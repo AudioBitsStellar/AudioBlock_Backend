@@ -8,16 +8,14 @@ services:
       - "4000:4000"
     env_file: .env.docker
     depends_on:
-      - db:
-        condition: service_healthy
-      - redis:
-        condition: service_healthy
+      - db
+      - redis
     volumes:
       - .:/app
       - /app/node_modules
   db:
     container_name: audioblocks-db
-    image: postgres:latest
+    image: postgres:15-alpine
     restart: always
     environment:
       POSTGRES_USER: postgres
