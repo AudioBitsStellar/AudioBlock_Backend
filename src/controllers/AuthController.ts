@@ -7,6 +7,7 @@ import { AuthService } from '../services/AuthService';
 import { UserService } from './../services/UserService';
 import { Request, Response } from 'express';
 import { validate } from 'class-validator';
+import { formatValidationErrors } from '../utils/helpers';
 
 export class AuthController {
 
@@ -20,88 +21,81 @@ export class AuthController {
 
     register = async(req: Request, res: Response) => {
         try {
-            // Add detailed logging for debugging
-            console.log("=== REGISTER REQUEST DEBUG ===");
-            console.log("Headers:", req.headers);
-            console.log("Body:", JSON.stringify(req.body, null, 2));
-            console.log("Body type:", typeof req.body);
-            console.log("Body constructor:", req.body?.constructor?.name);
-
-            // Validate request body exists
             if (!req.body || Object.keys(req.body).length === 0) {
-                return res.status(400).json({ 
+                return res.status(400).json({
+                    success: false,
                     message: "Request body is required" 
                 });
             }
 
             // Check for required fields before transformation
-            const requiredFields = ['role', 'walletAddress', 'signature', 'message'];
+            const requiredFields = ['role', 'walletAddress', 'signature', 'message', 'username', 'email'];
             const missingFields = requiredFields.filter(field => !req.body[field]);
             
             if (missingFields.length > 0) {
-                return res.status(400).json({ 
+                return res.status(400).json({
+                    success: false, 
                     message: `Missing required fields: ${missingFields.join(', ')}` 
                 });
             }
 
             // Transform with explicit options
             const userData = plainToInstance(CreateUserDTO, req.body, {
-                excludeExtraneousValues: true,
                 enableImplicitConversion: true
             });
 
             console.log("Transformed userData:", userData);
-            console.log("UserData constructor:", userData?.constructor?.name);
 
             // Validate the transformed data
             const errors = await validate(userData);
-
             if (errors.length > 0) {
                 console.log("Validation errors:", errors);
-                const formattedErrors = errors.map(err => {
-                    const constraints = err.constraints || {};
-                    return Object.values(constraints);
-                }).flat();
-                
-                return res.status(400).json({ 
-                    message: formattedErrors.length > 0 ? formattedErrors : "Validation failed" 
-                });
+                const formatted = formatValidationErrors(errors);
+                return res.status(422).json(formatted);
             }
 
             // Create user
             const user = await this.userService.createUser(userData);
-            res.status(201).json(user);
+            res.status(201).json({success: true, message: "User created successfully", user});
             
         } catch (error) {
-          
-            
+            console.error("Register error:", error);     
             this.handleError(res, error);
         }
     }
 
     login = async (req: Request, res: Response) => {
         try {
-            // Add request validation
             if (!req.body || Object.keys(req.body).length === 0) {
-                return res.status(400).json({ 
+                return res.status(400).json({
+                    success: false,
                     message: "Request body is required" 
                 });
             }
 
-            // You might want to validate JWTDTO as well
-            const data: JWTDTO = req.body;
+             // Check for required fields before transformation
+            const requiredFields = ['role', 'walletAddress', 'signature', 'message'];
+            const missingFields = requiredFields.filter(field => !req.body[field]);
             
-            // Optional: Add validation for JWTDTO
-            const loginData = plainToInstance(JWTDTO, req.body);
-            const errors = await validate(loginData);
-            
-            if (errors.length > 0) {
-                const formattedErrors = errors.map(err => Object.values(err.constraints || {})).flat();
-                return res.status(400).json({ message: formattedErrors });
+            if (missingFields.length > 0) {
+                return res.status(400).json({
+                    success: false, 
+                    message: `Missing required fields: ${missingFields.join(', ')}` 
+                });
             }
+            
+            const loginData = plainToInstance(JWTDTO, req.body, {
+                enableImplicitConversion: true
+            });
 
+            const errors = await validate(loginData);
+            if (errors.length > 0) {
+                console.log("Validation errors:", errors);
+                const formatted = formatValidationErrors(errors);
+                return res.status(422).json(formatted);
+            }
             const user = await this.authService.login(loginData);
-            res.status(200).json(user); // Changed from 201 to 200 for login
+            res.status(200).json({success: true, message: "User logged in successfully", user});
             
         } catch (error) {
             console.error("Login error:", error);

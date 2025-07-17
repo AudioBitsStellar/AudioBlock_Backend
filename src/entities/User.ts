@@ -15,7 +15,7 @@ export enum UserRole {
 }
 
 @Entity("users")
-@Unique(["address"])
+@Unique(["walletAddress", "email", "username"])
 export class User {
   @PrimaryGeneratedColumn("uuid")
   id!: string;

@@ -14,17 +14,15 @@ export class CreateUserDTO {
   @IsString()
   walletAddress!: string;
 
-  @IsOptional()
   @IsString()
-  username?: string;
+  username!: string;
 
   @IsOptional()
   @IsString()
   name?: string;
 
-  @IsOptional()
   @IsEmail()
-  email?: string;
+  email!: string;
 
   @IsOptional()
   @IsNumber()
@@ -47,7 +45,5 @@ export class CreateUserDTO {
 
   @IsString()
   message!: string;
-  
-  // Add constructor
-  constructor() {}
+
 }

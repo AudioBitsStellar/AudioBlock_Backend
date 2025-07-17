@@ -16,13 +16,6 @@ export class UserService {
 
     async createUser(data: CreateUserDTO): Promise<{ user: User; token: string }> {
         const dto = Object.assign(new CreateUserDTO(), data);
-        // const errors = await validate(dto);
-
-        // if (errors.length > 0) {
-        //     throw new Error(
-        //         errors.map((error) => error.constraints).join(", ")
-        //     );
-        // }
 
         const recoveredAddress = verifyMessage(dto.message, dto.signature);
 
@@ -36,6 +29,20 @@ export class UserService {
 
         const user = this.userRepo.create(dto);
         const savedUser = await this.userRepo.save(user);
+
+        // const payload = {
+        //     id: savedUser.id,
+        //     email: savedUser.email,
+        //     walletAddress: savedUser.walletAddress,
+        //     role: savedUser.role,
+        //     username: savedUser.username,
+        //     profileImage: savedUser.profileImage,
+        //     name: savedUser.name,
+        //     rewardPoints: savedUser.rewardPoints,
+        //     totalStreams: savedUser.totalStreams,
+        //     totalStreamTime: savedUser.totalStreamTime,
+        //     uniqueListeners: savedUser.uniqueListeners
+        // };
 
         const JWT_SECRET = process.env.JWT_SECRET;
         if (!JWT_SECRET) throw new Error("JWT_SECRET is not defined");
