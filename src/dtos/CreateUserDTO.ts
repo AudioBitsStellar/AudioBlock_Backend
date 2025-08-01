@@ -15,7 +15,8 @@ export class CreateUserDTO {
   walletAddress!: string;
 
   @IsString()
-  username!: string;
+  @IsOptional()
+  username?: string;
 
   @IsOptional()
   @IsString()
