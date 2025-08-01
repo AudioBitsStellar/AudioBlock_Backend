@@ -23,7 +23,7 @@ app.use(morgan("dev"));
 // CORS configuration
 app.use(
   cors({
-    origin: ["*"], // Add your frontend URLs
+    origin: ["http://localhost:3000", "http://localhost:3001"], // Add your frontend URLs
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allowedHeaders: [
