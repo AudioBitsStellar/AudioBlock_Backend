@@ -29,7 +29,7 @@ export class AuthController {
             }
 
             // Check for required fields before transformation
-            const requiredFields = ['role', 'walletAddress', 'signature', 'message', 'username', 'email'];
+            const requiredFields = ['role', 'walletAddress', 'signature', 'message', 'email'];
             const missingFields = requiredFields.filter(field => !req.body[field]);
             
             if (missingFields.length > 0) {
