@@ -30,24 +30,24 @@ export class UserService {
         const user = this.userRepo.create(dto);
         const savedUser = await this.userRepo.save(user);
 
-        // const payload = {
-        //     id: savedUser.id,
-        //     email: savedUser.email,
-        //     walletAddress: savedUser.walletAddress,
-        //     role: savedUser.role,
-        //     username: savedUser.username,
-        //     profileImage: savedUser.profileImage,
-        //     name: savedUser.name,
-        //     rewardPoints: savedUser.rewardPoints,
-        //     totalStreams: savedUser.totalStreams,
-        //     totalStreamTime: savedUser.totalStreamTime,
-        //     uniqueListeners: savedUser.uniqueListeners
-        // };
+        const payload = {
+            id: savedUser.id,
+            email: savedUser.email,
+            walletAddress: savedUser.walletAddress,
+            role: savedUser.role,
+            username: savedUser.username,
+            profileImage: savedUser.profileImage,
+            name: savedUser.name,
+            rewardPoints: savedUser.rewardPoints,
+            totalStreams: savedUser.totalStreams,
+            totalStreamTime: savedUser.totalStreamTime,
+            uniqueListeners: savedUser.uniqueListeners
+        };
 
         const JWT_SECRET = process.env.JWT_SECRET;
         if (!JWT_SECRET) throw new Error("JWT_SECRET is not defined");
 
-        const token = jwt.sign({ savedUser }, JWT_SECRET, { expiresIn: "1d" });
+        const token = jwt.sign(payload, JWT_SECRET, { expiresIn: "1d" });
 
         return { user: savedUser, token };
 

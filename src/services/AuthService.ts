@@ -58,7 +58,7 @@ export class AuthService {
             totalStreamTime: user.totalStreamTime,
             uniqueListeners: user.uniqueListeners
         };
-        const token = jwt.sign({user}, JWT_SECRET, { expiresIn: "1d" });
+        const token = jwt.sign(payload, JWT_SECRET, { expiresIn: "1d" });
         return {user, token}
     }
 }

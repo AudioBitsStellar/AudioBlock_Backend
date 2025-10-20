@@ -6,7 +6,7 @@ dotenv.config();
 
 const run = async (): Promise<void> => {
     try {
-        const privateKey = process.env.PRIVATE_KEY;
+        const privateKey = process.env.PRIVATE_KEY_2;
 
         if (!privateKey) {
             throw new Error('PRIVATE_KEY is not defined in the environment variables');

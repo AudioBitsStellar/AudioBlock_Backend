@@ -6,7 +6,10 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   Unique,
+  OneToOne,
 } from "typeorm";
+import { ArtistProfile } from "./AristProfile";
+
 
 export enum UserRole {
   LISTENER = "listener",
@@ -60,4 +63,7 @@ export class User {
 
   @UpdateDateColumn()
   updatedAt!: Date;
+
+  @OneToOne(() => ArtistProfile, (profile) => profile.user)
+  artistProfile!: ArtistProfile;
 }

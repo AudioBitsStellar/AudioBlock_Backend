@@ -11,7 +11,7 @@ import { formatValidationErrors } from '../utils/helpers';
 
 export class AuthController {
 
-    private userService: UserService
+    private userService: UserService;
     private authService: AuthService;
     
     constructor() {
@@ -103,7 +103,7 @@ export class AuthController {
         }
     }
 
-     private handleError(res: Response, error: unknown): void {
+    private handleError(res: Response, error: unknown): void {
         if (error instanceof Error) {
             console.error("Handled Error:", error.message, error.stack);
             
