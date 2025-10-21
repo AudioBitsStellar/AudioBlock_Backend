@@ -13,15 +13,15 @@ export class ArtistProfileController {
 
     createProfile = async(req: Request, res: Response) => {
         try {
-            const userId = req.user?.id;
+            const userId = (req as any).user?.id;
             
-
             if (!userId) {
                 return res.status(401).json({
                 success: false,
                 message: "Unauthorized: user not found in token",
                 });
             }
+            
            const profile = req.body;
            const newProfile = await this.artistProfileService.createArtistProfile(userId,profile);
            res.status(201).json(newProfile);

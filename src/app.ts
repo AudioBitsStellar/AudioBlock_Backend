@@ -10,6 +10,7 @@ import cors from "cors";
 import redis from "./config/redis";
 import authRoutes from "./routes/authRoutes";
 import artistRoutes from "./routes/artistRoutes";
+import twitterRoutes from "./routes/twitterRoutes";
 
 // Route imports
 
@@ -63,6 +64,10 @@ app.use("/health", (req, res) => {
 
 app.use("/api/auth", authRoutes);
 app.use("/api/artist", artistRoutes);
+
+//TWITTER CALLBACK ROUTE
+app.use("/api/auth/twitter", twitterRoutes);
+
 
 app.get('/redis-test', async (req, res) => {
   await redis.set('greeting', 'hello world');

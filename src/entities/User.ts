@@ -58,6 +58,24 @@ export class User {
   @Column("int", { default: 0 })
   uniqueListeners!: number;
 
+  @Column({ nullable: true })
+  twitterId?: string;
+
+  @Column({ nullable: true })
+  twitterUsername?: string;
+
+  @Column({ nullable: true })
+  twitterDisplayName?: string;
+
+  @Column({ nullable: true })
+  twitterProfileImage?: string;
+
+  @Column({ nullable: true })
+  twitterVerified?: boolean;
+
+  @Column({ nullable: true })
+  twitterConnected?: boolean;
+
   @CreateDateColumn()
   createdAt!: Date;
 
