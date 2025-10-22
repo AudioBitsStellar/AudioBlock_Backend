@@ -25,7 +25,7 @@ router.get("/init", authArtistMiddleware, async (req: Request, res: Response) =>
   try {
     // if your auth middleware augments req.user, adjust typing; cast here to be safe
     const userId = (req as any).user?.id as string | undefined;
-    // const userId = "d462471f-217d-4bfd-b31c-e55a75a9e0d5";
+    // const userId = "bdbf8392-7c27-4f4f-99de-182178f65ebf";
     if (!userId) {
       return res.status(401).json({ error: "Unauthorized" });
     }

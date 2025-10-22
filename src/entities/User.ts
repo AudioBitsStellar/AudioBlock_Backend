@@ -70,11 +70,26 @@ export class User {
   @Column({ nullable: true })
   twitterProfileImage?: string;
 
-  @Column({ nullable: true })
+  @Column({ default: false })
   twitterVerified?: boolean;
 
   @Column({ nullable: true })
   twitterConnected?: boolean;
+
+  @Column({ nullable: true })
+  facebookId?: string;
+
+  @Column({ nullable: true })
+  facebookName?: string;
+
+  @Column({ nullable: true })
+  facebookEmail?: string;
+
+  @Column({ nullable: true })
+  facebookProfileImage?: string;
+
+  @Column({ default: false })
+  facebookConnected?: boolean;
 
   @CreateDateColumn()
   createdAt!: Date;
