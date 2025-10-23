@@ -50,6 +50,7 @@ export class AuthService {
       const nonce = nonceMatch[1];
 
       const storedNonce = await redis.get(`nonce:${dto.email}`);
+      console.log("Stored nonce:", storedNonce);
       if (!storedNonce || storedNonce !== nonce) {
         throw new Error("Invalid or expired nonce");
       }

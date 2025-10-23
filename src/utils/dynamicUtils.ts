@@ -27,6 +27,7 @@ export const createEvmWallet = async ({
     backUpToClientShareService: true,
   });
 
+  return wallet;
   return {
     accountAddress: wallet.accountAddress,
     publicKeyHex: wallet.publicKeyHex,

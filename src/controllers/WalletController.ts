@@ -13,7 +13,7 @@ export class WalletController {
 
     createEvmWallet = async(req: Request, res: Response) => {
         try {
-            const wallet = await this.walletService.createEvmWallet();
+            const wallet = await this.walletService.createWallet();
             res.status(201).json({success: true, message: "Wallet created successfully", wallet});
         
         } catch (error) {
@@ -21,6 +21,15 @@ export class WalletController {
         }
     }
 
-    
+    signMessage = async(req: Request, res: Response) => {
+        try {
+            const payload = req.body;
+            const signature = await this.walletService.signMessage(payload);
+            res.status(200).json({success: true, message: "Message signed successfully", signature});
+        
+        } catch (error) {
+            handleError(res, error);
+        }
+    }
     
 }
