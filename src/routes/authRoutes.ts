@@ -11,6 +11,8 @@ import { AuthController } from "../controllers/AuthController";
 const authController = new AuthController();
 const router = Router();
 
+
+router.get("/nonce/:email", authController.getNonce);
 router.post("/register", authController.register);
 router.post("/login", authController.login);
 

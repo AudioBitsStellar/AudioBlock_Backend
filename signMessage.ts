@@ -17,7 +17,7 @@ const run = async (): Promise<void> => {
         console.log('Wallet connected:', wallet.address);
 
         // 2. Generate message
-        const message: string = `Sign this message to authenticate: ${new Date().toISOString()}`;
+        const message: string = `Audioblocks Login\nNonce: 78b26580bc3265cdbc860dce87e766fc\nEmail: ezeozuechiagoziem@gmail.com`;
         console.log('Message to sign:', message);
 
         // 3. Sign the message

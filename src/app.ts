@@ -11,6 +11,7 @@ import redis from "./config/redis";
 import authRoutes from "./routes/authRoutes";
 import artistRoutes from "./routes/artistRoutes";
 import twitterRoutes from "./routes/twitterRoutes";
+import walletRoutes from "./routes/walletRoutes";
 
 // Route imports
 
@@ -64,6 +65,10 @@ app.use("/health", (req, res) => {
 
 app.use("/api/auth", authRoutes);
 app.use("/api/artist", artistRoutes);
+
+// Dynamic wallet routes
+app.use("/api/wallet", walletRoutes);
+
 
 //TWITTER CALLBACK ROUTE
 app.use("/api/auth/twitter", twitterRoutes);

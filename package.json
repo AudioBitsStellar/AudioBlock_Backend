@@ -6,12 +6,15 @@
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "test:dynamic": "ts-node-esm src/scripts/dynamic.ts"
   },
   "author": "",
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@dynamic-labs-wallet/core": "^0.0.187",
+    "@dynamic-labs-wallet/node-evm": "^0.0.187",
     "axios": "^1.12.2",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",

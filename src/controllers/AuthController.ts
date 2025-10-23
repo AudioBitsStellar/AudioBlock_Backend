@@ -7,7 +7,8 @@ import { AuthService } from '../services/AuthService';
 import { UserService } from './../services/UserService';
 import { Request, Response } from 'express';
 import { validate } from 'class-validator';
-import { formatValidationErrors } from '../utils/helpers';
+import { formatValidationErrors, handleError } from '../utils/helpers';
+import redis from '../config/redis';
 
 export class AuthController {
 
@@ -17,6 +18,20 @@ export class AuthController {
     constructor() {
         this.userService = new UserService();
         this.authService = new AuthService();
+    }
+
+    getNonce = async (req: Request, res: Response) => {
+        try {
+            const email = req.params.email;
+            const nonce = await this.authService.getNonce(email);
+            res.status(200).json({
+                success: true,
+                message: `Audioblocks Login\nNonce: ${nonce}\nEmail: ${email}`
+            });
+        } catch (error) {
+            console.log(error);
+            handleError(res, error);
+        }
     }
 
     register = async(req: Request, res: Response) => {

@@ -6,6 +6,7 @@ import { validate } from "class-validator";
 import { verifyMessage } from "ethers";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
+import redis from "../config/redis";
 
 export class UserService {
     private userRepo: Repository<User>;
@@ -23,6 +24,20 @@ export class UserService {
             throw new Error("Invalid signature");
         }
 
+        // Extract nonce from message
+        const nonceMatch = dto.message.match(/Nonce: (\w+)/);
+        if (!nonceMatch) throw new Error("Nonce missing in message");
+        const nonce = nonceMatch[1];
+
+         // Verify nonce exists and matches stored one
+        const storedNonce = await redis.get(`nonce:${dto.email}`);
+        if (!storedNonce || storedNonce !== nonce) {
+            throw new Error("Invalid or expired nonce");
+        }
+
+        //  Delete nonce immediately (one-time use)
+        await redis.del(`nonce:${dto.email}`);
+
         if (await this.userRepo.findOneBy({ walletAddress: dto.walletAddress })) {
             throw new Error("User already exists");
         }
@@ -32,6 +47,7 @@ export class UserService {
 
         const payload = {
             id: savedUser.id,
+            dynamixUserId: savedUser.dynamixUserId,
             email: savedUser.email,
             walletAddress: savedUser.walletAddress,
             role: savedUser.role,
