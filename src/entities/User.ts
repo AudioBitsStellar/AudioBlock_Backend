@@ -7,9 +7,10 @@ import {
   UpdateDateColumn,
   Unique,
   OneToOne,
+  OneToMany,
 } from "typeorm";
 import { ArtistProfile } from "./AristProfile";
-
+import { Song } from "./Song";
 
 export enum UserRole {
   LISTENER = "listener",
@@ -100,6 +101,11 @@ export class User {
   @UpdateDateColumn()
   updatedAt!: Date;
 
+  // One user has one artist profile
   @OneToOne(() => ArtistProfile, (profile) => profile.user)
   artistProfile!: ArtistProfile;
+
+  // One user has many songs
+  @OneToMany(() => Song, (song) => song.user)
+  songs!: Song[];
 }

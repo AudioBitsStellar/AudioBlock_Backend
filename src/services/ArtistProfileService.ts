@@ -35,7 +35,7 @@ export class ArtistProfileService {
 
     async getArtistProfileById(id: string): Promise<ArtistProfile | null> {
         return await this.artistProfileRepo.findOneBy({ id });
-    }
+    } 
 
     async updateArtistProfile(id: string, data: Partial<ArtistProfile>): Promise<ArtistProfile | null> {
         const profile = await this.artistProfileRepo.findOneBy({ id });

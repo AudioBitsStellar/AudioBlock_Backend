@@ -81,5 +81,4 @@ export class AuthService {
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: "1d" });
     return { user, token };
   }
-
 }

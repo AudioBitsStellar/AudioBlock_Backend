@@ -1,0 +1,51 @@
+import { Request, Response } from "express";
+import multer from "multer";
+import { handleError } from "../utils/helpers";
+import { SongService } from "../services/SongService";
+
+const upload = multer({ dest: "uploads/chunks/" });
+const songService = new SongService();
+
+export class UploadController {
+  uploadChunk = [
+    upload.single("chunk"),
+    async (req: Request, res: Response) => {
+      try {
+        const { fileId, chunkIndex } = req.body;
+        const chunkFile = req.file!;
+        await songService.saveChunk(fileId, Number(chunkIndex), chunkFile.path);
+
+        return res.status(200).json({ success: true });
+      } catch (error) {
+        handleError(res, error);
+      }
+    },
+  ];
+
+  /**
+     * Once all chunks are uploaded, merge and push to RabbitMQ
+    */
+
+  finalizeUpload = async (req: Request, res: Response) => {
+    try {
+      const { fileId, totalChunks, title } = req.body;
+
+      const user = (req as any).user;
+
+      const artistId = user.id;
+      const artistAddress = user.walletAddress;
+
+      const song = await songService.finalizeUpload(
+        fileId,
+        Number(totalChunks),
+        title,
+        artistId,
+        artistAddress
+      );
+      return res.status(201).json({ success: true,data: song });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Finalize failed" });
+    }
+  };
+}
