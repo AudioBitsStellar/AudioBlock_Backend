@@ -14,6 +14,7 @@ services:
     volumes:
       - .:/app
       - /app/node_modules
+      - ./uploads:/app/uploads
   db:
     container_name: audioblocks-db
     image: postgres:15-alpine

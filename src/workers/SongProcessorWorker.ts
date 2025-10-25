@@ -1,6 +1,8 @@
 import fs from "fs";
 import path from "path";
+import os from "os";
 import ffmpeg from "fluent-ffmpeg";
+import axios from "axios";
 import { getChannel } from "../config/rabbitmq";
 import { s3 } from "../config/s3";
 import { CacheService } from "../services/CacheService";
@@ -25,7 +27,7 @@ export async function startSongWorker() {
 
     try {
       //   const song = await songRepo.findOneBy({ id: songId });
-      const { songId } = JSON.parse(msg.content.toString());
+      const { songId, fileId } = JSON.parse(msg.content.toString());
       console.log(`Processing song ${songId}`);
 
       const data = JSON.parse(msg.content.toString());
@@ -37,8 +39,8 @@ export async function startSongWorker() {
       });
       if (!song) throw new Error("Song not found");
 
-      const localFile = path.join("uploads/merged", `${songId}.mp3`);
-      const hlsDir = `uploads/hls/${songId}`;
+      const localFile = path.join("uploads/merged", `${fileId}.mp3`);
+      const hlsDir = `uploads/hls/${fileId}`;
 
       if (!fs.existsSync(hlsDir)) fs.mkdirSync(hlsDir, { recursive: true });
 
@@ -54,7 +56,7 @@ export async function startSongWorker() {
 
       // Upload HLS to S3
       const hlsFiles = fs.readdirSync(hlsDir);
-      const s3BasePath = `songs/${songId}/hls/`;
+      const s3BasePath = `songs/${fileId}/hls/`;
 
       for (const f of hlsFiles) {
         const filePath = path.join(hlsDir, f);
@@ -66,9 +68,15 @@ export async function startSongWorker() {
       }
 
       const masterUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.amazonaws.com/${s3BasePath}master.m3u8`;
+      const tempCoverPath = path.join(os.tmpdir(), `${fileId}-cover.jpg`);
+      const coverResponse = await axios.get<ArrayBuffer>(song.coverArtPath, { responseType: "arraybuffer" });
+      fs.writeFileSync(tempCoverPath, Buffer.from(new Uint8Array(coverResponse.data)));
+      fs.writeFileSync(tempCoverPath, Buffer.from(coverResponse.data));
+
+      const coverRes = await PinataService.uploadFile(tempCoverPath, `${songId}-cover.jpg`);
 
       // Upload metadata + cover to IPFS
-      const coverRes = await PinataService.uploadFile(song.coverArtPath, `${songId}-cover.jpg`);
+      // const coverRes = await PinataService.uploadFile(song.coverArtPath, `${fileId}-cover.jpg`);
       const metadata = {
         name: song.title,
         artist: song.artistAddress,

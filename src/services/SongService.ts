@@ -39,6 +39,7 @@ export class SongService {
         Key: `covers/${coverFileName}`,
         Body: coverBuffer,
         ContentType: "image/png",
+        // ACL: "public-read",
       })
       .promise();
 
@@ -87,6 +88,7 @@ export class SongService {
         Bucket: process.env.AWS_BUCKET_NAME!,
         Key: `uploads/${fileId}.mp3`,
         Body: fs.createReadStream(finalPath),
+        // ACL: "public-read",
       })
       .promise();
 
@@ -107,7 +109,7 @@ export class SongService {
     const channel = getChannel();
     channel.sendToQueue(
       "song_processing",
-      Buffer.from(JSON.stringify({ songId: song.id }))
+      Buffer.from(JSON.stringify({ songId: song.id, fileId }))
     );
 
     // Optional cleanup
