@@ -10,3 +10,5 @@ newrelic_agent.log
 logs/newrelic*
 
 ./dist
+
+./uploads

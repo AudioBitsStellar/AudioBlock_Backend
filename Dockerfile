@@ -1,6 +1,9 @@
 # Use node image
 FROM node:20
 
+# Install ffmpeg (required by fluent-ffmpeg)
+RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+
 # Set working directory
 WORKDIR /app
 

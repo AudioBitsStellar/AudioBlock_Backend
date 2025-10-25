@@ -11,10 +11,23 @@ export class FinalizeUploadDTO {
 
   @IsNumber()
   @IsNotEmpty({ message: "Total chunks is required." })
-  totalChunk!: int;
+  totalChunks!: number;
 
   @IsString()
   @IsNotEmpty({ message: "Song title address is required." })
   title!: string;
+
+  @IsString()
+  @IsNotEmpty({ message: "Song description is required." })
+  description!: string;
+
+  @IsString()
+  @IsNotEmpty({ message: "Song genre is required." })
+  genre!: string;
+
+  @IsString()
+  @IsNotEmpty({ message: "Cover art path is required." })
+  coverArtPath!: string;
+
 
 }

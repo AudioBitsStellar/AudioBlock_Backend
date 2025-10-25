@@ -26,11 +26,11 @@ export async function startWorker() {
       const song = await repo.findOneBy({ id: songId });
       if (!song) throw new Error("Song not found");
 
-      // Step 1️⃣: Download the file from S3
+      // Step 1️: Download the file from S3
       const localFile = path.join("temp", `${songId}.mp3`);
       if (!fs.existsSync("temp")) fs.mkdirSync("temp");
 
-      console.log("⬇️ Downloading from S3...");
+      console.log(" Downloading from S3...");
       const s3Key = song.s3OriginalUrl.split(".amazonaws.com/")[1];
       const s3Stream = s3
         .getObject({
@@ -53,8 +53,12 @@ export async function startWorker() {
 
       // Step 3️: Upload HLS files (master + segments) to Pinata
       console.log(" Uploading HLS files to IPFS...");
-      const masterFilePath = path.join(outputDir, "master.m3u8");
-      const upload = await uploadFileToPinata(masterFilePath);
+      
+    //   const masterFilePath = path.join(outputDir, "master.m3u8");
+    //   const upload = await uploadFileToPinata(masterFilePath);
+
+      const upload = await uploadFileToPinata(outputDir); // Use this for full HLS folder upload
+
       const songCid = upload.cid;
 
       // Step 4️: Upload metadata to Pinata

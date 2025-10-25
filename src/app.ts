@@ -12,6 +12,7 @@ import authRoutes from "./routes/authRoutes";
 import artistRoutes from "./routes/artistRoutes";
 import twitterRoutes from "./routes/twitterRoutes";
 import walletRoutes from "./routes/walletRoutes";
+import SongRoutes from "./routes/SongRoutes";
 
 // Route imports
 
@@ -68,6 +69,9 @@ app.use("/api/artist", artistRoutes);
 
 // Dynamic wallet routes
 app.use("/api/wallet", walletRoutes);
+
+// Song wallet
+app.use("/api/song", SongRoutes);
 
 
 //TWITTER CALLBACK ROUTE

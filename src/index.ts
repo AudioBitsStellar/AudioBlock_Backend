@@ -1,6 +1,8 @@
 import 'reflect-metadata';
 import app from "./app";
 import AppDataSource from "./config/db";
+import { initRabbitMQ, waitForRabbitMQ } from './config/rabbitmq';
+import { startSongWorker } from './workers/SongProcessorWorker';
 
 async function main() {
   try {
@@ -8,11 +10,23 @@ async function main() {
     await AppDataSource.initialize();
     console.log("✅ Database connected successfully");
 
+    initRabbitMQ();
+    await waitForRabbitMQ();
+    console.log("✅ RabbitMQ is ready");
+    
+    
+
     // Start the server
     const PORT = process.env.PORT || 4000;
     const server = app.listen(PORT, () => {
       console.log(`🚀 Server is listening on port ${PORT}`);
     });
+
+    // Start background workers
+    startSongWorker();
+    console.log("✅ Background workers started");
+
+   
 
     // Handle server startup errors
     server.on("error", (error: NodeJS.ErrnoException) => {
@@ -41,5 +55,6 @@ process.on("unhandledRejection", (reason, promise) => {
   console.error("❌ Unhandled Rejection at:", promise, "reason:", reason);
   process.exit(1);
 });
+
 
 main();

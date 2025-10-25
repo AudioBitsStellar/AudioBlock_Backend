@@ -21,8 +21,18 @@ export class Song {
   @Column()
   artistId!: string; 
 
+
+  @Column()
+  coverArtPath!: string; 
+
   @Column()
   title!: string;
+
+  @Column({ nullable: true })
+  description!: string;
+
+  @Column({ nullable: true })
+  genre!: string;
 
   @Column({ nullable: true })
   artistAddress!: string;

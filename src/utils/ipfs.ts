@@ -20,6 +20,30 @@ export async function uploadFileToPinata(filePath: string, mimeType = "audio/mpe
   return upload; // { cid, uri, name }
 }
 
+
+
+/**
+ * Uploads a full HLS folder (master.m3u8 + all .ts files)
+ * Returns the CID of the root folder.
+ */
+export async function uploadHLSFolderToPinata(folderPath: string) {
+  const files = fs.readdirSync(folderPath);
+  const uploadFiles = [];
+
+  for (const filename of files) {
+    const fullPath = path.join(folderPath, filename);
+    const fileBuffer = fs.readFileSync(fullPath);
+    const blob = new Blob([fileBuffer]);
+    const file = new File([blob], filename);
+    uploadFiles.push(file);
+  }
+
+  const result = await pinata.upload.public.fileArray(uploadFiles);
+
+  return result; // { cid, ipfsUrl, etc. }
+}
+
+
 /**
  * Upload JSON metadata to IPFS
  */
