@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import { User } from "../entities/User";
 import { Song } from "../entities/Song";
 import { ArtistProfile } from "../entities/AristProfile";
+import { TransactionLog } from "../entities/TransactionLog";
 
 
 dotenv.config();
@@ -22,7 +23,8 @@ const AppDataSource = new DataSource({
   entities: [
     User,
     ArtistProfile,
-    Song
+    Song,
+    TransactionLog,
   ],
   migrations: ["src/migrations/*.ts"],
   migrationsTableName: "migrations",

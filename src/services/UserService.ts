@@ -7,12 +7,18 @@ import { verifyMessage } from "ethers";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import redis from "../config/redis";
+import { TransactionLog } from "../entities/TransactionLog";
+import { ArtistService } from "./Artist/ArtistService";
 
 export class UserService {
     private userRepo: Repository<User>;
+    private transactionLogRepo: Repository<TransactionLog>;
+    private artistService: ArtistService;
     constructor() {
         this.userRepo = AppDataSource.getRepository(User);
+        this.transactionLogRepo = AppDataSource.getRepository(TransactionLog);
         dotenv.config();
+        this.artistService = new ArtistService();
     }
 
     async createUser(data: CreateUserDTO): Promise<{ user: User; token: string }> {
@@ -42,9 +48,21 @@ export class UserService {
             throw new Error("User already exists");
         }
 
+        const onChainAccount = await this.artistService.setupArtistAccountOnChain(dto.walletAddress);
+        console.log("On-chain account setup initiated:", onChainAccount);
+
         const user = this.userRepo.create(dto);
         const savedUser = await this.userRepo.save(user);
 
+        const log = this.transactionLogRepo.create({
+            user: savedUser,
+            user_id: savedUser.id,
+            txHash: onChainAccount,
+            action: "CREATE_USER",
+            description: `User with wallet ${savedUser.walletAddress} created.`,
+        });
+        await this.transactionLogRepo.save(log);
+        
         const payload = {
             id: savedUser.id,
             dynamixUserId: savedUser.dynamixUserId,

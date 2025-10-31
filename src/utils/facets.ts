@@ -1,0 +1,7 @@
+export const LiskSepoliaFacetAddress = {
+    SongFacet: "0xaa06d4dF522d31F7718F135eA42b166C9002ea9B",
+    AlbumFacet: "0x07D1f4D4ac6296155196306f225b4780258c4246",
+    ArtistFacet: "0x31e322a43AceBcd6d557337775581e93E3873A5a",
+    MarketPlaceFacet: "0x3769931F368841485d3387596d0aB0f45c7CCd56",
+    Diamond: "0x353ac4905ba942277575d71eF5dA7c0819FBba79",
+}

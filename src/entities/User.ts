@@ -11,6 +11,8 @@ import {
 } from "typeorm";
 import { ArtistProfile } from "./AristProfile";
 import { Song } from "./Song";
+import { Transaction } from "ethers";
+import { TransactionLog } from "./TransactionLog";
 
 export enum UserRole {
   LISTENER = "listener",
@@ -108,4 +110,8 @@ export class User {
   // One user has many songs
   @OneToMany(() => Song, (song) => song.user)
   songs!: Song[];
+
+  // One user has many transaction logs
+  @OneToMany(() => TransactionLog, (log) => log.user)
+  transactionLogs!: TransactionLog[];
 }

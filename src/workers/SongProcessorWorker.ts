@@ -17,13 +17,12 @@ export async function startSongWorker() {
 
   const queue = "song_processing";
 
-  // ✅ Ensure the queue exists before consuming
+  // Ensure the queue exists before consuming
   await channel.assertQueue(queue, { durable: true });
   console.log(`🎵 Waiting for messages in queue: ${queue}`);
 
   channel.consume(queue, async (msg) => {
     if (!msg) return;
-    
 
     try {
       //   const song = await songRepo.findOneBy({ id: songId });
@@ -34,8 +33,8 @@ export async function startSongWorker() {
       console.log("🎧 Received message:", data);
 
       const song = await songRepo.findOne({
-          where: { id: songId },
-          relations: ["user"], // load the related user (artist)
+        where: { id: songId },
+        relations: ["user"], // load the related user (artist)
       });
       if (!song) throw new Error("Song not found");
 
@@ -47,7 +46,13 @@ export async function startSongWorker() {
       // Transcode to HLS
       await new Promise((resolve, reject) => {
         ffmpeg(localFile)
-          .outputOptions(["-codec: copy", "-start_number 0", "-hls_time 10", "-hls_list_size 0", "-f hls"])
+          .outputOptions([
+            "-codec: copy",
+            "-start_number 0",
+            "-hls_time 10",
+            "-hls_list_size 0",
+            "-f hls",
+          ])
           .output(path.join(hlsDir, "master.m3u8"))
           .on("end", resolve)
           .on("error", reject)
@@ -60,20 +65,30 @@ export async function startSongWorker() {
 
       for (const f of hlsFiles) {
         const filePath = path.join(hlsDir, f);
-        await s3.upload({
-          Bucket: process.env.AWS_BUCKET_NAME!,
-          Key: `${s3BasePath}${f}`,
-          Body: fs.createReadStream(filePath)
-        }).promise();
+        await s3
+          .upload({
+            Bucket: process.env.AWS_BUCKET_NAME!,
+            Key: `${s3BasePath}${f}`,
+            Body: fs.createReadStream(filePath),
+          })
+          .promise();
       }
 
       const masterUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.amazonaws.com/${s3BasePath}master.m3u8`;
       const tempCoverPath = path.join(os.tmpdir(), `${fileId}-cover.jpg`);
-      const coverResponse = await axios.get<ArrayBuffer>(song.coverArtPath, { responseType: "arraybuffer" });
-      fs.writeFileSync(tempCoverPath, Buffer.from(new Uint8Array(coverResponse.data)));
+      const coverResponse = await axios.get<ArrayBuffer>(song.coverArtPath, {
+        responseType: "arraybuffer",
+      });
+      fs.writeFileSync(
+        tempCoverPath,
+        Buffer.from(new Uint8Array(coverResponse.data))
+      );
       fs.writeFileSync(tempCoverPath, Buffer.from(coverResponse.data));
 
-      const coverRes = await PinataService.uploadFile(tempCoverPath, `${songId}-cover.jpg`);
+      const coverRes = await PinataService.uploadFile(
+        tempCoverPath,
+        `${songId}-cover.jpg`
+      );
 
       // Upload metadata + cover to IPFS
       // const coverRes = await PinataService.uploadFile(song.coverArtPath, `${fileId}-cover.jpg`);
@@ -90,10 +105,14 @@ export async function startSongWorker() {
           { trait_type: "cover_url", value: coverRes.cid },
           { trait_type: "artist_name", value: song?.user.name },
           { trait_type: "artist_username", value: song?.user.username },
-        ]
+          { trait_type: "Composers", value: "" },
+        ],
       };
 
-      const metadataRes = await PinataService.uploadJSON(metadata, `${songId}-metadata.json`);
+      const metadataRes = await PinataService.uploadJSON(
+        metadata,
+        `${songId}-metadata.json`
+      );
 
       // Update song record
       song.status = "ready";
@@ -103,11 +122,9 @@ export async function startSongWorker() {
       await songRepo.save(song);
 
       await CacheService.cacheSong(songId, song);
-      
+
       fs.unlinkSync(localFile);
       fs.rmdirSync(hlsDir, { recursive: true });
-
-
 
       channel.ack(msg);
     } catch (err) {

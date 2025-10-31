@@ -1,8 +1,13 @@
-import 'reflect-metadata';
+import "reflect-metadata";
 import app from "./app";
 import AppDataSource from "./config/db";
-import { initRabbitMQ, waitForRabbitMQ } from './config/rabbitmq';
-import { startSongWorker } from './workers/SongProcessorWorker';
+import { initRabbitMQ, waitForRabbitMQ } from "./config/rabbitmq";
+import { startSongWorker } from "./workers/SongProcessorWorker";
+import fs from "fs";
+import path from "path";
+
+// Ensure upload directories exist
+const uploadDirs = ["uploads/temp", "uploads/merged"];
 
 async function main() {
   try {
@@ -13,8 +18,6 @@ async function main() {
     initRabbitMQ();
     await waitForRabbitMQ();
     console.log("✅ RabbitMQ is ready");
-    
-    
 
     // Start the server
     const PORT = process.env.PORT || 4000;
@@ -26,7 +29,12 @@ async function main() {
     startSongWorker();
     console.log("✅ Background workers started");
 
-   
+    uploadDirs.forEach((dir) => {
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+        console.log(`✅ Created directory: ${dir}`);
+      }
+    });
 
     // Handle server startup errors
     server.on("error", (error: NodeJS.ErrnoException) => {
@@ -55,6 +63,5 @@ process.on("unhandledRejection", (reason, promise) => {
   console.error("❌ Unhandled Rejection at:", promise, "reason:", reason);
   process.exit(1);
 });
-
 
 main();
