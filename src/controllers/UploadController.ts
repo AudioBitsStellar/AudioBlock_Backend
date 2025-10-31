@@ -2,8 +2,6 @@ import { Request, Response } from "express";
 import multer from "multer";
 import { handleError } from "../utils/helpers";
 import { SongService } from "../services/SongService";
-
-const upload = multer({ dest: "uploads/chunks/" });
 const songService = new SongService();
 
 export class UploadController {
@@ -20,7 +18,8 @@ export class UploadController {
         }
 
         const chunkFile = req.file!;
-        await songService.saveChunk(fileId, Number(chunkIndex), chunkFile.path);
+        // await songService.saveChunk(fileId, Number(chunkIndex), chunkFile.path);
+        await songService.saveChunk(fileId, Number(chunkIndex), req.file.path);
 
         return res.status(200).json({ success: true });
       } catch (error) {
@@ -32,7 +31,10 @@ export class UploadController {
     async (req: Request, res: Response) => {
       try {
         const { fileId } = req.body;
-        const coverPath = req.file!.path;
+        if (!req.file) {
+          return res.status(400).json({success: false, error: "No cover file uploaded" });
+        }
+        const coverPath = req.file.path;
         const cover = await songService.saveCover(fileId, coverPath);
         res.status(200).json({ success: true, message: "Cover uploaded", data: {fileId, cover} });
       } catch (error) {
@@ -66,7 +68,7 @@ export class UploadController {
       return res.status(201).json({ success: true, data: song });
     } catch (err) {
       console.error(err);
-      res.status(500).json({ error: "Finalize failed" });
+      handleError(res, err);
     }
   };
 }

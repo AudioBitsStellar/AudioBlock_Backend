@@ -1,24 +1,24 @@
 /**
- * Simulate full song upload (chunked) + cover + finalize to your AudioBlocks backend
+ * Simulate full song upload (chunked) + cover + finalize
  */
 
 import fs from "fs";
 import axios from "axios";
 import FormData from "form-data";
-import path from "path";
+import crypto from "crypto";
 
 const API_BASE = "http://localhost:4000/api/song/upload";
 const AUTH_TOKEN =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImMxYTMxNjIwLTk5ZjQtNGQ1Zi05OGQxLWQ4N2VkOGU3OTBkNyIsImR5bmFtaXhVc2VySWQiOiIxZGE3MzY5Mi1lYzE1LTRiNTctOTg5ZS1lNGQwZmM0NjViNjciLCJlbWFpbCI6ImV6ZW96dWVjaGlhZ296aWVtQGdtYWlsLmNvbSIsIndhbGxldEFkZHJlc3MiOiIweEIwODZjRjk4OTc0MWU4NmI1MzU0NzA5NjYxMjBlQUNDMmI5RkY3OTkiLCJyb2xlIjoiYXJ0aXN0IiwidXNlcm5hbWUiOiJndXpieXRlXzIiLCJwcm9maWxlSW1hZ2UiOm51bGwsIm5hbWUiOm51bGwsInJld2FyZFBvaW50cyI6MCwidG90YWxTdHJlYW1zIjowLCJ0b3RhbFN0cmVhbVRpbWUiOjAsInVuaXF1ZUxpc3RlbmVycyI6MCwiaWF0IjoxNzYxMzU4MDcwLCJleHAiOjE3NjE0NDQ0NzB9.037q2iqtonpoMKxHVe6k1Dx5UDgNXkJ1x9CGck683VY"; // Replace with a valid artist token
-const FILE_ID = crypto.randomUUID() + "abc123"; // Unique identifier per upload session
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImMxYTMxNjIwLTk5ZjQtNGQ1Zi05OGQxLWQ4N2VkOGU3OTBkNyIsImR5bmFtaXhVc2VySWQiOiIxZGE3MzY5Mi1lYzE1LTRiNTctOTg5ZS1lNGQwZmM0NjViNjciLCJlbWFpbCI6ImV6ZW96dWVjaGlhZ296aWVtQGdtYWlsLmNvbSIsIndhbGxldEFkZHJlc3MiOiIweEIwODZjRjk4OTc0MWU4NmI1MzU0NzA5NjYxMjBlQUNDMmI5RkY3OTkiLCJyb2xlIjoiYXJ0aXN0IiwidXNlcm5hbWUiOiJndXpieXRlXzIiLCJwcm9maWxlSW1hZ2UiOm51bGwsIm5hbWUiOm51bGwsInJld2FyZFBvaW50cyI6MCwidG90YWxTdHJlYW1zIjowLCJ0b3RhbFN0cmVhbVRpbWUiOjAsInVuaXF1ZUxpc3RlbmVycyI6MCwiaWF0IjoxNzYxNjA1MDU1LCJleHAiOjE3NjE2OTE0NTV9.ZASaMBzvk3iX7MYWicLgiVD4gutILqEW_lNy-31QAew"; // Replace with valid token
 
-const SONG_PATH = "./test_song.mp3"; // Your local audio file
-const COVER_PATH = "./cover.jpg"; // Your cover art image
+const SONG_PATH = "./test_song.mp3";
+const COVER_PATH = "./cover.jpg";
 const CHUNK_SIZE = 2 * 1024 * 1024; // 2MB per chunk
+
 let coverArtPath = "";
 
 /**
- * Split file into smaller chunks
+ * Split file into chunks
  */
 function splitFile(filePath, chunkSize) {
   const buffer = fs.readFileSync(filePath);
@@ -51,13 +51,13 @@ async function uploadChunk(fileId, chunkIndex, chunk) {
         ...form.getHeaders(),
       },
     });
-    console.log(`✅ Uploaded chunk ${chunkIndex}:`, res.data.success);
+    console.log(`✅ Uploaded chunk ${chunkIndex}`);
   } catch (err) {
     console.error(
-      `❌ Failed to upload chunk ${chunkIndex}:`,
+      `❌ Failed chunk ${chunkIndex}:`,
       err.response?.data || err.message
     );
-    process.exit(1);
+    throw err;
   }
 }
 
@@ -77,56 +77,69 @@ async function uploadCover(fileId, coverPath) {
       },
     });
     coverArtPath = res.data.data.cover;
-    console.log("✅ Uploaded cover art", res.data);
-    console.log("🖼️ Cover uploaded:", res.data.message);
+    console.log("✅ Cover uploaded:", coverArtPath);
   } catch (err) {
     console.error("❌ Cover upload failed:", err.response?.data || err.message);
-    process.exit(1);
+    throw err;
   }
 }
 
 /**
  * Finalize upload
  */
-async function finalizeUpload(fileId, totalChunks, title = "My Test Song") {
+async function finalizeUpload(fileId, totalChunks, metadata) {
   try {
-    const genre = "Pop"; // Example genre
-    const description = "This is a test song upload."; // Example description
-    const coverr = coverArtPath;
     const res = await axios.post(
       `${API_BASE}/finalize`,
-      { fileId, totalChunks, title, coverArtPath: coverr, description, genre },
+      {
+        fileId,
+        totalChunks,
+        title: metadata.title,
+        coverArtPath: metadata.coverArtPath,
+        description: metadata.description,
+        genre: metadata.genre,
+      },
       { headers: { Authorization: `Bearer ${AUTH_TOKEN}` } }
     );
-    console.log("🎵 Finalize response:", res.data);
+    console.log("🎵 Upload finalized:", res.data);
   } catch (err) {
     console.error("❌ Finalize failed:", err.response?.data || err.message);
-    process.exit(1);
+    throw err;
   }
 }
 
 /**
- * Main Simulation Runner
+ * Main execution
  */
 async function simulateUpload() {
-  console.log("🚀 Starting chunked upload simulation...");
+  const fileId = crypto.randomUUID();
+  console.log("🚀 Starting upload with fileId:", fileId);
 
-  // 1️⃣ Split the audio file
-  const chunks = splitFile(SONG_PATH, CHUNK_SIZE);
-  console.log(`🔹 Total chunks: ${chunks.length}`);
+  try {
+    // 1. Split and upload chunks
+    const chunks = splitFile(SONG_PATH, CHUNK_SIZE);
+    console.log(`📦 Total chunks: ${chunks.length}`);
 
-  // 2️⃣ Upload chunks sequentially
-  for (let i = 0; i < chunks.length; i++) {
-    await uploadChunk(FILE_ID, i, chunks[i]);
+    for (let i = 0; i < chunks.length; i++) {
+      await uploadChunk(fileId, i, chunks[i]);
+    }
+
+    // 2. Upload cover
+    await uploadCover(fileId, COVER_PATH);
+
+    // 3. Finalize
+    await finalizeUpload(fileId, chunks.length, {
+      title: "My Test Song",
+      coverArtPath,
+      description: "This is a test upload",
+      genre: "Pop",
+    });
+
+    console.log("✅ Upload complete!");
+  } catch (error) {
+    console.error("❌ Upload failed:", error.message);
+    process.exit(1);
   }
-
-  // 3️⃣ Upload cover
-  await uploadCover(FILE_ID, COVER_PATH);
-
-  // 4️⃣ Finalize upload
-  await finalizeUpload(FILE_ID, chunks.length);
-
-  console.log("✅ All done!");
 }
 
 simulateUpload();
