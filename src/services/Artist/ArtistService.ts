@@ -17,15 +17,6 @@ import {
 import { ArtistFacetV2ABI } from "../../abis/ArtistFacetV2";
 
 export class ArtistService {
-  private userRepo: Repository<User>;
-  private publicClient: any;
-  private evmClient: any;
-
-  constructor() {
-    this.userRepo = AppDataSource.getRepository(User);
-    dotenv.config();
-  }
-
   async setupArtistAccountOnChain(walletAddress: string): Promise<`0x${string}`> {
   try {
     const publicClient = await getLiskPublicClient();
@@ -78,19 +69,6 @@ export class ArtistService {
     });
 
     console.log(`Transaction confirmed in block ${receipt.blockNumber}`);
-
-
-    // const txHash = await (
-    //   await accountWalletClient(walletAddress)
-    // ).sendTransaction({
-    //   to: preparedTx.to,
-    //   data: preparedTx.data,
-    //   chainId: preparedTx.chainId,
-    //   gas: preparedTx.gas,
-    //   maxFeePerGas: preparedTx.maxFeePerGas,
-    //   maxPriorityFeePerGas: preparedTx.maxPriorityFeePerGas,
-    //   nonce: preparedTx.nonce,
-    // });
 
     console.log(`Transaction sent with hash: ${txHash}`);
     return txHash;
