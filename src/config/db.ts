@@ -3,7 +3,6 @@ import { DataSource } from "typeorm";
 import dotenv from "dotenv";
 import { User } from "../entities/User";
 import { Song } from "../entities/Song";
-import { ArtistProfile } from "../entities/AristProfile";
 import { TransactionLog } from "../entities/TransactionLog";
 
 
@@ -22,7 +21,6 @@ const AppDataSource = new DataSource({
   logging: true,
   entities: [
     User,
-    ArtistProfile,
     Song,
     TransactionLog,
   ],

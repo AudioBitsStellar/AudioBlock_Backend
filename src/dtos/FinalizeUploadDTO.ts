@@ -29,5 +29,9 @@ export class FinalizeUploadDTO {
   @IsNotEmpty({ message: "Cover art path is required." })
   coverArtPath!: string;
 
+  @IsString()
+  @IsOptional()
+  composers?: string;
+
 
 }

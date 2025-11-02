@@ -112,7 +112,7 @@ export async function startSongWorker() {
           { trait_type: "cover_url", value: coverRes.cid },
           { trait_type: "artist_name", value: song?.user.name },
           { trait_type: "artist_username", value: song?.user.username },
-          { trait_type: "Composers", value: "" },
+          { trait_type: "Composers", value: song.composers || "" },
         ],
       };
 

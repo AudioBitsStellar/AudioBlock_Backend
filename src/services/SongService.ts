@@ -83,7 +83,8 @@ export class SongService {
     artistAddress: string,
     description: string,
     genre: string,
-    coverArtPath: string
+    coverArtPath: string,
+    composers: string
   ): Promise<Song> {
     const tempDir = path.join("uploads/temp", fileId);
     const mergedDir = "uploads/merged";
@@ -165,6 +166,7 @@ export class SongService {
       description,
       genre,
       coverArtPath,
+      composers,
     });
     await this.songRepo.save(song);
 

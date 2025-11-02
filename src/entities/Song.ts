@@ -21,7 +21,6 @@ export class Song {
   @Column()
   artistId!: string; 
 
-
   @Column()
   coverArtPath!: string; 
 
@@ -60,6 +59,9 @@ export class Song {
 
   @Column({ type: "json", nullable: true })
   metadata: any;
+
+  @Column({ nullable: true })
+  composers?: string;
 
   @CreateDateColumn()
   createdAt!: Date;

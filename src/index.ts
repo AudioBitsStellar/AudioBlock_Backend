@@ -7,7 +7,8 @@ import fs from "fs";
 import path from "path";
 
 // Ensure upload directories exist
-const uploadDirs = ["uploads/temp", "uploads/merged"];
+const uploadDirs = ["uploads/temp", "uploads/merged", "uploads/profile-images",
+  "uploads/page-covers", "uploads/covers"];
 
 async function main() {
   try {
