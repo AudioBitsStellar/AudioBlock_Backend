@@ -12,3 +12,5 @@ logs/newrelic*
 ./dist
 
 ./uploads
+simulateUpload.js
+simulateUploadOld.js
