@@ -49,7 +49,8 @@ export async function initRabbitMQ(): Promise<void> {
       // For amqps://, no additional config needed - amqplib handles TLS automatically
       const connection = await amqp.connect(rabbitmqUrl, {
         heartbeat: 60,
-      });
+        ssl: { rejectUnauthorized: false }
+      } as any);
 
       channel = await connection.createChannel();
       console.log("✅ RabbitMQ connected and channel created");
