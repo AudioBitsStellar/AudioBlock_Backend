@@ -16,7 +16,8 @@ import { TransactionLogService } from '../services/TransactionLogService';
 const songRepo = AppDataSource.getRepository(Song);
 
 export async function startSongWorker() {
-  const channel = getChannel();
+  try {
+    const channel = getChannel();
 
   const queue = "song_processing";
 
@@ -156,4 +157,8 @@ export async function startSongWorker() {
       channel.nack(msg, false, false);
     }
   });
+  } catch (error) {
+    console.error("❌ Could not start song worker:", error);
+    console.log("⚠️ Worker will retry when RabbitMQ reconnects");
+  }
 }
