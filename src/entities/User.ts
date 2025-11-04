@@ -9,10 +9,10 @@ import {
   OneToOne,
   OneToMany,
 } from "typeorm";
-import { ArtistProfile } from "./AristProfile";
 import { Song } from "./Song";
 import { Transaction } from "ethers";
 import { TransactionLog } from "./TransactionLog";
+import { Album } from "./Album";
 
 export enum UserRole {
   LISTENER = "listener",
@@ -65,6 +65,15 @@ export class User {
   uniqueListeners!: number;
 
   @Column({ nullable: true })
+  bio?: string;
+
+  @Column({ nullable: true })
+  pageCover?: string;
+
+  @Column({ nullable: true })
+  website?: string;
+
+  @Column({ nullable: true })
   twitterId?: string;
 
   @Column({ nullable: true })
@@ -103,13 +112,13 @@ export class User {
   @UpdateDateColumn()
   updatedAt!: Date;
 
-  // One user has one artist profile
-  @OneToOne(() => ArtistProfile, (profile) => profile.user)
-  artistProfile!: ArtistProfile;
-
   // One user has many songs
   @OneToMany(() => Song, (song) => song.user)
   songs!: Song[];
+
+  // One user has many albums
+  @OneToMany(() => Album, (album) => album.user)
+  albums!: Album[];
 
   // One user has many transaction logs
   @OneToMany(() => TransactionLog, (log) => log.user)

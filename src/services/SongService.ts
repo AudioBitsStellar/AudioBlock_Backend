@@ -7,6 +7,12 @@ import path from "path";
 import fs from "fs";
 import { s3 } from "../config/s3";
 import { getChannel } from "../config/rabbitmq";
+import { getLiskPublicClient } from "../config/dynamic";
+import { authenticatedEvmClient, keyShare } from "../utils/dynamicUtils";
+import { encodeFunctionData } from "viem";
+import { SongFacetABI } from "../abis/SongFacetABI";
+import { LiskSepoliaFacetAddress } from "../utils/facets";
+import { liskSepolia } from "viem/chains";
 
 export class SongService {
   private songRepo: Repository<Song>;
@@ -77,7 +83,8 @@ export class SongService {
     artistAddress: string,
     description: string,
     genre: string,
-    coverArtPath: string
+    coverArtPath: string,
+    composers: string
   ): Promise<Song> {
     const tempDir = path.join("uploads/temp", fileId);
     const mergedDir = "uploads/merged";
@@ -138,15 +145,13 @@ export class SongService {
     // Remove empty temp directory
     fs.rmdirSync(tempDir);
 
-
-
     //  Upload merged file to S3
     const s3Res = await s3
       .upload({
         Bucket: process.env.AWS_BUCKET_NAME!,
         Key: `uploads/${fileId}.mp3`,
         Body: fs.createReadStream(finalPath),
-        ContentType: "audio/mpeg"
+        ContentType: "audio/mpeg",
         // ACL: "public-read",
       })
       .promise();
@@ -161,6 +166,7 @@ export class SongService {
       description,
       genre,
       coverArtPath,
+      composers,
     });
     await this.songRepo.save(song);
 
@@ -177,5 +183,86 @@ export class SongService {
     // fs.unlinkSync(finalPath);
 
     return song;
+  }
+
+  async uploadSongToBlockchain(
+    user_id: string,
+    metadataCid: string
+  ): Promise<string> {
+    try {
+      const publicClient = await getLiskPublicClient();
+      const evmClient = await authenticatedEvmClient();
+
+      if (!evmClient) {
+        throw new Error("EVM client not initialized");
+      }
+
+      const userRepo = AppDataSource.getRepository(User);
+      const user = await userRepo.findOneBy({ id: user_id });
+      if (!user) {
+        throw new Error("User not found");
+      }
+
+      const walletAddress = user.walletAddress;
+
+      const data = encodeFunctionData({
+        abi: SongFacetABI,
+        functionName: "uploadAndMintSong",
+        args: [
+          metadataCid,
+          0, // albumId
+        ],
+      });
+
+      const transactionRequest = {
+        to: LiskSepoliaFacetAddress.Diamond as `0x${string}`,
+        data,
+        account: walletAddress as `0x${string}`,
+      };
+
+      const preparedTx = await publicClient.prepareTransactionRequest({
+        ...transactionRequest,
+        chain: liskSepolia,
+      });
+
+      console.log("Prepared transaction:", preparedTx);
+
+      const signedTx = await evmClient.signTransaction({
+        senderAddress: walletAddress as `0x${string}`,
+        externalServerKeyShares: await keyShare(walletAddress),
+        transaction: {
+          to: preparedTx.to,
+          data: preparedTx.data,
+          chainId: preparedTx.chainId,
+          gas: preparedTx.gas,
+          maxFeePerGas: preparedTx.maxFeePerGas,
+          maxPriorityFeePerGas: preparedTx.maxPriorityFeePerGas,
+          nonce: preparedTx.nonce,
+          type: "eip1559", // Explicitly set transaction type
+        },
+      });
+
+      console.log("Signed transaction:", signedTx);
+
+      const txHash = await publicClient.sendRawTransaction({
+        serializedTransaction: signedTx as `0x${string}`,
+      });
+      console.log(`Transaction sent with hash: ${txHash}`);
+
+      // Wait for confirmation
+      const receipt = await publicClient.waitForTransactionReceipt({
+        hash: txHash,
+      });
+
+      console.log(`Transaction confirmed in block ${receipt.blockNumber}`);
+
+      console.log(`Transaction sent with hash: ${txHash}`);
+      return txHash;
+    } catch (error) {
+      console.error("Error setting up artist account on-chain:", error);
+      throw new Error(
+        "ArtistService: Error setting up artist account on-chain"
+      );
+    }
   }
 }

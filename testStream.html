@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Audioblocks Stream Player</title>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <style>
+    body {
+      background: #0d0d0d;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      font-family: sans-serif;
+    }
+    audio {
+      width: 80%;
+      max-width: 600px;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h2>🎶 AudioBlocks Streaming from Backend (Using HLS)</h2>
+  <audio id="player" controls></audio>
+
+  <script>
+    const audio = document.getElementById("player");
+    const streamUrl = "http://127.0.0.1:4000/api/song/stream/836c320b-e53b-4733-9fa7-7f90a4ca32a3";
+
+    if (Hls.isSupported()) {
+      const hls = new Hls();
+      hls.loadSource(streamUrl);
+      hls.attachMedia(audio);
+      hls.on(Hls.Events.MANIFEST_PARSED, function () {
+        console.log("✅ Stream loaded, starting playback...");
+        audio.play();
+      });
+      hls.on(Hls.Events.ERROR, (event, data) => {
+        console.error("❌ HLS.js error:", data);
+      });
+    } else if (audio.canPlayType("application/vnd.apple.mpegurl")) {
+      // Safari supports native HLS playback
+      audio.src = streamUrl;
+      audio.addEventListener("loadedmetadata", () => {
+        audio.play();
+      });
+    } else {
+      console.error("Your browser does not support HLS playback.");
+    }
+  </script>
+</body>
+</html>

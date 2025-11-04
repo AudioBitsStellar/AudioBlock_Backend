@@ -1,3 +1,4 @@
+import { SongService } from './../services/SongService';
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -9,6 +10,8 @@ import { CacheService } from "../services/CacheService";
 import AppDataSource from "../config/db";
 import { Song } from "../entities/Song";
 import { PinataService } from "../services/PinataService";
+import { precomputeSignedManifest } from "./precomputeManifest";
+import { TransactionLogService } from '../services/TransactionLogService';
 
 const songRepo = AppDataSource.getRepository(Song);
 
@@ -16,6 +19,9 @@ export async function startSongWorker() {
   const channel = getChannel();
 
   const queue = "song_processing";
+
+  const SongServiceInstance = new SongService();
+  const logService = new TransactionLogService();
 
   // Ensure the queue exists before consuming
   await channel.assertQueue(queue, { durable: true });
@@ -61,7 +67,8 @@ export async function startSongWorker() {
 
       // Upload HLS to S3
       const hlsFiles = fs.readdirSync(hlsDir);
-      const s3BasePath = `songs/${fileId}/hls/`;
+      // const s3BasePath = `songs/${fileId}/hls/`;
+      const s3BasePath = `songs/${songId}/hls/`;
 
       for (const f of hlsFiles) {
         const filePath = path.join(hlsDir, f);
@@ -105,7 +112,7 @@ export async function startSongWorker() {
           { trait_type: "cover_url", value: coverRes.cid },
           { trait_type: "artist_name", value: song?.user.name },
           { trait_type: "artist_username", value: song?.user.username },
-          { trait_type: "Composers", value: "" },
+          { trait_type: "Composers", value: song.composers || "" },
         ],
       };
 
@@ -121,7 +128,24 @@ export async function startSongWorker() {
       song.metadata = metadata;
       await songRepo.save(song);
 
+      await precomputeSignedManifest(song.id).catch(err => console.warn("precompute failed", err));
+
       await CacheService.cacheSong(songId, song);
+
+      // Interact with Smart Contract to mint NFT
+      const txHash = await SongServiceInstance.uploadSongToBlockchain(
+        song.user.id,
+        metadataRes.cid
+      ).catch((err) =>
+        console.error("Blockchain upload failed for song", song.id, err)
+      );
+
+      await logService.createLogEntry(
+        song.user.id,
+        txHash || "",
+        "SONG_PROCESSED",
+        `Song with ID ${song.id} has been processed and is live.`,
+      );
 
       fs.unlinkSync(localFile);
       fs.rmdirSync(hlsDir, { recursive: true });

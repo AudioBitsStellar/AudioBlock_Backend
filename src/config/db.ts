@@ -3,8 +3,10 @@ import { DataSource } from "typeorm";
 import dotenv from "dotenv";
 import { User } from "../entities/User";
 import { Song } from "../entities/Song";
-import { ArtistProfile } from "../entities/AristProfile";
 import { TransactionLog } from "../entities/TransactionLog";
+import { Genre } from "../entities/Genre";
+import { Album } from "../entities/Album";
+
 
 
 dotenv.config();
@@ -22,9 +24,10 @@ const AppDataSource = new DataSource({
   logging: true,
   entities: [
     User,
-    ArtistProfile,
     Song,
     TransactionLog,
+    Genre,
+    Album
   ],
   migrations: ["src/migrations/*.ts"],
   migrationsTableName: "migrations",

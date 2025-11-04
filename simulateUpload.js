@@ -9,7 +9,7 @@ import crypto from "crypto";
 
 const API_BASE = "http://localhost:4000/api/song/upload";
 const AUTH_TOKEN =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImMxYTMxNjIwLTk5ZjQtNGQ1Zi05OGQxLWQ4N2VkOGU3OTBkNyIsImR5bmFtaXhVc2VySWQiOiIxZGE3MzY5Mi1lYzE1LTRiNTctOTg5ZS1lNGQwZmM0NjViNjciLCJlbWFpbCI6ImV6ZW96dWVjaGlhZ296aWVtQGdtYWlsLmNvbSIsIndhbGxldEFkZHJlc3MiOiIweEIwODZjRjk4OTc0MWU4NmI1MzU0NzA5NjYxMjBlQUNDMmI5RkY3OTkiLCJyb2xlIjoiYXJ0aXN0IiwidXNlcm5hbWUiOiJndXpieXRlXzIiLCJwcm9maWxlSW1hZ2UiOm51bGwsIm5hbWUiOm51bGwsInJld2FyZFBvaW50cyI6MCwidG90YWxTdHJlYW1zIjowLCJ0b3RhbFN0cmVhbVRpbWUiOjAsInVuaXF1ZUxpc3RlbmVycyI6MCwiaWF0IjoxNzYxNjA1MDU1LCJleHAiOjE3NjE2OTE0NTV9.ZASaMBzvk3iX7MYWicLgiVD4gutILqEW_lNy-31QAew"; // Replace with valid token
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImU4YzA5MGQ2LWU4NjYtNDNjMy1hNjRiLTIzZGIzMmU2MWRhOSIsImR5bmFtaXhVc2VySWQiOiIxZGE3MzY5Mi1lYzE1LTRiNTctOTg5ZS1lNGQwZmM0NjViNjciLCJlbWFpbCI6ImV6ZW96dWVjaGlhZ296aWVtQGdtYWlsLmNvbSIsIndhbGxldEFkZHJlc3MiOiIweEIwODZjRjk4OTc0MWU4NmI1MzU0NzA5NjYxMjBlQUNDMmI5RkY3OTkiLCJyb2xlIjoiYXJ0aXN0IiwidXNlcm5hbWUiOiJndXpieXRlcmVjIiwicHJvZmlsZUltYWdlIjpudWxsLCJuYW1lIjpudWxsLCJyZXdhcmRQb2ludHMiOjAsInRvdGFsU3RyZWFtcyI6MCwidG90YWxTdHJlYW1UaW1lIjowLCJ1bmlxdWVMaXN0ZW5lcnMiOjAsImlhdCI6MTc2MjA4MDg0MSwiZXhwIjoxNzYyMTY3MjQxfQ.cyWsCLn43W5V2UhODYOoOgBnKH40mfYQrUkDLFMce9o"; // Replace with valid token
 
 const SONG_PATH = "./test_song.mp3";
 const COVER_PATH = "./cover.jpg";
@@ -98,6 +98,7 @@ async function finalizeUpload(fileId, totalChunks, metadata) {
         coverArtPath: metadata.coverArtPath,
         description: metadata.description,
         genre: metadata.genre,
+        composers: metadata.composers,
       },
       { headers: { Authorization: `Bearer ${AUTH_TOKEN}` } }
     );
@@ -133,6 +134,7 @@ async function simulateUpload() {
       coverArtPath,
       description: "This is a test upload",
       genre: "Pop",
+      composers: "John Doe, Jane Smith",
     });
 
     console.log("✅ Upload complete!");

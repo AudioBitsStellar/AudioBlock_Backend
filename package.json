@@ -8,7 +8,8 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "test:dynamic": "ts-node-esm src/scripts/dynamic.ts"
+    "test:dynamic": "ts-node-esm src/scripts/dynamic.ts",
+    "seed:genres": "ts-node src/seeders/genre.seeder.ts"
   },
   "author": "",
   "license": "ISC",

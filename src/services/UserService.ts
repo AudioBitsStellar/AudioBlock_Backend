@@ -48,16 +48,19 @@ export class UserService {
             throw new Error("User already exists");
         }
 
-        const onChainAccount = await this.artistService.setupArtistAccountOnChain(dto.walletAddress);
-        console.log("On-chain account setup initiated:", onChainAccount);
+        let onChainAccount: string | undefined = undefined;
+
+        if (dto.role === "artist") {
+            onChainAccount = await this.artistService.setupArtistAccountOnChain(dto.walletAddress);
+            console.log("On-chain account setup initiated:", onChainAccount);
+        }
 
         const user = this.userRepo.create(dto);
         const savedUser = await this.userRepo.save(user);
 
         const log = this.transactionLogRepo.create({
-            user: savedUser,
             user_id: savedUser.id,
-            txHash: onChainAccount,
+            txHash: onChainAccount ?? undefined,
             action: "CREATE_USER",
             description: `User with wallet ${savedUser.walletAddress} created.`,
         });
@@ -129,7 +132,6 @@ export class UserService {
         Object.assign(user, data);
         return await this.userRepo.save(user);
     }
-
     async deleteUser(id: string): Promise<User | null> {
         const user = await this.userRepo.findOneBy({ id });
         if (!user) {
@@ -137,5 +139,4 @@ export class UserService {
         }
         return await this.userRepo.remove(user);
     }
-
 }
