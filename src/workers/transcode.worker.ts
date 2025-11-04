@@ -7,7 +7,7 @@ import { transcodeToHLS } from "../utils/ffmpeg";
 import { uploadFileToPinata, uploadJsonToPinata } from "../utils/ipfs";
 
 import AppDataSource from "../config/db";
-import { sendToBlockchain } from "../services/blockchainService";
+// import { sendToBlockchain } from "../services/blockchainService";
 
 export async function startWorker() {
   const channel = getChannel();
@@ -83,7 +83,7 @@ export async function startWorker() {
       console.log(` Song ${songId} ready! CID: ${songCid}`);
 
       // Step 6️⃣: Send metadata CID to blockchain
-      await sendToBlockchain(song.artistId, metadataCid);
+      // await sendToBlockchain(song.artistId, metadataCid);
 
       // Cleanup
       fs.unlinkSync(localFile);

@@ -5,6 +5,7 @@ import { initRabbitMQ, waitForRabbitMQ } from "./config/rabbitmq";
 import { startSongWorker } from "./workers/SongProcessorWorker";
 import fs from "fs";
 import path from "path";
+import { runSeeders } from "./seeders";
 
 // Ensure upload directories exist
 const uploadDirs = ["uploads/temp", "uploads/merged", "uploads/profile-images",
@@ -15,6 +16,10 @@ async function main() {
     // Initialize the database connection
     await AppDataSource.initialize();
     console.log("✅ Database connected successfully");
+
+
+    // Run Seeders
+    await runSeeders();
 
     initRabbitMQ();
     await waitForRabbitMQ();
