@@ -79,6 +79,51 @@ export class AuthController {
         }
     }
 
+    registerListener = async(req: Request, res: Response) => {
+        try {
+            if (!req.body || Object.keys(req.body).length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Request body is required" 
+                });
+            }
+
+            // Check for required fields before transformation
+            const requiredFields = ['role', 'walletAddress', 'signature', 'message', 'email'];
+            const missingFields = requiredFields.filter(field => !req.body[field]);
+            
+            if (missingFields.length > 0) {
+                return res.status(400).json({
+                    success: false, 
+                    message: `Missing required fields: ${missingFields.join(', ')}` 
+                });
+            }
+
+            // Transform with explicit options
+            const userData = plainToInstance(CreateUserDTO, req.body, {
+                enableImplicitConversion: true
+            });
+
+            console.log("Transformed userData:", userData);
+
+            // Validate the transformed data
+            const errors = await validate(userData);
+            if (errors.length > 0) {
+                console.log("Validation errors:", errors);
+                const formatted = formatValidationErrors(errors);
+                return res.status(422).json(formatted);
+            }
+
+            // Create user
+            const user = await this.userService.createUser(userData);
+            res.status(201).json({success: true, message: "User created successfully", user});
+            
+        } catch (error) {
+            console.error("Register error:", error);     
+            this.handleError(res, error);
+        }
+    }
+
     login = async (req: Request, res: Response) => {
         try {
             if (!req.body || Object.keys(req.body).length === 0) {
