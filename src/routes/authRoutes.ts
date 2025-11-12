@@ -14,6 +14,7 @@ const router = Router();
 
 router.get("/nonce/:email", authController.getNonce);
 router.post("/register", authController.register);
+router.post("/register-listener", authController.registerListener);
 router.post("/login", authController.login);
 
 
