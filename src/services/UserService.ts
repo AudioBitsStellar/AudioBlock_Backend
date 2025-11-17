@@ -31,15 +31,29 @@ export class UserService {
         }
 
         // Extract nonce from message
-        const nonceMatch = dto.message.match(/Nonce: (\w+)/);
+        // const nonceMatch = dto.message.match(/Nonce: (\w+)/);
+        const nonceMatch = dto.message.match(/Nonce:\s*([A-Za-z0-9-]+)/);
+
         if (!nonceMatch) throw new Error("Nonce missing in message");
         const nonce = nonceMatch[1];
 
          // Verify nonce exists and matches stored one
         const storedNonce = await redis.get(`nonce:${dto.email}`);
-        if (!storedNonce || storedNonce !== nonce) {
-            throw new Error("Invalid or expired nonce");
+        console.log("Stored nonce:", storedNonce);
+        console.log("Received nonce:", nonce);
+
+         if (!storedNonce) {
+            throw new Error("Nonce expired");
         }
+
+        if (storedNonce !== nonce) {
+            throw new Error("Nonce mismatch");
+        }
+
+
+        // if (!storedNonce || storedNonce !== nonce) {
+        //     throw new Error("Invalid or expired nonce");
+        // }
 
         //  Delete nonce immediately (one-time use)
         await redis.del(`nonce:${dto.email}`);
