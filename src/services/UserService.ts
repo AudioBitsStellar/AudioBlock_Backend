@@ -31,7 +31,9 @@ export class UserService {
         }
 
         // Extract nonce from message
-        const nonceMatch = dto.message.match(/Nonce: (\w+)/);
+        // const nonceMatch = dto.message.match(/Nonce: (\w+)/);
+        const nonceMatch = dto.message.match(/Nonce:\s*([A-Za-z0-9-]+)/);
+
         if (!nonceMatch) throw new Error("Nonce missing in message");
         const nonce = nonceMatch[1];
 
