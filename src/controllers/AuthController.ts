@@ -20,7 +20,7 @@ export class AuthController {
         this.authService = new AuthService();
     }
 
-    getNonce = async (req: Request, res: Response) => {
+    getUserNonce = async (req: Request, res: Response) => {
         try {
             const email = req.params.email;
             const nonce = await this.authService.getNonce(email);
