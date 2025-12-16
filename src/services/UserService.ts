@@ -37,7 +37,7 @@ export class UserService {
         if (!nonceMatch) throw new Error("Nonce missing in message");
         const nonce = nonceMatch[1];
 
-         // Verify nonce exists and matches stored one
+        // Verify nonce exists and matches stored one
         const storedNonce = await redis.get(`nonce:${dto.email}`);
         console.log("Stored nonce:", storedNonce);
         console.log("Received nonce:", nonce);
