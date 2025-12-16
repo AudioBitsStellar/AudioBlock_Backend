@@ -42,7 +42,7 @@ export class UserService {
         console.log("Stored nonce:", storedNonce);
         console.log("Received nonce:", nonce);
 
-         if (!storedNonce) {
+        if (!storedNonce) {
             throw new Error("Nonce expired");
         }
 
