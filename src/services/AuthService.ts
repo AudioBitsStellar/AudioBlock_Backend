@@ -28,6 +28,8 @@ export class AuthService {
     // store nonce with 5-min expiry
     await redis.set(`nonce:${email}`, nonce, "EX", 300);
 
+    console.log("Generated nonce:", nonce);
+    console.log("Nonce from redis:", await redis.get(`nonce:${email}`));
     return nonce;
   }
 
