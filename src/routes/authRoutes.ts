@@ -12,7 +12,7 @@ const authController = new AuthController();
 const router = Router();
 
 
-router.get("/nonce/:email", authController.getNonce);
+router.get("/nonce/:email", authController.getUserNonce);
 router.post("/register", authController.register);
 router.post("/register-listener", authController.registerListener);
 router.post("/login", authController.login);
