@@ -57,6 +57,18 @@ export class Song {
   @Column({ nullable: true })
   metadataCid!: string;
 
+  /** On-chain minting state, independent of streaming readiness above. */
+  @Column({ default: "not_minted" })
+  mintStatus!: "not_minted" | "pending" | "minted" | "failed";
+
+  /** song_id returned by the catalog Soroban contract once minting succeeds. */
+  @Column({ nullable: true })
+  onChainSongId?: string;
+
+  /** token_id of the song NFT, minted by the catalog Soroban contract. */
+  @Column({ nullable: true })
+  onChainTokenId?: string;
+
   @Column({ type: "json", nullable: true })
   metadata: any;
 

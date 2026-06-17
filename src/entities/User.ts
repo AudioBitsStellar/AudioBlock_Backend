@@ -39,8 +39,25 @@ export class User {
   })
   role!: UserRole;
 
-  @Column()
-  walletAddress!: string;
+  /** Optional: only set for users who authenticate with a wallet signature. */
+  @Column({ nullable: true })
+  walletAddress?: string;
+
+  /** Optional: only set for users who authenticate with email + password. */
+  @Column({ nullable: true })
+  passwordHash?: string;
+
+  /** Stellar G... public key the artist connected (e.g. via Freighter) for Soroban actions. */
+  @Column({ unique: true, nullable: true })
+  stellarPublicKey?: string;
+
+  /** artist_id returned by the artist Soroban contract once on-chain setup succeeds. */
+  @Column({ nullable: true })
+  stellarArtistId?: string;
+
+  /** token_id of the artist's profile NFT, minted by the artist Soroban contract. */
+  @Column({ nullable: true })
+  stellarArtistTokenId?: string;
 
   @Column({ unique: true, nullable: true })
   username?: string;

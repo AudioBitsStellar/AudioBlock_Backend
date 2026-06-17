@@ -1,80 +1,69 @@
-import { validate } from "class-validator";
+import { Repository } from "typeorm";
 import { User } from "../../entities/User";
 import AppDataSource from "../../config/db";
-import { Repository } from "typeorm";
-import dotenv from "dotenv";
-import { getLiskPublicClient } from "../../config/dynamic";
-import { LiskSepoliaFacetAddress } from "../../utils/facets";
-import { encodeFunctionData } from "viem";
-import { parseAbi } from "viem";
-import { ArtistFacetABI } from "../../abis/ArtistFacet";
-import { liskSepolia } from "viem/chains";
-import {
-  accountWalletClient,
-  authenticatedEvmClient,
-  keyShare,
-} from "../../utils/dynamicUtils";
-import { ArtistFacetV2ABI } from "../../abis/ArtistFacetV2";
+import { SorobanContracts } from "../../config/soroban";
+import { SorobanService, addressArg, stringArg } from "../Soroban/SorobanService";
+
+export interface PreparedTransaction {
+  xdr: string;
+  networkPassphrase: string;
+}
 
 export class ArtistService {
-  async setupArtistAccountOnChain(walletAddress: string): Promise<`0x${string}`> {
-  try {
-    const publicClient = await getLiskPublicClient();
-    const evmClient = await authenticatedEvmClient();
+  private userRepo: Repository<User>;
+  private soroban: SorobanService;
 
-    const data = encodeFunctionData({
-      abi: ArtistFacetV2ABI,
-      functionName: "setupArtistProfile",
-      args: [],
-    });
-
-    const transactionRequest = {
-      to: LiskSepoliaFacetAddress.Diamond as `0x${string}`,
-      data,
-      account: walletAddress as `0x${string}`,
-    };
-
-    const preparedTx = await publicClient.prepareTransactionRequest({
-      ...transactionRequest,
-      chain: liskSepolia
-    });
-
-    console.log("Prepared transaction:", preparedTx);
-
-    const signedTx = await evmClient.signTransaction({
-      senderAddress: walletAddress as `0x${string}`,
-      externalServerKeyShares: await keyShare(walletAddress),
-      transaction: {
-        to: preparedTx.to,
-        data: preparedTx.data,
-        chainId: preparedTx.chainId,
-        gas: preparedTx.gas,
-        maxFeePerGas: preparedTx.maxFeePerGas,
-        maxPriorityFeePerGas: preparedTx.maxPriorityFeePerGas,
-        nonce: preparedTx.nonce,
-        type: 'eip1559', // Explicitly set transaction type
-      },
-    });
-
-    console.log("Signed transaction:", signedTx);
-
-     const txHash = await publicClient.sendRawTransaction({
-      serializedTransaction: signedTx as `0x${string}`,
-    });
-    console.log(`Transaction sent with hash: ${txHash}`);
-
-    // Wait for confirmation
-    const receipt = await publicClient.waitForTransactionReceipt({
-      hash: txHash,
-    });
-
-    console.log(`Transaction confirmed in block ${receipt.blockNumber}`);
-
-    console.log(`Transaction sent with hash: ${txHash}`);
-    return txHash;
-  } catch (error) {
-    console.error("Error setting up artist account on-chain:", error);
-    throw new Error("ArtistService: Error setting up artist account on-chain");
+  constructor() {
+    this.userRepo = AppDataSource.getRepository(User);
+    this.soroban = new SorobanService();
   }
+
+  /** Records the Stellar account (e.g. Freighter) the artist will sign on-chain actions with. */
+  async connectStellarWallet(userId: string, stellarPublicKey: string): Promise<User> {
+    const user = await this.userRepo.findOneBy({ id: userId });
+    if (!user) throw new Error("User not found");
+
+    user.stellarPublicKey = stellarPublicKey;
+    return this.userRepo.save(user);
+  }
+
+  /**
+   * Builds the unsigned `setup_artist_profile` invocation for the artist
+   * contract. The artist's own wallet must sign and return it via
+   * `submitArtistOnChainSetup` — the backend never holds the artist's key.
+   */
+  async prepareArtistOnChainSetup(userId: string, cid: string): Promise<PreparedTransaction> {
+    const user = await this.userRepo.findOneBy({ id: userId });
+    if (!user) throw new Error("User not found");
+    if (!user.stellarPublicKey) {
+      throw new Error("Connect a Stellar wallet before setting up an on-chain artist profile");
+    }
+    if (!cid) throw new Error("cid is required");
+
+    const xdrTx = await this.soroban.prepareInvocation(
+      user.stellarPublicKey,
+      SorobanContracts.artist,
+      "setup_artist_profile",
+      [addressArg(user.stellarPublicKey), stringArg(cid)]
+    );
+
+    return { xdr: xdrTx, networkPassphrase: process.env.SOROBAN_NETWORK_PASSPHRASE || "" };
+  }
+
+  /** Submits the artist's signed `setup_artist_profile` transaction and records the result. */
+  async submitArtistOnChainSetup(userId: string, signedXdr: string): Promise<{ txHash: string; artistId: string; tokenId: string }> {
+    const user = await this.userRepo.findOneBy({ id: userId });
+    if (!user) throw new Error("User not found");
+
+    const { hash, returnValue } = await this.soroban.submitSignedTransaction(signedXdr);
+
+    // setup_artist_profile returns (artist_id: u64, token_id: u64)
+    const [artistId, tokenId] = returnValue as [bigint, bigint];
+
+    user.stellarArtistId = artistId.toString();
+    user.stellarArtistTokenId = tokenId.toString();
+    await this.userRepo.save(user);
+
+    return { txHash: hash, artistId: user.stellarArtistId, tokenId: user.stellarArtistTokenId };
   }
 }

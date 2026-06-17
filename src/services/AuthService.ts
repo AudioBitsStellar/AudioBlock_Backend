@@ -1,5 +1,7 @@
 import { validate } from "class-validator";
 import { JWTDTO } from "../dtos/JWTDTO";
+import { RegisterWithEmailDTO } from "../dtos/RegisterWithEmailDTO";
+import { LoginWithEmailDTO } from "../dtos/LoginWithEmailDTO";
 import { verifyMessage } from "ethers";
 import { Repository } from "typeorm";
 import { User } from "../entities/User";
@@ -9,6 +11,9 @@ import dotenv from "dotenv";
 import { profile } from "console";
 import redis from "../config/redis";
 import { randomBytes } from "crypto";
+import bcrypt from "bcrypt";
+
+const PASSWORD_SALT_ROUNDS = 12;
 
 export class AuthService {
   private userRepo: Repository<User>;
@@ -16,6 +21,79 @@ export class AuthService {
   constructor() {
     this.userRepo = AppDataSource.getRepository(User);
     dotenv.config();
+  }
+
+  private signToken(user: User): string {
+    const JWT_SECRET = process.env.JWT_SECRET as string;
+    if (!JWT_SECRET) {
+      throw new Error("JWT_SECRET not set in environment variables");
+    }
+
+    const payload = {
+      id: user.id,
+      dynamixUserId: user.dynamixUserId,
+      email: user.email,
+      walletAddress: user.walletAddress,
+      role: user.role,
+      username: user.username,
+      profileImage: user.profileImage,
+      name: user.name,
+      rewardPoints: user.rewardPoints,
+      totalStreams: user.totalStreams,
+      totalStreamTime: user.totalStreamTime,
+      uniqueListeners: user.uniqueListeners,
+    };
+
+    return jwt.sign(payload, JWT_SECRET, { expiresIn: "1d" });
+  }
+
+  /** Registers a user with email + password instead of a wallet signature. */
+  async registerWithEmail(data: RegisterWithEmailDTO): Promise<{ user: User; token: string }> {
+    const dto = Object.assign(new RegisterWithEmailDTO(), data);
+    const errors = await validate(dto);
+    if (errors.length > 0) {
+      throw new Error(errors.map((error) => Object.values(error.constraints || {}).join(", ")).join(", "));
+    }
+
+    if (await this.userRepo.findOneBy({ email: dto.email })) {
+      throw new Error("User already exists");
+    }
+
+    const passwordHash = await bcrypt.hash(dto.password, PASSWORD_SALT_ROUNDS);
+
+    const user = this.userRepo.create({
+      email: dto.email,
+      passwordHash,
+      role: dto.role,
+      username: dto.username,
+      name: dto.name,
+    });
+    const savedUser = await this.userRepo.save(user);
+
+    const token = this.signToken(savedUser);
+    return { user: savedUser, token };
+  }
+
+  /** Logs in a user with email + password instead of a wallet signature. */
+  async loginWithEmail(data: LoginWithEmailDTO): Promise<{ user: User; token: string }> {
+    const dto = Object.assign(new LoginWithEmailDTO(), data);
+    const errors = await validate(dto);
+    if (errors.length > 0) {
+      throw new Error(errors.map((error) => Object.values(error.constraints || {}).join(", ")).join(", "));
+    }
+
+    const user = await this.userRepo.findOneBy({ email: dto.email });
+    if (!user || !user.passwordHash) {
+      throw new Error("Invalid email or password");
+    }
+
+    const matches = await bcrypt.compare(dto.password, user.passwordHash);
+    if (!matches) {
+      throw new Error("Invalid email or password");
+    }
+
+    const token = this.signToken(user);
+    return { user, token };
   }
 
   async getNonce(email: string): Promise<any> {
@@ -36,11 +114,6 @@ export class AuthService {
   async login(data: JWTDTO): Promise<{ user: User; token: string }> {
     const dto = Object.assign(new JWTDTO(), data);
     const errors = await validate(dto);
-    const JWT_SECRET = process.env.JWT_SECRET as string;
-
-    if (!JWT_SECRET) {
-      throw new Error("JWT_SECRET not set in environment variables");
-    }
 
     if (errors.length > 0) {
       throw new Error(errors.map((error) => error.constraints).join(", "));
@@ -66,21 +139,7 @@ export class AuthService {
       throw new Error("User not found");
     }
 
-    const payload = {
-      id: user.id,
-      dynamixUserId: user.dynamixUserId,
-      email: user.email,
-      walletAddress: user.walletAddress,
-      role: user.role,
-      username: user.username,
-      profileImage: user.profileImage,
-      name: user.name,
-      rewardPoints: user.rewardPoints,
-      totalStreams: user.totalStreams,
-      totalStreamTime: user.totalStreamTime,
-      uniqueListeners: user.uniqueListeners,
-    };
-    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: "1d" });
+    const token = this.signToken(user);
     return { user, token };
   }
 }

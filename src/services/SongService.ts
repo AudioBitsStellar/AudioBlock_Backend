@@ -7,18 +7,19 @@ import path from "path";
 import fs from "fs";
 import { s3 } from "../config/s3";
 import { getChannel } from "../config/rabbitmq";
-import { getLiskPublicClient } from "../config/dynamic";
-import { authenticatedEvmClient, keyShare } from "../utils/dynamicUtils";
-import { encodeFunctionData } from "viem";
-import { SongFacetABI } from "../abis/SongFacetABI";
-import { LiskSepoliaFacetAddress } from "../utils/facets";
-import { liskSepolia } from "viem/chains";
+import { SorobanContracts } from "../config/soroban";
+import { SorobanService, addressArg, stringArg, u64Arg } from "./Soroban/SorobanService";
+import { PreparedTransaction } from "./Artist/ArtistService";
 
 export class SongService {
   private songRepo: Repository<Song>;
+  private userRepo: Repository<User>;
+  private soroban: SorobanService;
 
   constructor() {
     this.songRepo = AppDataSource.getRepository(Song);
+    this.userRepo = AppDataSource.getRepository(User);
+    this.soroban = new SorobanService();
     dotenv.config();
   }
 
@@ -185,84 +186,54 @@ export class SongService {
     return song;
   }
 
-  async uploadSongToBlockchain(
-    user_id: string,
-    metadataCid: string
-  ): Promise<string> {
+  /**
+   * Builds the unsigned `upload_and_mint_song` invocation for the catalog
+   * contract. The song's artist must already be registered on-chain and
+   * have a connected Stellar wallet; that wallet signs and returns the
+   * transaction via `submitSongMintTx` — the backend never holds the
+   * artist's key.
+   */
+  async prepareSongMintTx(songId: string, albumId: number = 0): Promise<PreparedTransaction> {
+    const song = await this.songRepo.findOne({ where: { id: songId }, relations: ["user"] });
+    if (!song) throw new Error("Song not found");
+    if (!song.metadataCid) throw new Error("Song has no metadata CID yet");
+
+    const user = song.user ?? (await this.userRepo.findOneBy({ id: song.artistId }));
+    if (!user?.stellarPublicKey) {
+      throw new Error("Connect a Stellar wallet before minting this song");
+    }
+
+    const xdrTx = await this.soroban.prepareInvocation(
+      user.stellarPublicKey,
+      SorobanContracts.catalog,
+      "upload_and_mint_song",
+      [addressArg(user.stellarPublicKey), stringArg(song.metadataCid), u64Arg(albumId)]
+    );
+
+    return { xdr: xdrTx, networkPassphrase: process.env.SOROBAN_NETWORK_PASSPHRASE || "" };
+  }
+
+  /** Submits the artist's signed `upload_and_mint_song` transaction and records the result. */
+  async submitSongMintTx(songId: string, signedXdr: string): Promise<{ txHash: string; songId: string; tokenId: string }> {
+    const song = await this.songRepo.findOneBy({ id: songId });
+    if (!song) throw new Error("Song not found");
+
     try {
-      const publicClient = await getLiskPublicClient();
-      const evmClient = await authenticatedEvmClient();
+      const { hash, returnValue } = await this.soroban.submitSignedTransaction(signedXdr);
 
-      if (!evmClient) {
-        throw new Error("EVM client not initialized");
-      }
+      // upload_and_mint_song returns (song_id: u64, token_id: u64)
+      const [onChainSongId, tokenId] = returnValue as [bigint, bigint];
 
-      const userRepo = AppDataSource.getRepository(User);
-      const user = await userRepo.findOneBy({ id: user_id });
-      if (!user) {
-        throw new Error("User not found");
-      }
+      song.onChainSongId = onChainSongId.toString();
+      song.onChainTokenId = tokenId.toString();
+      song.mintStatus = "minted";
+      await this.songRepo.save(song);
 
-      const walletAddress = user.walletAddress;
-
-      const data = encodeFunctionData({
-        abi: SongFacetABI,
-        functionName: "uploadAndMintSong",
-        args: [
-          metadataCid,
-          0, // albumId
-        ],
-      });
-
-      const transactionRequest = {
-        to: LiskSepoliaFacetAddress.Diamond as `0x${string}`,
-        data,
-        account: walletAddress as `0x${string}`,
-      };
-
-      const preparedTx = await publicClient.prepareTransactionRequest({
-        ...transactionRequest,
-        chain: liskSepolia,
-      });
-
-      console.log("Prepared transaction:", preparedTx);
-
-      const signedTx = await evmClient.signTransaction({
-        senderAddress: walletAddress as `0x${string}`,
-        externalServerKeyShares: await keyShare(walletAddress),
-        transaction: {
-          to: preparedTx.to,
-          data: preparedTx.data,
-          chainId: preparedTx.chainId,
-          gas: preparedTx.gas,
-          maxFeePerGas: preparedTx.maxFeePerGas,
-          maxPriorityFeePerGas: preparedTx.maxPriorityFeePerGas,
-          nonce: preparedTx.nonce,
-          type: "eip1559", // Explicitly set transaction type
-        },
-      });
-
-      console.log("Signed transaction:", signedTx);
-
-      const txHash = await publicClient.sendRawTransaction({
-        serializedTransaction: signedTx as `0x${string}`,
-      });
-      console.log(`Transaction sent with hash: ${txHash}`);
-
-      // Wait for confirmation
-      const receipt = await publicClient.waitForTransactionReceipt({
-        hash: txHash,
-      });
-
-      console.log(`Transaction confirmed in block ${receipt.blockNumber}`);
-
-      console.log(`Transaction sent with hash: ${txHash}`);
-      return txHash;
+      return { txHash: hash, songId: song.onChainSongId, tokenId: song.onChainTokenId };
     } catch (error) {
-      console.error("Error setting up artist account on-chain:", error);
-      throw new Error(
-        "ArtistService: Error setting up artist account on-chain"
-      );
+      song.mintStatus = "failed";
+      await this.songRepo.save(song);
+      throw error;
     }
   }
 }

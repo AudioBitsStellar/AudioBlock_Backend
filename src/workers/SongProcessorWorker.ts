@@ -133,19 +133,16 @@ export async function startSongWorker() {
 
       await CacheService.cacheSong(songId, song);
 
-      // Interact with Smart Contract to mint NFT
-      const txHash = await SongServiceInstance.uploadSongToBlockchain(
-        song.user.id,
-        metadataRes.cid
-      ).catch((err) =>
-        console.error("Blockchain upload failed for song", song.id, err)
-      );
-
+      // Minting the song NFT now requires the artist's own Stellar wallet
+      // (e.g. Freighter) to sign the `upload_and_mint_song` transaction, so
+      // it can't happen here. The song stays streamable (`status: "ready"`)
+      // with `mintStatus: "not_minted"`; the artist mints it later via
+      // SongService.prepareSongMintTx/submitSongMintTx.
       await logService.createLogEntry(
         song.user.id,
-        txHash || "",
+        "",
         "SONG_PROCESSED",
-        `Song with ID ${song.id} has been processed and is live.`,
+        `Song with ID ${song.id} has been processed and is live. Awaiting artist signature to mint.`,
       );
 
       fs.unlinkSync(localFile);

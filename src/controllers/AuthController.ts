@@ -1,6 +1,8 @@
 import { plainToInstance } from 'class-transformer';
 import { CreateUserDTO } from '../dtos/CreateUserDTO';
 import { JWTDTO } from '../dtos/JWTDTO';
+import { RegisterWithEmailDTO } from '../dtos/RegisterWithEmailDTO';
+import { LoginWithEmailDTO } from '../dtos/LoginWithEmailDTO';
 import { UpdateUserDTO } from '../dtos/UpdateUserDTO';
 import { User } from '../entities/User';
 import { AuthService } from '../services/AuthService';
@@ -156,9 +158,49 @@ export class AuthController {
             }
             const user = await this.authService.login(loginData);
             res.status(200).json({success: true, message: "User logged in successfully", user});
-            
+
         } catch (error) {
             console.error("Login error:", error);
+            this.handleError(res, error);
+        }
+    }
+
+    registerWithEmail = async (req: Request, res: Response) => {
+        try {
+            const dto = plainToInstance(RegisterWithEmailDTO, req.body, {
+                enableImplicitConversion: true
+            });
+
+            const errors = await validate(dto);
+            if (errors.length > 0) {
+                const formatted = formatValidationErrors(errors);
+                return res.status(422).json(formatted);
+            }
+
+            const result = await this.authService.registerWithEmail(dto);
+            res.status(201).json({ success: true, message: "User registered successfully", ...result });
+        } catch (error) {
+            console.error("Register with email error:", error);
+            this.handleError(res, error);
+        }
+    }
+
+    loginWithEmail = async (req: Request, res: Response) => {
+        try {
+            const dto = plainToInstance(LoginWithEmailDTO, req.body, {
+                enableImplicitConversion: true
+            });
+
+            const errors = await validate(dto);
+            if (errors.length > 0) {
+                const formatted = formatValidationErrors(errors);
+                return res.status(422).json(formatted);
+            }
+
+            const result = await this.authService.loginWithEmail(dto);
+            res.status(200).json({ success: true, message: "User logged in successfully", ...result });
+        } catch (error) {
+            console.error("Login with email error:", error);
             this.handleError(res, error);
         }
     }

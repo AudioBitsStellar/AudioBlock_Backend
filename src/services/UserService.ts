@@ -8,17 +8,14 @@ import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import redis from "../config/redis";
 import { TransactionLog } from "../entities/TransactionLog";
-import { ArtistService } from "./Artist/ArtistService";
 
 export class UserService {
     private userRepo: Repository<User>;
     private transactionLogRepo: Repository<TransactionLog>;
-    private artistService: ArtistService;
     constructor() {
         this.userRepo = AppDataSource.getRepository(User);
         this.transactionLogRepo = AppDataSource.getRepository(TransactionLog);
         dotenv.config();
-        this.artistService = new ArtistService();
     }
 
     async createUser(data: CreateUserDTO): Promise<{ user: User; token: string }> {
@@ -62,19 +59,17 @@ export class UserService {
             throw new Error("User already exists");
         }
 
-        let onChainAccount: string | undefined = undefined;
-
-        if (dto.role === "artist") {
-            onChainAccount = await this.artistService.setupArtistAccountOnChain(dto.walletAddress);
-            console.log("On-chain account setup initiated:", onChainAccount);
-        }
-
+        // Artist on-chain setup (Soroban `setup_artist_profile`) is no longer
+        // triggered here: it requires the artist's own wallet (e.g. Freighter)
+        // to sign, so it happens later via
+        // ArtistService.prepareArtistOnChainSetup/submitArtistOnChainSetup
+        // once the artist has connected a Stellar wallet.
         const user = this.userRepo.create(dto);
         const savedUser = await this.userRepo.save(user);
 
         const log = this.transactionLogRepo.create({
             user_id: savedUser.id,
-            txHash: onChainAccount ?? undefined,
+            txHash: "",
             action: "CREATE_USER",
             description: `User with wallet ${savedUser.walletAddress} created.`,
         });
