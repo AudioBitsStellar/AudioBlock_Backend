@@ -3,13 +3,12 @@ import AppDataSource from "../config/db";
 import { Song } from "../entities/Song";
 import redis from "../config/redis";
 import { precomputeSignedManifest } from "../workers/precomputeManifest";
-import { handleError } from "../utils/helpers";
+import { handleError, handleOnChainError } from "../utils/helpers";
 import { SongService } from "../services/SongService";
 
 const songService = new SongService();
 
 export class SongController {
-
   static prepareMint = async (req: Request, res: Response) => {
     try {
       const songId = req.params.id as string;
@@ -28,7 +27,7 @@ export class SongController {
       const result = await songService.submitSongMintTx(songId, signedXdr);
       return res.status(200).json({ success: true, data: result });
     } catch (error) {
-      handleError(res, error);
+      handleOnChainError(res, error);
     }
   };
 
@@ -58,6 +57,4 @@ export class SongController {
       handleError(res, err);
     }
   };
-
-  
 }
