@@ -13,6 +13,7 @@ import artistRoutes from "./routes/artistRoutes";
 import twitterRoutes from "./routes/twitterRoutes";
 import walletRoutes from "./routes/walletRoutes";
 import SongRoutes from "./routes/SongRoutes";
+import marketplaceRoutes from "./routes/marketplaceRoutes";
 
 
 // Route imports
@@ -26,9 +27,16 @@ app.use(cookieParser());
 app.use(morgan("dev"));
 
 // CORS configuration
+// In production set ALLOWED_ORIGINS to a comma-separated list of the deployed
+// listener-app and artist-dashboard domains, e.g.:
+//   ALLOWED_ORIGINS=https://listener.audioblockz.com,https://artist.audioblockz.com
+const allowedOrigins: string[] = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim())
+  : ["http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:5500"];
+
 app.use(
   cors({
-    origin: ["http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:5500"], // Add your frontend URLs
+    origin: allowedOrigins,
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allowedHeaders: [
@@ -73,6 +81,9 @@ app.use("/api/wallet", walletRoutes);
 
 // Song wallet
 app.use("/api/song", SongRoutes);
+
+// Marketplace Soroban relay (list + buy)
+app.use("/api/marketplace", marketplaceRoutes);
 
 
 //TWITTER CALLBACK ROUTE
