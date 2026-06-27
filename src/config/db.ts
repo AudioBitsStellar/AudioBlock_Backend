@@ -6,6 +6,7 @@ import { Song } from "../entities/Song";
 import { TransactionLog } from "../entities/TransactionLog";
 import { Genre } from "../entities/Genre";
 import { Album } from "../entities/Album";
+import { RoyaltyPayout } from "../entities/RoyaltyPayout";
 
 
 
@@ -27,7 +28,8 @@ const AppDataSource = new DataSource({
     Song,
     TransactionLog,
     Genre,
-    Album
+    Album,
+    RoyaltyPayout
   ],
   migrations: ["src/migrations/*.ts"],
   migrationsTableName: "migrations",

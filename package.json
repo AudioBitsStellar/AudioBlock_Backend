@@ -10,7 +10,8 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:dynamic": "ts-node-esm src/scripts/dynamic.ts",
-    "seed:genres": "ts-node src/seeders/genre.seeder.ts"
+    "seed:genres": "ts-node src/seeders/genre.seeder.ts",
+    "reconcile:royalties": "ts-node src/jobs/RoyaltyReconciliationJob.ts"
   },
   "author": "",
   "license": "ISC",
@@ -37,8 +38,10 @@
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
     "multer": "^2.0.2",
+    "otplib": "^13.4.1",
     "pg": "^8.16.3",
     "pinata": "^2.5.1",
+    "qrcode": "^1.5.4",
     "reflect-metadata": "^0.2.2",
     "typeorm": "^0.3.25"
   },
@@ -57,6 +60,7 @@
     "@types/morgan": "^1.9.10",
     "@types/multer": "^2.0.0",
     "@types/node": "^24.0.14",
+    "@types/qrcode": "^1.5.6",
     "jest": "^30.4.2",
     "ts-jest": "^29.4.11",
     "ts-node": "^10.9.2",
