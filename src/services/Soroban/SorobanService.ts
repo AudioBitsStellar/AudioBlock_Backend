@@ -28,12 +28,22 @@ export interface SorobanSubmitResult {
 export class SorobanService {
   private server = getSorobanServer();
 
-  /** Builds, simulates, and assembles an unsigned invocation ready to sign. */
+  /**
+   * Builds, simulates, and assembles an unsigned invocation ready to sign.
+   *
+   * Transaction Time Bounds:
+   * - Sets timeout to 120 seconds (2 minutes) from preparation
+   * - Frontend wallets (e.g., Freighter) must sign within this window
+   * - Expired transactions return TRANSACTION_EXPIRED error code from submit endpoints
+   * - Frontend should display countdown timer and handle expiration gracefully
+   *
+   * See docs/ON_CHAIN_INTEGRATION.md for frontend coordination guidelines.
+   */
   async prepareInvocation(
     sourcePublicKey: string,
     contractId: string,
     method: string,
-    args: xdr.ScVal[]
+    args: xdr.ScVal[],
   ): Promise<string> {
     const account = await this.server.getAccount(sourcePublicKey);
     const contract = new Contract(contractId);
@@ -44,7 +54,7 @@ export class SorobanService {
       networkPassphrase: getNetworkPassphrase(),
     })
       .addOperation(operation)
-      .setTimeout(120)
+      .setTimeout(120) // 120 seconds - coordinate with frontend signing UX
       .build();
 
     const prepared = await this.server.prepareTransaction(transaction);
@@ -52,12 +62,19 @@ export class SorobanService {
   }
 
   /** Submits a wallet-signed XDR and waits for it to land. */
-  async submitSignedTransaction(signedXdr: string): Promise<SorobanSubmitResult> {
-    const transaction = TransactionBuilder.fromXDR(signedXdr, getNetworkPassphrase());
+  async submitSignedTransaction(
+    signedXdr: string,
+  ): Promise<SorobanSubmitResult> {
+    const transaction = TransactionBuilder.fromXDR(
+      signedXdr,
+      getNetworkPassphrase(),
+    );
     const sendResponse = await this.server.sendTransaction(transaction);
 
     if (sendResponse.status === "ERROR") {
-      throw new Error(`Soroban transaction rejected: ${JSON.stringify(sendResponse.errorResult)}`);
+      throw new Error(
+        `Soroban transaction rejected: ${JSON.stringify(sendResponse.errorResult)}`,
+      );
     }
 
     const hash = sendResponse.hash;
@@ -73,10 +90,14 @@ export class SorobanService {
     }
 
     if (getResponse.status !== rpc.Api.GetTransactionStatus.SUCCESS) {
-      throw new Error(`Soroban transaction ${hash} failed with status ${getResponse.status}`);
+      throw new Error(
+        `Soroban transaction ${hash} failed with status ${getResponse.status}`,
+      );
     }
 
-    const returnValue = getResponse.returnValue ? scValToNative(getResponse.returnValue) : undefined;
+    const returnValue = getResponse.returnValue
+      ? scValToNative(getResponse.returnValue)
+      : undefined;
     return { hash, returnValue };
   }
 }
