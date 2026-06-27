@@ -7,7 +7,8 @@
     "worker": "ts-node src/workers/SongProcessorWorker.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "jest",
+    "test:watch": "jest --watch",
     "test:dynamic": "ts-node-esm src/scripts/dynamic.ts",
     "seed:genres": "ts-node src/seeders/genre.seeder.ts"
   },
@@ -51,10 +52,13 @@
     "@types/express": "^5.0.3",
     "@types/fluent-ffmpeg": "^2.1.28",
     "@types/ioredis": "^4.28.10",
+    "@types/jest": "^30.0.0",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/morgan": "^1.9.10",
     "@types/multer": "^2.0.0",
     "@types/node": "^24.0.14",
+    "jest": "^30.4.2",
+    "ts-jest": "^29.4.11",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.8.3"
