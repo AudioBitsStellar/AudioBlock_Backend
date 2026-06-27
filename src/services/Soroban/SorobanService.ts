@@ -17,6 +17,13 @@ export interface SorobanSubmitResult {
   returnValue: unknown;
 }
 
+export interface RoyaltyPayoutEvent {
+  saleEventId: string;
+  onChainEventId: string;
+  recipientPublicKey: string;
+  amountStroops: string;
+}
+
 /**
  * Generic helper for the "client signs, backend relays" Soroban flow:
  * the backend never holds an artist's secret key. It builds + simulates an
@@ -99,6 +106,61 @@ export class SorobanService {
       ? scValToNative(getResponse.returnValue)
       : undefined;
     return { hash, returnValue };
+  }
+
+  async getRoyaltyPayoutEvents(
+    royaltyContractId: string,
+    saleEventIds: string[],
+  ): Promise<RoyaltyPayoutEvent[]> {
+    if (saleEventIds.length === 0) {
+      return [];
+    }
+
+    const serverWithEvents = this.server as unknown as {
+      getEvents?: (request: {
+        filters: Array<{ type: "contract"; contractIds: string[] }>;
+        limit: number;
+      }) => Promise<{ events: Array<{ id?: string; value?: unknown; topic?: unknown[] }> }>;
+    };
+
+    if (!serverWithEvents.getEvents) {
+      throw new Error("Configured Soroban RPC client does not support event reads");
+    }
+
+    const response = await serverWithEvents.getEvents({
+      filters: [{ type: "contract", contractIds: [royaltyContractId] }],
+      limit: 200,
+    });
+
+    return response.events
+      .map((event) => this.parseRoyaltyPayoutEvent(event))
+      .filter((event): event is RoyaltyPayoutEvent => {
+        return Boolean(event && saleEventIds.includes(event.saleEventId));
+      });
+  }
+
+  private parseRoyaltyPayoutEvent(event: {
+    id?: string;
+    value?: unknown;
+    topic?: unknown[];
+  }): RoyaltyPayoutEvent | undefined {
+    const value = event.value as Partial<RoyaltyPayoutEvent> | undefined;
+
+    if (
+      !value ||
+      !value.saleEventId ||
+      !value.recipientPublicKey ||
+      !value.amountStroops
+    ) {
+      return undefined;
+    }
+
+    return {
+      saleEventId: String(value.saleEventId),
+      onChainEventId: String(value.onChainEventId || event.id || ""),
+      recipientPublicKey: String(value.recipientPublicKey),
+      amountStroops: String(value.amountStroops),
+    };
   }
 }
 

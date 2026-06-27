@@ -32,7 +32,7 @@ export class SongController {
   };
 
   static streamSong = async (req: Request, res: Response) => {
-    const songId = req.params.id;
+    const songId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     try {
       const songRepo = AppDataSource.getRepository(Song);
       const song = await songRepo.findOne({ where: { id: songId } });

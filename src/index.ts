@@ -6,6 +6,7 @@ import { startSongWorker } from "./workers/SongProcessorWorker";
 import fs from "fs";
 import path from "path";
 import { runSeeders } from "./seeders";
+import { validateSorobanConfig } from "./config/soroban";
 
 // Ensure upload directories exist
 const uploadDirs = ["uploads/temp", "uploads/merged", "uploads/profile-images",
@@ -62,6 +63,8 @@ const uploadDirs = ["uploads/temp", "uploads/merged", "uploads/profile-images",
 
 async function main() {
   try {
+    validateSorobanConfig();
+
     // Initialize the database connection
     await AppDataSource.initialize();
     console.log("✅ Database connected successfully");

@@ -11,6 +11,15 @@ jest.mock("../config/redis", () => ({
 }));
 jest.mock("bcrypt");
 jest.mock("jsonwebtoken");
+jest.mock("otplib", () => ({
+  generateSecret: jest.fn().mockReturnValue("TOTPSECRET"),
+  generateURI: jest.fn().mockReturnValue("otpauth://totp/AudioBlocks:a%40b.com?secret=TOTPSECRET"),
+  verifySync: jest.fn().mockReturnValue({ valid: true }),
+}));
+jest.mock("qrcode", () => ({
+  __esModule: true,
+  default: { toDataURL: jest.fn().mockResolvedValue("data:image/png;base64,qr") },
+}));
 
 import AppDataSource from "../config/db";
 import redis from "../config/redis";
@@ -99,8 +108,63 @@ describe("AuthService.loginWithEmail", () => {
     const svc = new AuthService();
     const result = await svc.loginWithEmail({ email: "a@b.com", password: "password123" });
 
+    if (result.twoFactorRequired) {
+      throw new Error("Did not expect 2FA challenge");
+    }
     expect(result.token).toBe("jwt.token");
     expect(result.user).toBe(user);
+  });
+
+  it("requires a second factor when 2FA is enabled", async () => {
+    const user = {
+      id: "u1",
+      email: "a@b.com",
+      passwordHash: "hashed",
+      role: UserRole.ARTIST,
+      twoFactorEnabled: true,
+      twoFactorSecret: "SECRET",
+    };
+    mockUserRepo.findOneBy.mockResolvedValue(user);
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+    const svc = new AuthService();
+    const result = await svc.loginWithEmail({ email: "a@b.com", password: "password123" });
+
+    expect(result).toEqual({
+      twoFactorRequired: true,
+      user: { id: "u1", email: "a@b.com", role: UserRole.ARTIST },
+    });
+    expect(jwt.sign).not.toHaveBeenCalled();
+  });
+
+  it("accepts and consumes a valid recovery code", async () => {
+    const user = {
+      id: "u1",
+      email: "a@b.com",
+      passwordHash: "hashed",
+      role: UserRole.ARTIST,
+      twoFactorEnabled: true,
+      twoFactorRecoveryCodeHashes: ["hashed_recovery"],
+    };
+    mockUserRepo.findOneBy.mockResolvedValue(user);
+    (bcrypt.compare as jest.Mock)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(true);
+    mockUserRepo.save.mockResolvedValue(user);
+    (jwt.sign as jest.Mock).mockReturnValue("jwt.token");
+    process.env.JWT_SECRET = "test_secret";
+
+    const svc = new AuthService();
+    const result = await svc.loginWithEmail({
+      email: "a@b.com",
+      password: "password123",
+      recoveryCode: "abcde-fghij",
+    });
+
+    expect(mockUserRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ twoFactorRecoveryCodeHashes: [] }),
+    );
+    expect(result).toEqual({ user, token: "jwt.token" });
   });
 });
 

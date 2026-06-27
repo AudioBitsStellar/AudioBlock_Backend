@@ -114,6 +114,7 @@ appropriate role (`authArtistMiddleware` for artist-only routes).
 | POST | `/login` | — | Wallet-signature login |
 | POST | `/register-email` | — | Email + password signup |
 | POST | `/login-email` | — | Email + password login |
+| POST | `/2fa/enable` | any authenticated email/password account | Enables TOTP 2FA and returns QR/secret plus backup codes |
 
 ### Artist — `/api/artist`
 
@@ -219,7 +220,11 @@ matches the claimed wallet address; a nonce embedded in the signed message
 (stored in Redis, single-use) prevents replay.
 
 **Email + password** — standard bcrypt-hashed password (12 salt rounds),
-compared on login.
+compared on login. Email/password accounts can enroll TOTP 2FA via
+`POST /api/auth/2fa/enable` with an existing JWT. Enrollment returns the
+shared secret, an otpauth URL/QR data URL, and backup recovery codes. Once
+enabled, `POST /api/auth/login-email` requires either `twoFactorCode` or
+`recoveryCode` in addition to the email/password.
 
 Both issue a JWT (`expiresIn: "1d"`) carrying `id`, `email`, `role`,
 `walletAddress`, and profile fields. `authArtistMiddleware` /
@@ -262,14 +267,22 @@ AWS_BUCKET_NAME=
 PINATA_JWT=
 PINATA_GATEWAY=
 
-# Soroban (Stellar) — see AudioB_Contract_Soroban for how to obtain these
-SOROBAN_RPC_URL=https://soroban-testnet.stellar.org
-SOROBAN_NETWORK_PASSPHRASE="Test SDF Network ; September 2015"
-NFT_CONTRACT_ID=
-ARTIST_CONTRACT_ID=
-CATALOG_CONTRACT_ID=
-ROYALTY_CONTRACT_ID=
-MARKETPLACE_CONTRACT_ID=
+# Soroban (Stellar)
+SOROBAN_NETWORK=testnet
+SOROBAN_TESTNET_RPC_URL=https://soroban-testnet.stellar.org
+SOROBAN_TESTNET_NETWORK_PASSPHRASE="Test SDF Network ; September 2015"
+SOROBAN_TESTNET_NFT_CONTRACT_ID=
+SOROBAN_TESTNET_ARTIST_CONTRACT_ID=
+SOROBAN_TESTNET_CATALOG_CONTRACT_ID=
+SOROBAN_TESTNET_ROYALTY_CONTRACT_ID=
+SOROBAN_TESTNET_MARKETPLACE_CONTRACT_ID=
+SOROBAN_MAINNET_RPC_URL=https://mainnet.sorobanrpc.com
+SOROBAN_MAINNET_NETWORK_PASSPHRASE="Public Global Stellar Network ; September 2015"
+SOROBAN_MAINNET_NFT_CONTRACT_ID=
+SOROBAN_MAINNET_ARTIST_CONTRACT_ID=
+SOROBAN_MAINNET_CATALOG_CONTRACT_ID=
+SOROBAN_MAINNET_ROYALTY_CONTRACT_ID=
+SOROBAN_MAINNET_MARKETPLACE_CONTRACT_ID=
 
 # Dynamic Labs (legacy EVM wallet service)
 DYNAMIC_ENVIRONMENT_ID=
@@ -290,6 +303,30 @@ SIGNED_URL_EXPIRES=300
 > The backend deliberately has **no** environment variable for an artist's
 > or platform's Stellar secret key — on-chain writes are always relayed,
 > never signed server-side.
+
+### Updating Soroban Contract Addresses
+
+`src/config/soroban.ts` treats the five AudioBlocks Soroban contract IDs as
+a versioned per-network config surface. Set `SOROBAN_NETWORK` to `testnet`
+or `mainnet`; startup validates that all five IDs for that selected network
+are present before the API connects to the database.
+
+When the `AudioB_Contract_Soroban` team redeploys, copy the deployment
+output for the matching network into the five env vars with the same network
+prefix:
+
+```bash
+SOROBAN_TESTNET_NFT_CONTRACT_ID=
+SOROBAN_TESTNET_ARTIST_CONTRACT_ID=
+SOROBAN_TESTNET_CATALOG_CONTRACT_ID=
+SOROBAN_TESTNET_ROYALTY_CONTRACT_ID=
+SOROBAN_TESTNET_MARKETPLACE_CONTRACT_ID=
+```
+
+For mainnet, use the same names with `SOROBAN_MAINNET_`. Commit updates to
+deployment secret stores or environment dashboards together with the contract
+repo deployment tag/commit in the release notes so backend and contract
+versions can be traced together.
 
 ## Getting Started
 

@@ -24,7 +24,7 @@ export class AuthController {
 
     getUserNonce = async (req: Request, res: Response) => {
         try {
-            const email = req.params.email;
+            const email = Array.isArray(req.params.email) ? req.params.email[0] : req.params.email;
             const nonce = await this.authService.getNonce(email);
             res.status(200).json({
                 success: true,
@@ -201,6 +201,25 @@ export class AuthController {
             res.status(200).json({ success: true, message: "User logged in successfully", ...result });
         } catch (error) {
             console.error("Login with email error:", error);
+            this.handleError(res, error);
+        }
+    }
+
+    enableTwoFactor = async (req: Request, res: Response) => {
+        try {
+            const userId = (req as any).user?.id;
+            if (!userId) {
+                return res.status(401).json({ success: false, message: "Unauthorized" });
+            }
+
+            const enrollment = await this.authService.enableTwoFactor(userId);
+            res.status(200).json({
+                success: true,
+                message: "Two-factor authentication enabled",
+                ...enrollment,
+            });
+        } catch (error) {
+            console.error("Enable 2FA error:", error);
             this.handleError(res, error);
         }
     }

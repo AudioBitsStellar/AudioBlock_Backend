@@ -1,4 +1,4 @@
-import { IsEmail, IsString, IsNotEmpty } from "class-validator";
+import { IsEmail, IsString, IsNotEmpty, IsOptional } from "class-validator";
 
 export class LoginWithEmailDTO {
   @IsEmail()
@@ -7,4 +7,12 @@ export class LoginWithEmailDTO {
   @IsString()
   @IsNotEmpty({ message: "Password is required." })
   password!: string;
+
+  @IsOptional()
+  @IsString()
+  twoFactorCode?: string;
+
+  @IsOptional()
+  @IsString()
+  recoveryCode?: string;
 }

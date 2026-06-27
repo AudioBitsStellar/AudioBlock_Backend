@@ -13,6 +13,7 @@ import { Song } from "./Song";
 import { Transaction } from "ethers";
 import { TransactionLog } from "./TransactionLog";
 import { Album } from "./Album";
+import { RoyaltyPayout } from "./RoyaltyPayout";
 
 export enum UserRole {
   LISTENER = "listener",
@@ -46,6 +47,15 @@ export class User {
   /** Optional: only set for users who authenticate with email + password. */
   @Column({ nullable: true })
   passwordHash?: string;
+
+  @Column({ default: false })
+  twoFactorEnabled!: boolean;
+
+  @Column({ nullable: true })
+  twoFactorSecret?: string;
+
+  @Column("simple-json", { nullable: true })
+  twoFactorRecoveryCodeHashes?: string[];
 
   /** Stellar G... public key the artist connected (e.g. via Freighter) for Soroban actions. */
   @Column({ unique: true, nullable: true })
@@ -140,4 +150,7 @@ export class User {
   // One user has many transaction logs
   @OneToMany(() => TransactionLog, (log) => log.user)
   transactionLogs!: TransactionLog[];
+
+  @OneToMany(() => RoyaltyPayout, (payout) => payout.artist)
+  royaltyPayouts!: RoyaltyPayout[];
 }

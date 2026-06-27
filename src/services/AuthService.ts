@@ -12,8 +12,16 @@ import { profile } from "console";
 import redis from "../config/redis";
 import { randomBytes } from "crypto";
 import bcrypt from "bcrypt";
+import { generateSecret, generateURI, verifySync } from "otplib";
+import QRCode from "qrcode";
 
 const PASSWORD_SALT_ROUNDS = 12;
+const RECOVERY_CODE_COUNT = 10;
+const RECOVERY_CODE_BYTES = 5;
+
+type LoginWithEmailResult =
+  | { user: User; token: string; twoFactorRequired?: false }
+  | { twoFactorRequired: true; user: Pick<User, "id" | "email" | "role"> };
 
 export class AuthService {
   private userRepo: Repository<User>;
@@ -34,6 +42,7 @@ export class AuthService {
       dynamixUserId: user.dynamixUserId,
       email: user.email,
       walletAddress: user.walletAddress,
+      stellarPublicKey: user.stellarPublicKey,
       role: user.role,
       username: user.username,
       profileImage: user.profileImage,
@@ -75,7 +84,7 @@ export class AuthService {
   }
 
   /** Logs in a user with email + password instead of a wallet signature. */
-  async loginWithEmail(data: LoginWithEmailDTO): Promise<{ user: User; token: string }> {
+  async loginWithEmail(data: LoginWithEmailDTO): Promise<LoginWithEmailResult> {
     const dto = Object.assign(new LoginWithEmailDTO(), data);
     const errors = await validate(dto);
     if (errors.length > 0) {
@@ -92,8 +101,99 @@ export class AuthService {
       throw new Error("Invalid email or password");
     }
 
+    if (user.twoFactorEnabled) {
+      if (!dto.twoFactorCode && !dto.recoveryCode) {
+        return {
+          twoFactorRequired: true,
+          user: { id: user.id, email: user.email, role: user.role },
+        };
+      }
+
+      const verified = dto.twoFactorCode
+        ? this.verifyTotpCode(user, dto.twoFactorCode)
+        : await this.verifyAndConsumeRecoveryCode(user, dto.recoveryCode as string);
+
+      if (!verified) {
+        throw new Error("Invalid two-factor code");
+      }
+    }
+
     const token = this.signToken(user);
     return { user, token };
+  }
+
+  async enableTwoFactor(userId: string): Promise<{
+    secret: string;
+    otpauthUrl: string;
+    qrCodeDataUrl: string;
+    backupCodes: string[];
+  }> {
+    const user = await this.userRepo.findOneBy({ id: userId });
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    if (!user.passwordHash) {
+      throw new Error("Two-factor authentication is only available for email/password accounts");
+    }
+
+    const secret = generateSecret();
+    const label = user.email || user.username || user.id;
+    const issuer = "AudioBlocks";
+    const otpauthUrl = generateURI({ label, issuer, secret });
+    const backupCodes = this.generateRecoveryCodes();
+    const recoveryCodeHashes = await Promise.all(
+      backupCodes.map((code) => bcrypt.hash(this.normalizeRecoveryCode(code), PASSWORD_SALT_ROUNDS)),
+    );
+
+    user.twoFactorEnabled = true;
+    user.twoFactorSecret = secret;
+    user.twoFactorRecoveryCodeHashes = recoveryCodeHashes;
+    await this.userRepo.save(user);
+
+    return {
+      secret,
+      otpauthUrl,
+      qrCodeDataUrl: await QRCode.toDataURL(otpauthUrl),
+      backupCodes,
+    };
+  }
+
+  private verifyTotpCode(user: User, code: string): boolean {
+    if (!user.twoFactorSecret) {
+      return false;
+    }
+
+    return verifySync({
+      token: code.replace(/\s/g, ""),
+      secret: user.twoFactorSecret,
+    }).valid;
+  }
+
+  private async verifyAndConsumeRecoveryCode(user: User, recoveryCode: string): Promise<boolean> {
+    const hashes = user.twoFactorRecoveryCodeHashes || [];
+    const normalized = this.normalizeRecoveryCode(recoveryCode);
+
+    for (const hash of hashes) {
+      if (await bcrypt.compare(normalized, hash)) {
+        user.twoFactorRecoveryCodeHashes = hashes.filter((storedHash) => storedHash !== hash);
+        await this.userRepo.save(user);
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private generateRecoveryCodes(): string[] {
+    return Array.from({ length: RECOVERY_CODE_COUNT }, () => {
+      const value = randomBytes(RECOVERY_CODE_BYTES).toString("hex").toUpperCase();
+      return `${value.slice(0, 5)}-${value.slice(5)}`;
+    });
+  }
+
+  private normalizeRecoveryCode(code: string): string {
+    return code.trim().replace(/\s/g, "").toUpperCase();
   }
 
   async getNonce(email: string): Promise<any> {
