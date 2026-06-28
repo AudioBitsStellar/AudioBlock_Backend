@@ -11,7 +11,10 @@
     "test:watch": "jest --watch",
     "test:dynamic": "ts-node-esm src/scripts/dynamic.ts",
     "seed:genres": "ts-node src/seeders/genre.seeder.ts",
-    "reconcile:royalties": "ts-node src/jobs/RoyaltyReconciliationJob.ts"
+    "reconcile:royalties": "ts-node src/jobs/RoyaltyReconciliationJob.ts",
+    "migration:generate": "typeorm migration:generate",
+    "migration:run": "typeorm migration:run -d dist/config/db.js",
+    "migration:revert": "typeorm migration:revert -d dist/config/db.js"
   },
   "author": "",
   "license": "ISC",
