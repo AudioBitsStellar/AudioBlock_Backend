@@ -392,6 +392,91 @@ await s3.deleteObject({
 
 This is more precise (no 7-day lag) and easier to test locally.
 
+## Environment Variable Validation
+
+At startup, the server validates that all required environment variables are
+present before connecting to the database or starting the HTTP listener. If
+any critical variables are missing, the server logs a clear, itemized error
+message and exits immediately (process exit code 1). This is faster and more
+transparent than discovering missing config later during API calls.
+
+The validation is performed in `src/config/env.ts` and called at the top of
+`main()` in `src/index.ts`, before any other initialization.
+
+## Secrets Management
+
+**Development:** Secrets are stored locally in `.env` (never committed). Copy
+`.env.example` to `.env` and fill in real values.
+
+**Production:** The recommended approach depends on your deployment platform:
+
+- **Render/Heroku/Railway:** Use the platform's native environment variable
+  dashboard. Secrets are injected at container startup as process env vars and
+  reach the running application the same way as in development.
+- **AWS:** Use [AWS Secrets Manager](https://docs.aws.amazon.com/secretsmanager/)
+  or [AWS Systems Manager Parameter Store](https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-parameter-store.html).
+  Fetch secrets at container startup and populate env vars, or integrate the
+  secrets into your CI/CD pipeline and inject them into the ECS/Lambda task
+  definition.
+- **Kubernetes:** Use [Kubernetes Secrets](https://kubernetes.io/docs/concepts/configuration/secret/)
+  and mount them as env vars or files.
+- **Docker:** Inject secrets at `docker run` time using `--env-file` or `--env`
+  flags. Never bake secrets into the image.
+
+In all cases, ensure that:
+- `.env` is in `.gitignore` (it is).
+- No real secrets exist in git history or public container registries.
+- The startup validation catches any missing secrets before the server listens.
+
+## Database Migrations
+
+Schema changes in production are managed with TypeORM migrations, not
+`synchronize: true`, which is unsafe once real user data exists.
+
+### Local Development
+
+In development, `synchronize: true` automatically creates or alters tables to
+match your entity definitions, allowing rapid iteration. Migrations are not
+required for local work.
+
+### Production
+
+In production, `NODE_ENV=production` disables auto-synchronize. Schema changes
+are applied explicitly via migrations:
+
+1. **Generate a new migration** after editing entities:
+   ```bash
+   npm run migration:generate -- -n DescribeYourChange
+   # This creates a new file in src/migrations/ capturing the detected
+   # differences between the current schema and your entities.
+   ```
+
+2. **Review** the generated migration file in `src/migrations/`. Adjust if
+   needed (e.g., if the tool misses a constraint or index).
+
+3. **Test** in a staging database:
+   ```bash
+   NODE_ENV=production npm run build
+   npm run migration:run
+   ```
+
+4. **Deploy** (the app will run migrations automatically on startup if
+   `migrations` are configured in `src/config/db.ts`, or you can run them
+   manually before starting the server).
+
+5. **Rollback** (if needed):
+   ```bash
+   npm run migration:revert
+   ```
+
+### Baseline Migration
+
+This repository includes an initial baseline migration
+(`src/migrations/1719619200000-CreateInitialSchema.ts`) that captures the
+full current schema (User, Song, Album, Genre, TransactionLog, RoyaltyPayout).
+The first deployment to a new database will run this migration to set up all
+tables and indexes.
+
 ## Getting Started
 
 ### With Docker (recommended)
@@ -427,6 +512,9 @@ npm run dev
 | `npm start` | Runs the compiled build (`dist/index.js`) |
 | `npm run worker` | Runs the song-processing worker as a standalone process, independent of the API process — useful for scaling workers separately |
 | `npm run seed:genres` | Manually re-runs the genre seeder (also runs automatically on every boot) |
+| `npm run migration:generate -- -n DescribeYourChange` | Generates a new migration file based on entity changes |
+| `npm run migration:run` | Applies pending migrations to the database |
+| `npm run migration:revert` | Reverts the last applied migration |
 
 ## Known Issues / Cleanup Backlog
 
