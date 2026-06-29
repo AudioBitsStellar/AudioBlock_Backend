@@ -51,8 +51,23 @@ export class User {
   @Column({ default: false })
   twoFactorEnabled!: boolean;
 
+  @Column({ default: false })
+  emailVerified!: boolean;
+
   @Column({ nullable: true })
   twoFactorSecret?: string;
+
+  @Column({ nullable: true })
+  emailVerificationToken?: string;
+
+  @Column({ nullable: true })
+  emailVerificationTokenExpiry?: Date;
+
+  @Column({ nullable: true })
+  passwordResetToken?: string;
+
+  @Column({ nullable: true })
+  passwordResetTokenExpiry?: Date;
 
   @Column("simple-json", { nullable: true })
   twoFactorRecoveryCodeHashes?: string[];

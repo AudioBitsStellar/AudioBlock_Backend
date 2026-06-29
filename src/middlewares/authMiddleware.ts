@@ -3,13 +3,14 @@ import jwt from "jsonwebtoken";
 import { UserRole } from "../entities/User";
 
 export interface JwtPayload {
-  id: string; // or userId, depending on how you signed it
+  id: string;
   role?: UserRole;
   email?: string;
   walletAddress?: string;
   stellarPublicKey?: string;
   username?: string;
   name?: string;
+  emailVerified?: boolean;
 }
 
 export const requireAuth = (
@@ -69,3 +70,36 @@ export const requireRoles = (...allowedRoles: UserRole[]) => (
 
 export const authArtistMiddleware = requireRoles(UserRole.ARTIST, UserRole.ADMIN);
 export const authListenerMiddleware = requireRoles(UserRole.LISTENER, UserRole.ADMIN);
+
+export const requireEmailVerified = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const user = (req as any).user;
+  if (!user) {
+    return res.status(401).json({
+      success: false,
+      message: "Unauthorized: No user in session",
+    });
+  }
+
+  if (user.emailVerified === false) {
+    return res.status(403).json({
+      success: false,
+      message: "Email verification required for this action",
+    });
+  }
+
+  next();
+};
+
+export const requireArtistAndVerified = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  return requireRoles(UserRole.ARTIST, UserRole.ADMIN)(req, res, () => {
+    return requireEmailVerified(req, res, next);
+  });
+};

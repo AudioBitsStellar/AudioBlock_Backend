@@ -40,6 +40,13 @@ export class SongController {
         return res.status(404).json({ error: "Song not ready" });
       }
 
+      const sessionKey = `play:throttle:${req.ip}:${songId}`;
+      const recentlyPlayed = await redis.get(sessionKey);
+      if (!recentlyPlayed) {
+        await songRepo.increment({ id: songId }, "playCount", 1);
+        await redis.set(sessionKey, "1", "EX", 30);
+      }
+
       const cacheKey = `manifest:${songId}`;
       const cached = await redis.get(cacheKey);
       if (cached) {
@@ -47,7 +54,6 @@ export class SongController {
         return res.send(cached);
       }
 
-      // fallback: generate on the fly (fast rewrite)
       const generated = await precomputeSignedManifest(songId);
       res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
       res.setHeader("Access-Control-Allow-Origin", "*");
@@ -55,6 +61,35 @@ export class SongController {
     } catch (err) {
       console.error("Stream error:", err);
       handleError(res, err);
+    }
+  };
+
+  static getPopularSongs = async (req: Request, res: Response) => {
+    try {
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 20;
+      const skip = (page - 1) * limit;
+
+      const songRepo = AppDataSource.getRepository(Song);
+      const [songs, total] = await songRepo.findAndCount({
+        where: { status: "ready" },
+        order: { playCount: "DESC" },
+        skip,
+        take: limit,
+      });
+
+      return res.status(200).json({
+        success: true,
+        data: songs,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      });
+    } catch (error) {
+      handleError(res, error);
     }
   };
 }

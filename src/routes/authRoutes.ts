@@ -24,5 +24,12 @@ router.post("/register-email", authController.registerWithEmail);
 router.post("/login-email", authController.loginWithEmail);
 router.post("/2fa/enable", requireAuth, authController.enableTwoFactor);
 
+// Email verification
+router.get("/verify-email/:token", authController.verifyEmail);
+
+// Password reset
+router.post("/forgot-password", authController.forgotPassword);
+router.post("/reset-password/:token", authController.resetPassword);
+
 
 export default router;

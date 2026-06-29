@@ -2,18 +2,16 @@ import { validate } from "class-validator";
 import { JWTDTO } from "../dtos/JWTDTO";
 import { RegisterWithEmailDTO } from "../dtos/RegisterWithEmailDTO";
 import { LoginWithEmailDTO } from "../dtos/LoginWithEmailDTO";
-import { verifyMessage } from "ethers";
 import { Repository } from "typeorm";
 import { User } from "../entities/User";
 import AppDataSource from "../config/db";
 import jwt from "jsonwebtoken";
-import dotenv from "dotenv";
-import { profile } from "console";
 import redis from "../config/redis";
 import { randomBytes } from "crypto";
 import bcrypt from "bcrypt";
 import { generateSecret, generateURI, verifySync } from "otplib";
 import QRCode from "qrcode";
+import { EmailService } from "./EmailService";
 
 const PASSWORD_SALT_ROUNDS = 12;
 const RECOVERY_CODE_COUNT = 10;
@@ -25,10 +23,11 @@ type LoginWithEmailResult =
 
 export class AuthService {
   private userRepo: Repository<User>;
+  private emailService: EmailService;
 
   constructor() {
     this.userRepo = AppDataSource.getRepository(User);
-    dotenv.config();
+    this.emailService = new EmailService();
   }
 
   private signToken(user: User): string {
@@ -51,6 +50,7 @@ export class AuthService {
       totalStreams: user.totalStreams,
       totalStreamTime: user.totalStreamTime,
       uniqueListeners: user.uniqueListeners,
+      emailVerified: user.emailVerified ?? (user.passwordHash ? false : undefined),
     };
 
     return jwt.sign(payload, JWT_SECRET, { expiresIn: "1d" });
@@ -69,6 +69,8 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(dto.password, PASSWORD_SALT_ROUNDS);
+    const verificationToken = this.emailService.generateVerificationToken();
+    const tokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
     const user = this.userRepo.create({
       email: dto.email,
@@ -76,8 +78,18 @@ export class AuthService {
       role: dto.role,
       username: dto.username,
       name: dto.name,
+      emailVerificationToken: verificationToken,
+      emailVerificationTokenExpiry: tokenExpiry,
+      emailVerified: false,
     });
     const savedUser = await this.userRepo.save(user);
+
+    const appUrl = process.env.APP_URL || "http://localhost:3000";
+    await this.emailService.sendEmail(
+      dto.email,
+      "Verify your email",
+      `<p>Please click <a href="${appUrl}/verify-email/${verificationToken}">here</a> to verify your email.</p>`
+    );
 
     const token = this.signToken(savedUser);
     return { user: savedUser, token };
@@ -241,5 +253,62 @@ export class AuthService {
 
     const token = this.signToken(user);
     return { user, token };
+  }
+
+  async verifyEmail(token: string): Promise<User> {
+    const user = await this.userRepo.findOne({
+      where: { emailVerificationToken: token },
+    });
+
+    if (!user) {
+      throw new Error("Invalid verification token");
+    }
+
+    if (user.emailVerificationTokenExpiry && user.emailVerificationTokenExpiry < new Date()) {
+      throw new Error("Verification token has expired");
+    }
+
+    user.emailVerified = true;
+    user.emailVerificationToken = undefined;
+    user.emailVerificationTokenExpiry = undefined;
+    return this.userRepo.save(user);
+  }
+
+  async forgotPassword(email: string): Promise<void> {
+    const user = await this.userRepo.findOneBy({ email });
+    if (!user) return;
+
+    const resetToken = this.emailService.generateResetToken();
+    const tokenExpiry = new Date(Date.now() + 30 * 60 * 1000);
+
+    user.passwordResetToken = resetToken;
+    user.passwordResetTokenExpiry = tokenExpiry;
+    await this.userRepo.save(user);
+
+    const appUrl = process.env.APP_URL || "http://localhost:3000";
+    await this.emailService.sendEmail(
+      email,
+      "Reset your password",
+      `<p>Please click <a href="${appUrl}/reset-password/${resetToken}">here</a> to reset your password. This link expires in 30 minutes.</p>`
+    );
+  }
+
+  async resetPassword(token: string, newPassword: string): Promise<void> {
+    const user = await this.userRepo.findOne({
+      where: { passwordResetToken: token },
+    });
+
+    if (!user) {
+      throw new Error("Invalid reset token");
+    }
+
+    if (user.passwordResetTokenExpiry && user.passwordResetTokenExpiry < new Date()) {
+      throw new Error("Reset token has expired");
+    }
+
+    user.passwordHash = await bcrypt.hash(newPassword, PASSWORD_SALT_ROUNDS);
+    user.passwordResetToken = undefined;
+    user.passwordResetTokenExpiry = undefined;
+    await this.userRepo.save(user);
   }
 }

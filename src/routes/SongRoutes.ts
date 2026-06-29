@@ -59,6 +59,7 @@ router.post("/upload/finalize", authArtistMiddleware, validateDTO(FinalizeUpload
 
 // Stream Songs
 router.get("/stream/:id", SongController.streamSong);
+router.get("/popular", SongController.getPopularSongs);
 
 // Soroban on-chain song minting: the artist's wallet signs, the backend
 // only builds and relays the transaction.
