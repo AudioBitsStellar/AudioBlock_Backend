@@ -1,6 +1,7 @@
 import { Repository } from "typeorm";
 import { Song } from "../entities/Song";
 import { User } from "../entities/User";
+import { TransactionLog } from "../entities/TransactionLog";
 import AppDataSource from "../config/db";
 import dotenv from "dotenv";
 import path from "path";
@@ -14,11 +15,13 @@ import { PreparedTransaction } from "./Artist/ArtistService";
 export class SongService {
   private songRepo: Repository<Song>;
   private userRepo: Repository<User>;
+  private logRepo: Repository<TransactionLog>;
   private soroban: SorobanService;
 
   constructor() {
     this.songRepo = AppDataSource.getRepository(Song);
     this.userRepo = AppDataSource.getRepository(User);
+    this.logRepo = AppDataSource.getRepository(TransactionLog);
     this.soroban = new SorobanService();
     dotenv.config();
   }
@@ -235,5 +238,45 @@ export class SongService {
       await this.songRepo.save(song);
       throw error;
     }
+  }
+
+  async flagSong(songId: string, adminId: string, reason?: string): Promise<Song> {
+    const song = await this.songRepo.findOneBy({ id: songId });
+    if (!song) throw new Error("Song not found");
+    if (song.flagged) throw new Error("Song is already flagged");
+
+    song.flagged = true;
+    song.flaggedAt = new Date();
+    song.flaggedBy = adminId;
+    song.flagReason = reason || null;
+    await this.songRepo.save(song);
+
+    await this.logRepo.save({
+      userId: adminId,
+      action: "song_flag",
+      details: { songId, reason: reason || null },
+    });
+
+    return song;
+  }
+
+  async unflagSong(songId: string, adminId: string): Promise<Song> {
+    const song = await this.songRepo.findOneBy({ id: songId });
+    if (!song) throw new Error("Song not found");
+    if (!song.flagged) throw new Error("Song is not flagged");
+
+    song.flagged = false;
+    song.flaggedAt = null;
+    song.flaggedBy = null;
+    song.flagReason = null;
+    await this.songRepo.save(song);
+
+    await this.logRepo.save({
+      userId: adminId,
+      action: "song_unflag",
+      details: { songId },
+    });
+
+    return song;
   }
 }
