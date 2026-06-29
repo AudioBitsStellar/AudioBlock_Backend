@@ -19,7 +19,7 @@ const AppDataSource = new DataSource({
   username: process.env.POSTGRES_USER || "postgres",
   password: process.env.POSTGRES_PASSWORD || "1234",
   database: process.env.POSTGRES_DATABASE || "audioblocks",
-  synchronize: true,
+  synchronize: process.env.NODE_ENV !== "production",
   dropSchema: false,
   ssl: false,
   logging: true,
@@ -31,7 +31,7 @@ const AppDataSource = new DataSource({
     Album,
     RoyaltyPayout
   ],
-  migrations: ["src/migrations/*.ts"],
+  migrations: ["src/migrations/*.ts", "dist/migrations/*.js"],
   migrationsTableName: "migrations",
 });
 

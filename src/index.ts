@@ -7,6 +7,7 @@ import fs from "fs";
 import path from "path";
 import { runSeeders } from "./seeders";
 import { validateSorobanConfig } from "./config/soroban";
+import { validateEnvironment } from "./config/env";
 
 // Ensure upload directories exist
 const uploadDirs = ["uploads/temp", "uploads/merged", "uploads/profile-images",
@@ -63,6 +64,7 @@ const uploadDirs = ["uploads/temp", "uploads/merged", "uploads/profile-images",
 
 async function main() {
   try {
+    validateEnvironment();
     validateSorobanConfig();
 
     // Initialize the database connection
