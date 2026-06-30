@@ -224,6 +224,46 @@ export class AuthController {
         }
     }
 
+    verifyEmail = async (req: Request, res: Response) => {
+        try {
+            const token = req.params.token as string;
+            await this.authService.verifyEmail(token);
+            res.status(200).json({ success: true, message: "Email verified successfully" });
+        } catch (error) {
+            console.error("Verify email error:", error);
+            this.handleError(res, error);
+        }
+    }
+
+    forgotPassword = async (req: Request, res: Response) => {
+        try {
+            const { email } = req.body;
+            if (!email) {
+                return res.status(400).json({ success: false, message: "Email is required" });
+            }
+            await this.authService.forgotPassword(email);
+            res.status(200).json({ success: true, message: "If the email exists, a reset link has been sent" });
+        } catch (error) {
+            console.error("Forgot password error:", error);
+            this.handleError(res, error);
+        }
+    }
+
+    resetPassword = async (req: Request, res: Response) => {
+        try {
+            const token = req.params.token as string;
+            const { password } = req.body;
+            if (!password) {
+                return res.status(400).json({ success: false, message: "Password is required" });
+            }
+            await this.authService.resetPassword(token, password);
+            res.status(200).json({ success: true, message: "Password reset successfully" });
+        } catch (error) {
+            console.error("Reset password error:", error);
+            this.handleError(res, error);
+        }
+    }
+
     private handleError(res: Response, error: unknown): void {
         if (error instanceof Error) {
             console.error("Handled Error:", error.message, error.stack);

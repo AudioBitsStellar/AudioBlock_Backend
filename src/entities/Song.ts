@@ -54,6 +54,9 @@ export class Song {
   @Column({ default: "processing" })
   status!: "processing" | "ready" | "failed";
 
+  @Column({ default: 0 })
+  playCount!: number;
+
   @Column({ nullable: true })
   metadataCid!: string;
 
