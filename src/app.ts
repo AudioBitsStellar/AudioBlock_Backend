@@ -14,6 +14,7 @@ import twitterRoutes from "./routes/twitterRoutes";
 import walletRoutes from "./routes/walletRoutes";
 import SongRoutes from "./routes/SongRoutes";
 import marketplaceRoutes from "./routes/marketplaceRoutes";
+import adminRoutes from "./routes/adminRoutes";
 
 
 // Route imports
@@ -84,6 +85,9 @@ app.use("/api/song", SongRoutes);
 
 // Marketplace Soroban relay (list + buy)
 app.use("/api/marketplace", marketplaceRoutes);
+
+// Admin moderation routes
+app.use("/api/admin", adminRoutes);
 
 
 //TWITTER CALLBACK ROUTE

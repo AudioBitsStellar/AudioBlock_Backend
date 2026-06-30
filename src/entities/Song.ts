@@ -75,6 +75,18 @@ export class Song {
   @Column({ nullable: true })
   composers?: string;
 
+  @Column({ default: false })
+  flagged!: boolean;
+
+  @Column({ type: "timestamp", nullable: true })
+  flaggedAt!: Date | null;
+
+  @Column({ nullable: true })
+  flaggedBy!: string | null;
+
+  @Column({ type: "text", nullable: true })
+  flagReason!: string | null;
+
   @CreateDateColumn()
   createdAt!: Date;
 

@@ -9,6 +9,29 @@ import { SongService } from "../services/SongService";
 const songService = new SongService();
 
 export class SongController {
+  static flagSong = async (req: Request, res: Response) => {
+    try {
+      const songId = req.params.id as string;
+      const adminId = (req as any).user.id as string;
+      const { reason } = req.body;
+      const song = await songService.flagSong(songId, adminId, reason);
+      return res.status(200).json({ success: true, data: song });
+    } catch (error) {
+      handleError(res, error);
+    }
+  };
+
+  static unflagSong = async (req: Request, res: Response) => {
+    try {
+      const songId = req.params.id as string;
+      const adminId = (req as any).user.id as string;
+      const song = await songService.unflagSong(songId, adminId);
+      return res.status(200).json({ success: true, data: song });
+    } catch (error) {
+      handleError(res, error);
+    }
+  };
+
   static prepareMint = async (req: Request, res: Response) => {
     try {
       const songId = req.params.id as string;
@@ -36,8 +59,8 @@ export class SongController {
     try {
       const songRepo = AppDataSource.getRepository(Song);
       const song = await songRepo.findOne({ where: { id: songId } });
-      if (!song || song.status !== "ready" || !song.hlsMasterUrl) {
-        return res.status(404).json({ error: "Song not ready" });
+      if (!song || song.status !== "ready" || !song.hlsMasterUrl || song.flagged) {
+        return res.status(404).json({ error: "Song not available" });
       }
 
       const cacheKey = `manifest:${songId}`;
