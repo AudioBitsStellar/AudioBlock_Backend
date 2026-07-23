@@ -17,7 +17,7 @@ export class UserController {
             const user: User | null = await this.userService.getUserByWalletAddress(walletAddress);
             res.status(200).json(user);
         } catch (error) {
-            console.log(error);
+            req.log.error({ err: error }, "Get user by wallet address error");
             this.handleError(res, error);
         }
     }
@@ -28,7 +28,7 @@ export class UserController {
             const user: User | null = await this.userService.getUserById(id);
             res.status(200).json(user);
         } catch (error) {
-            console.log(error);
+            req.log.error({ err: error }, "Get user by id error");
             this.handleError(res, error);
         }
     }
@@ -38,7 +38,7 @@ export class UserController {
             const users: User[] = await this.userService.getAllUsers();
             res.status(200).json(users);
         } catch (error) {
-            console.log(error);
+            req.log.error({ err: error }, "Get all users error");
             this.handleError(res, error);
         }
     }
@@ -50,7 +50,7 @@ export class UserController {
             const user: User | null = await this.userService.updateUser(id, updateData);
             res.status(200).json(user);
         } catch (error) {
-            console.log(error);
+            req.log.error({ err: error }, "Update user error");
             this.handleError(res, error);
         }
     }
@@ -61,21 +61,20 @@ export class UserController {
             const user: User | null = await this.userService.deleteUser(id);
             res.status(200).json(user);
         } catch (error) {
-            console.log(error);
+            req.log.error({ err: error }, "Delete user error");
             this.handleError(res, error);
         }
     }
 
     private handleError(res: Response, error: unknown): void {
         if (error instanceof Error) {
-            console.error("Handled Error:", error.message, error.stack);
-            
+            res.log.error({ err: error }, "Handled error");
             res.status(400).json({ message: error.message });
         } else if (typeof error === 'string') {
-            console.error("String Error:", error);
+            res.log.error({ error }, "String error");
             res.status(400).json({ message: error });
         } else {
-            console.error("Unknown Error:", error);
+            res.log.error({ error }, "Unknown error");
             res.status(500).json({ message: "Internal server error" });
         }
     }

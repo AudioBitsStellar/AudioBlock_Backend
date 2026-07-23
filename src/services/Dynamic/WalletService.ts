@@ -6,6 +6,7 @@ import {
 } from "../../utils/dynamicUtils";
 import { SignMessageDTO } from "../../dtos/SignMessageDTO";
 import redis from "../../config/redis";
+import logger from "../../utils/logger";
 
 export class WalletService {
   constructor() {}
@@ -15,19 +16,19 @@ export class WalletService {
       const wallet = await createEvmWallet({
         thresholdSignatureScheme: ThresholdSignatureScheme.TWO_OF_TWO,
       });
-      console.log("Wallet created successfully:", wallet);
-      console.log("Wallet created successfully:", wallet.accountAddress);
+      // log the address only; the full wallet object carries key material
+      logger.info({ accountAddress: wallet.accountAddress }, "Wallet created");
 
       return wallet;
     } catch (error: any) {
       if (error.message.includes("insufficient funds")) {
-        console.error("Insufficient funds for wallet creation");
+        logger.error("Insufficient funds for wallet creation");
         throw new Error("Dynamic: Insufficient funds for wallet creation");
       } else if (error.message.includes("invalid session")) {
-        console.error("Invalid session ID - please re-authenticate");
+        logger.error("Invalid session ID - please re-authenticate");
         throw new Error("Dynamic: Invalid session ID - please re-authenticate");
       } else {
-        console.error("Wallet creation failed:", error.message);
+        logger.error({ err: error }, "Wallet creation failed");
         throw new Error("Dynamic: Wallet creation failed");
       }
     }
@@ -59,7 +60,7 @@ export class WalletService {
       });
       return signature;
     } catch (error: any) {
-      console.error("Error signing message:", error.message);
+      logger.error({ err: error }, "Error signing message");
       throw new Error("Dynamic: Error signing message");
     }
   }

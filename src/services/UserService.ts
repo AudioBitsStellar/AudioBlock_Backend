@@ -8,6 +8,7 @@ import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import redis from "../config/redis";
 import { TransactionLog } from "../entities/TransactionLog";
+import logger from "../utils/logger";
 
 export class UserService {
     private userRepo: Repository<User>;
@@ -36,8 +37,8 @@ export class UserService {
 
         // Verify nonce exists and matches stored one
         const storedNonce = await redis.get(`nonce:${dto.email}`);
-        console.log("Stored nonce:", storedNonce);
-        console.log("Received nonce:", nonce);
+        logger.debug({ storedNonce }, "Stored nonce");
+        logger.debug({ nonce }, "Received nonce");
 
         if (!storedNonce) {
             throw new Error("Nonce expired");

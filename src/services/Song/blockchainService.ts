@@ -1,6 +1,8 @@
+import logger from "../../utils/logger";
+
 export async function sendToBlockchain(artistId: string, metadataCid: string) {
-  console.log(`🪙 Blockchain: registering CID for artist ${artistId}`);
+  logger.info({ artistId, metadataCid }, "Blockchain: registering CID");
   // Example: await dynamic.wallet.sendTransaction({...})
 
-  console.log(`Perform Blockchain Operation here`);
+  logger.debug("Perform blockchain operation here");
 }

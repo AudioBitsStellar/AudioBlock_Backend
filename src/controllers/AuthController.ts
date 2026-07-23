@@ -31,7 +31,7 @@ export class AuthController {
                 message: `Audioblocks Login\nNonce: ${nonce}\nEmail: ${email}`
             });
         } catch (error) {
-            console.log(error);
+            req.log.error({ err: error }, "Get nonce error");
             handleError(res, error);
         }
     }
@@ -61,12 +61,12 @@ export class AuthController {
                 enableImplicitConversion: true
             });
 
-            console.log("Transformed userData:", userData);
+            req.log.debug({ userData }, "Transformed userData");
 
             // Validate the transformed data
             const errors = await validate(userData);
             if (errors.length > 0) {
-                console.log("Validation errors:", errors);
+                req.log.debug({ errors }, "Validation errors");
                 const formatted = formatValidationErrors(errors);
                 return res.status(422).json(formatted);
             }
@@ -76,7 +76,7 @@ export class AuthController {
             res.status(201).json({success: true, message: "User created successfully", user});
             
         } catch (error) {
-            console.error("Register error:", error);     
+            req.log.error({ err: error }, "Register error");
             this.handleError(res, error);
         }
     }
@@ -106,12 +106,12 @@ export class AuthController {
                 enableImplicitConversion: true
             });
 
-            console.log("Transformed userData:", userData);
+            req.log.debug({ userData }, "Transformed userData");
 
             // Validate the transformed data
             const errors = await validate(userData);
             if (errors.length > 0) {
-                console.log("Validation errors:", errors);
+                req.log.debug({ errors }, "Validation errors");
                 const formatted = formatValidationErrors(errors);
                 return res.status(422).json(formatted);
             }
@@ -121,7 +121,7 @@ export class AuthController {
             res.status(201).json({success: true, message: "User created successfully", user});
             
         } catch (error) {
-            console.error("Register error:", error);     
+            req.log.error({ err: error }, "Register error");
             this.handleError(res, error);
         }
     }
@@ -152,7 +152,7 @@ export class AuthController {
 
             const errors = await validate(loginData);
             if (errors.length > 0) {
-                console.log("Validation errors:", errors);
+                req.log.debug({ errors }, "Validation errors");
                 const formatted = formatValidationErrors(errors);
                 return res.status(422).json(formatted);
             }
@@ -160,7 +160,7 @@ export class AuthController {
             res.status(200).json({success: true, message: "User logged in successfully", user});
 
         } catch (error) {
-            console.error("Login error:", error);
+            req.log.error({ err: error }, "Login error");
             this.handleError(res, error);
         }
     }
@@ -180,7 +180,7 @@ export class AuthController {
             const result = await this.authService.registerWithEmail(dto);
             res.status(201).json({ success: true, message: "User registered successfully", ...result });
         } catch (error) {
-            console.error("Register with email error:", error);
+            req.log.error({ err: error }, "Register with email error");
             this.handleError(res, error);
         }
     }
@@ -200,7 +200,7 @@ export class AuthController {
             const result = await this.authService.loginWithEmail(dto);
             res.status(200).json({ success: true, message: "User logged in successfully", ...result });
         } catch (error) {
-            console.error("Login with email error:", error);
+            req.log.error({ err: error }, "Login with email error");
             this.handleError(res, error);
         }
     }
@@ -219,7 +219,7 @@ export class AuthController {
                 ...enrollment,
             });
         } catch (error) {
-            console.error("Enable 2FA error:", error);
+            req.log.error({ err: error }, "Enable 2FA error");
             this.handleError(res, error);
         }
     }
@@ -230,7 +230,7 @@ export class AuthController {
             await this.authService.verifyEmail(token);
             res.status(200).json({ success: true, message: "Email verified successfully" });
         } catch (error) {
-            console.error("Verify email error:", error);
+            req.log.error({ err: error }, "Verify email error");
             this.handleError(res, error);
         }
     }
@@ -244,7 +244,7 @@ export class AuthController {
             await this.authService.forgotPassword(email);
             res.status(200).json({ success: true, message: "If the email exists, a reset link has been sent" });
         } catch (error) {
-            console.error("Forgot password error:", error);
+            req.log.error({ err: error }, "Forgot password error");
             this.handleError(res, error);
         }
     }
@@ -259,21 +259,20 @@ export class AuthController {
             await this.authService.resetPassword(token, password);
             res.status(200).json({ success: true, message: "Password reset successfully" });
         } catch (error) {
-            console.error("Reset password error:", error);
+            req.log.error({ err: error }, "Reset password error");
             this.handleError(res, error);
         }
     }
 
     private handleError(res: Response, error: unknown): void {
         if (error instanceof Error) {
-            console.error("Handled Error:", error.message, error.stack);
-            
+            res.log.error({ err: error }, "Handled error");
             res.status(400).json({ message: error.message });
         } else if (typeof error === 'string') {
-            console.error("String Error:", error);
+            res.log.error({ error }, "String error");
             res.status(400).json({ message: error });
         } else {
-            console.error("Unknown Error:", error);
+            res.log.error({ error }, "Unknown error");
             res.status(500).json({ message: "Internal server error" });
         }
     }

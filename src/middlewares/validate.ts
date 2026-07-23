@@ -24,7 +24,7 @@ export function validateDTO(DTOClass: any) {
       next();
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "An unknown error occurred";
-      console.error("Validation Middleware Error:", err);
+      req.log.error({ err }, "Validation middleware error");
       return res.status(500).json({
         success: false,
         message: "Internal validation error.",

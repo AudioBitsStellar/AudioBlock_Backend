@@ -68,7 +68,7 @@ export class UploadController {
       );
       return res.status(201).json({ success: true, data: song });
     } catch (err) {
-      console.error(err);
+      req.log.error({ err }, "Finalize upload error");
       handleError(res, err);
     }
   };

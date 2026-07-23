@@ -2,6 +2,7 @@ import { ValidationError } from "class-validator";
 import { IValidationFormatResult } from "../interfaces/IValidateErrorFormat";
 import { Request, Response } from "express";
 import crypto from "crypto";
+import logger from "./logger";
 import {
   mapToOnChainError,
   OnChainErrorCode,
@@ -31,14 +32,16 @@ export function formatValidationErrors(
 }
 
 export function handleError(res: Response, error: unknown): void {
+  // res.log is missing when tests call controllers with bare res mocks
+  const log = res.log ?? logger;
   if (error instanceof Error) {
-    console.error("Handled Error:", error.message, error.stack);
+    log.error({ err: error }, "Handled error");
     res.status(400).json({ message: error.message });
   } else if (typeof error === "string") {
-    console.error("String Error:", error);
+    log.error({ error }, "String error");
     res.status(400).json({ message: error });
   } else {
-    console.error("Unknown Error:", error);
+    log.error({ error }, "Unknown error");
     res.status(500).json({ message: "Internal server error" });
   }
 }
@@ -49,7 +52,7 @@ export function handleError(res: Response, error: unknown): void {
  */
 export function handleOnChainError(res: Response, error: unknown): void {
   const errorResponse = mapToOnChainError(error);
-  console.error("On-chain Error:", errorResponse);
+  (res.log ?? logger).error({ errorResponse }, "On-chain error");
 
   // Return 400 for retryable errors, 500 for non-retryable
   const statusCode = errorResponse.retryable ? 400 : 500;

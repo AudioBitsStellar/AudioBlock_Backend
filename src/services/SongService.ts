@@ -11,6 +11,7 @@ import { getChannel } from "../config/rabbitmq";
 import { SorobanContracts } from "../config/soroban";
 import { SorobanService, addressArg, stringArg, u64Arg } from "./Soroban/SorobanService";
 import { PreparedTransaction } from "./Artist/ArtistService";
+import logger from "../utils/logger";
 
 export class SongService {
   private songRepo: Repository<Song>;
@@ -42,7 +43,7 @@ export class SongService {
   async saveChunk(fileId: string, chunkIndex: number, chunkPath: string) {
     const uploadDir = path.join("uploads", "temp", fileId);
 
-    console.log("Saving chunk to:", uploadDir);
+    logger.debug({ uploadDir }, "Saving chunk");
 
     // Ensure folder exists
     if (!fs.existsSync(uploadDir)) {

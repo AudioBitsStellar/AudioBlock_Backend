@@ -82,7 +82,7 @@ export class SongController {
       res.setHeader("Access-Control-Allow-Origin", "*");
       return res.send(generated);
     } catch (err) {
-      console.error("Stream error:", err);
+      req.log.error({ err }, "Stream error");
       handleError(res, err);
     }
   };
