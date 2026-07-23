@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import cookieParser from "cookie-parser";
 import express, {
   Request,
@@ -5,8 +6,9 @@ import express, {
   RequestHandler,
   ErrorRequestHandler,
 } from "express";
-import morgan from "morgan";
+import { pinoHttp } from "pino-http";
 import cors from "cors";
+import logger from "./utils/logger";
 import redis from "./config/redis";
 import authRoutes from "./routes/authRoutes";
 import artistRoutes from "./routes/artistRoutes";
@@ -25,7 +27,9 @@ const app = express();
 // Apply middleware
 // Apply global middlewares
 app.use(cookieParser());
-app.use(morgan("dev"));
+// pino-http only calls genReqId when req.id is unset, so the request-id
+// middleware planned in issue #22 can take over id assignment untouched.
+app.use(pinoHttp({ logger, genReqId: () => randomUUID() }));
 
 // CORS configuration
 // In production set ALLOWED_ORIGINS to a comma-separated list of the deployed
@@ -103,7 +107,7 @@ app.get('/redis-test', async (req, res) => {
 
 // Error handling middleware
 const customErrorHandler: ErrorRequestHandler = (err, req, res, _next) => {
-  console.error("Unhandled error:", err);
+  req.log.error({ err }, "Unhandled error");
   res.status(500).json({
     error: "Internal Server Error",
     message:
@@ -117,7 +121,7 @@ app.use(customErrorHandler);
 
 // Handle 404 errors
 app.use(((req: Request, res: Response) => {
-  console.log("404 - Route not found:", req.originalUrl);
+  req.log.info("Route not found");
   res.status(404).json({
     error: "error",
     message: `Route ${req.originalUrl} not found`,

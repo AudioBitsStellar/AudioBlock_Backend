@@ -1,5 +1,6 @@
 import axios from "axios";
 import { randomBytes } from "crypto";
+import logger from "../utils/logger";
 
 export class EmailService {
   private readonly apiKey: string;
@@ -12,7 +13,7 @@ export class EmailService {
 
   async sendEmail(to: string, subject: string, html: string): Promise<void> {
     if (!this.apiKey) {
-      console.log(`[EmailService] Skipping email send (no API key). To: ${to}, Subject: ${subject}`);
+      logger.info({ to, subject }, "EmailService: skipping email send (no API key)");
       return;
     }
 

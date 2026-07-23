@@ -17,6 +17,7 @@ an artist's behalf without ever holding their private key.
 - [On-Chain Integration: Client Signs, Backend Relays](#on-chain-integration-client-signs-backend-relays)
 - [Authentication](#authentication)
 - [Environment Variables](#environment-variables)
+- [Logging](#logging)
 - [Getting Started](#getting-started)
 - [Scripts](#scripts)
 - [Known Issues / Cleanup Backlog](#known-issues--cleanup-backlog)
@@ -62,6 +63,7 @@ the API still serves requests, just without background song processing.
 | Decentralized storage | Pinata (IPFS pinning for NFT metadata) |
 | Queueing | RabbitMQ (`amqplib`) — async song-processing jobs |
 | Caching | Redis (`ioredis`) — login nonces, signed-manifest cache, OAuth state |
+| Logging | `pino` + `pino-http` (structured JSON, request-id correlation) |
 | On-chain (Stellar/Soroban) | `@stellar/stellar-sdk` — transaction building, simulation, and relay |
 | On-chain (EVM, legacy) | `ethers`, Dynamic Labs MPC wallet service |
 
@@ -237,6 +239,7 @@ protected routes.
 # Server
 PORT=4000
 NODE_ENV=development
+LOG_LEVEL=info         # pino log level (see the Logging section)
 
 # PostgreSQL
 POSTGRES_HOST=
@@ -327,6 +330,42 @@ For mainnet, use the same names with `SOROBAN_MAINNET_`. Commit updates to
 deployment secret stores or environment dashboards together with the contract
 repo deployment tag/commit in the release notes so backend and contract
 versions can be traced together.
+
+## Logging
+
+The API logs structured JSON via [pino](https://getpino.io). Every request
+gets a generated UUID request id, and `pino-http` emits one completion line
+per request carrying the request id, method, route, status code, and response
+time. Controller, middleware, and error-handler logs use the per-request
+child logger (`req.log` / `res.log`), so they carry the same request id and
+can be correlated with the request line; code that runs outside a request
+(services, background jobs) uses the shared base logger. Honoring an incoming
+`X-Request-Id` header and echoing it back on the response is left to the
+request-id middleware tracked in issue #22.
+
+Credential-bearing headers (`Authorization`, `Cookie`, `Set-Cookie`) are
+redacted from the request/response objects on log lines.
+
+Verbosity is controlled by the `LOG_LEVEL` environment variable. Valid levels,
+from most to least severe:
+
+| Level | Use |
+|---|---|
+| `fatal` | Unrecoverable errors, process is about to exit |
+| `error` | Failed requests and unhandled errors |
+| `warn` | Suspicious but non-fatal conditions |
+| `info` | Request completion lines, notable lifecycle events |
+| `debug` | Diagnostic detail (validation errors, transformed payloads) |
+| `trace` | Very fine-grained tracing |
+
+Setting a level enables it and everything more severe; `LOG_LEVEL=silent`
+disables logging entirely. When `LOG_LEVEL` is unset the default is `info` in
+production (`NODE_ENV=production`) and `debug` otherwise.
+
+```bash
+LOG_LEVEL=debug npm run dev   # verbose local run
+LOG_LEVEL=warn npm start      # quiet production run
+```
 
 ## S3 Storage and Lifecycle Management
 

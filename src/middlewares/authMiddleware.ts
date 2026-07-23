@@ -42,7 +42,7 @@ export const requireAuth = (
     (req as any).user = decoded;
     next();
   } catch (error) {
-    console.error("JWT verification error:", error);
+    req.log.error({ err: error }, "JWT verification error");
     return res.status(401).json({
       success: false,
       message: "Unauthorized: Invalid or expired token",
