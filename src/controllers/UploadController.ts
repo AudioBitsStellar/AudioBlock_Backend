@@ -1,6 +1,8 @@
 import { Request, Response } from "express";
 import { handleError } from "../utils/helpers";
 import { SongService } from "../services/SongService";
+import logger from "../config/logger";
+
 const songService = new SongService();
 
 export class UploadController {
@@ -37,9 +39,12 @@ export class UploadController {
     };
 
   /**
-   * Once all chunks are uploaded, merge and push to RabbitMQ
+   * Once all chunks are uploaded, merge, scan for malware, and push to RabbitMQ.
+   *
+   * If the merged file is flagged by the malware scanner the artist receives a
+   * 422 response with a `MALWARE_DETECTED` code so the dashboard can display
+   * a clear error message (Issue #38).
    */
-
   finalizeUpload = async (req: Request, res: Response) => {
     try {
       const { fileId, totalChunks, title, description, genre, coverArtPath, composers } = req.body;
@@ -61,8 +66,20 @@ export class UploadController {
         composers
       );
       return res.status(201).json({ success: true, data: song });
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      // Surface malware detection as a 422 with a clear artist-facing message
+      if (err?.code === "MALWARE_DETECTED") {
+        logger.warn(
+          { reqId: (req as any).id, route: req.path, threat: err.threat },
+          "Upload rejected due to malware detection"
+        );
+        return res.status(422).json({
+          success: false,
+          error: "MALWARE_DETECTED",
+          message: err.message,
+        });
+      }
+      logger.error({ reqId: (req as any).id, route: req.path, err }, "finalizeUpload error");
       handleError(res, err);
     }
   };

@@ -11,6 +11,8 @@ import { getChannel } from "../config/rabbitmq";
 import { SorobanContracts } from "../config/soroban";
 import { SorobanService, addressArg, stringArg, u64Arg } from "./Soroban/SorobanService";
 import { PreparedTransaction } from "./Artist/ArtistService";
+import { ScanService } from "./ScanService";
+import logger from "../config/logger";
 
 export class SongService {
   private songRepo: Repository<Song>;
@@ -42,7 +44,7 @@ export class SongService {
   async saveChunk(fileId: string, chunkIndex: number, chunkPath: string) {
     const uploadDir = path.join("uploads", "temp", fileId);
 
-    console.log("Saving chunk to:", uploadDir);
+    logger.debug({ fileId, chunkIndex }, "Saving chunk");
 
     // Ensure folder exists
     if (!fs.existsSync(uploadDir)) {
@@ -149,7 +151,21 @@ export class SongService {
     // Remove empty temp directory
     fs.rmdirSync(tempDir);
 
-    //  Upload merged file to S3
+    // ── Malware scan (Issue #38) ───────────────────────────────────────────────
+    // Scan the merged file BEFORE uploading to S3 or queuing the worker.
+    // Flagged files are deleted and the finalize call is aborted with a 422.
+    logger.info({ fileId }, "Running malware scan on merged upload");
+    const scanResult = await ScanService.scanFile(finalPath);
+    if (!scanResult.clean) {
+      logger.warn({ fileId, threat: scanResult.threat }, "Malware detected — rejecting upload");
+      // Delete the merged file so nothing lands in S3
+      try { fs.unlinkSync(finalPath); } catch { /* best-effort */ }
+      throw Object.assign(
+        new Error(`Upload rejected: malware detected (${scanResult.threat ?? "unknown threat"})`),
+        { statusCode: 422, code: "MALWARE_DETECTED", threat: scanResult.threat }
+      );
+    }
+    logger.info({ fileId }, "Malware scan passed");
     const s3Res = await s3
       .upload({
         Bucket: process.env.AWS_BUCKET_NAME!,
