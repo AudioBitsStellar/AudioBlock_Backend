@@ -104,6 +104,23 @@ app.get('/redis-test', async (req, res) => {
 // Error handling middleware
 const customErrorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   console.error("Unhandled error:", err);
+
+  // Multer errors (file filter rejections, size limits)
+  if (err.name === "MulterError") {
+    return res.status(400).json({
+      error: "Bad Request",
+      message: err.message,
+    });
+  }
+
+  // File filter rejection errors are passed as plain Error through Express
+  if (err instanceof Error && /Invalid file type|allowed/i.test(err.message)) {
+    return res.status(400).json({
+      error: "Bad Request",
+      message: err.message,
+    });
+  }
+
   res.status(500).json({
     error: "Internal Server Error",
     message:

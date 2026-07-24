@@ -1,11 +1,10 @@
 import { Request, Response } from "express";
-import multer from "multer";
 import { handleError } from "../utils/helpers";
 import { SongService } from "../services/SongService";
 const songService = new SongService();
 
 export class UploadController {
-  uploadChunk = 
+  uploadChunk =
     async (req: Request, res: Response) => {
       try {
         const { fileId, chunkIndex } = req.body;
@@ -13,12 +12,7 @@ export class UploadController {
         if (!req.file) {
           return res.status(400).json({ error: "No chunk file uploaded" });
         }
-        if (!req.file.mimetype.startsWith("audio/")) {
-          throw new Error("Invalid file type. Only audio files are allowed.");
-        }
 
-        const chunkFile = req.file!;
-        // await songService.saveChunk(fileId, Number(chunkIndex), chunkFile.path);
         await songService.saveChunk(fileId, Number(chunkIndex), req.file.path);
 
         return res.status(200).json({ success: true });
