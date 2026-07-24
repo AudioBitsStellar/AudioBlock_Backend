@@ -8,6 +8,8 @@ import path from "path";
 import { runSeeders } from "./seeders";
 import { validateSorobanConfig } from "./config/soroban";
 import { validateEnvironment } from "./config/env";
+import { startDbPoolMonitor } from "./services/DbPoolMonitor";
+import { startJobQueueWorker, startJobQueueMonitor } from "./workers/JobQueueWorker";
 
 // Ensure upload directories exist
 const uploadDirs = ["uploads/temp", "uploads/merged", "uploads/profile-images",
@@ -21,6 +23,9 @@ async function main() {
     // Initialize the database connection
     await AppDataSource.initialize();
     console.log("✅ Database connected successfully");
+
+    // Start connection-pool metrics + health monitoring (Issue #134)
+    startDbPoolMonitor(AppDataSource);
 
     // Run Seeders
     await runSeeders();
@@ -47,6 +52,11 @@ async function main() {
       }
       process.exit(1);
     });
+
+    // Start the background job queue worker + depth monitor (Issue #132).
+    // Backed by Redis, independent of RabbitMQ.
+    startJobQueueWorker();
+    startJobQueueMonitor();
 
     // Initialize RabbitMQ in background (non-blocking)
     initRabbitMQ().then(() => {
