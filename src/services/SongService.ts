@@ -1,4 +1,4 @@
-import { Repository } from "typeorm";
+import { In, Repository } from "typeorm";
 import { Song } from "../entities/Song";
 import { User } from "../entities/User";
 import { TransactionLog } from "../entities/TransactionLog";
@@ -12,6 +12,7 @@ import { SorobanContracts } from "../config/soroban";
 import { SorobanService, addressArg, stringArg, u64Arg } from "./Soroban/SorobanService";
 import { PreparedTransaction } from "./Artist/ArtistService";
 import { ScanService } from "./ScanService";
+import { SearchIndexService } from "./SearchIndexService";
 import logger from "../config/logger";
 
 export class SongService {
@@ -256,6 +257,58 @@ export class SongService {
     }
   }
 
+  /**
+   * Search songs by title / artist / keywords (Issue #135).
+   *
+   * Hits the precomputed inverted index first; on an index miss (no matching
+   * tokens) falls back to a direct DB `ILIKE` query so results are never lost
+   * just because the index hasn't caught up. Only `ready`, un-flagged songs
+   * are returned.
+   */
+  async searchSongs(query: string, limit = 20): Promise<Song[]> {
+    const trimmed = (query || "").trim();
+    if (!trimmed) return [];
+
+    const indexedIds = await SearchIndexService.search(trimmed, limit);
+
+    if (indexedIds.length > 0) {
+      const songs = await this.songRepo.find({
+        where: { id: In(indexedIds), status: "ready", flagged: false },
+      });
+      // Preserve the index's relevance ordering (DB `IN` doesn't guarantee it).
+      const rank = new Map(indexedIds.map((id, i) => [id, i]));
+      return songs.sort(
+        (a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0)
+      );
+    }
+
+    // Index miss — fall back to the database.
+    const like = `%${trimmed}%`;
+    return this.songRepo
+      .createQueryBuilder("song")
+      .where("song.status = :status", { status: "ready" })
+      .andWhere("song.flagged = false")
+      .andWhere(
+        "(song.title ILIKE :like OR song.genre ILIKE :like OR song.composers ILIKE :like)",
+        { like }
+      )
+      .orderBy("song.playCount", "DESC")
+      .take(limit)
+      .getMany();
+  }
+
+  /**
+   * Rebuild the entire search index from the current catalog (Issue #135).
+   * Returns the number of songs indexed.
+   */
+  async rebuildSearchIndex(): Promise<number> {
+    const songs = await this.songRepo.find({
+      where: { status: "ready", flagged: false },
+      relations: ["user"],
+    });
+    return SearchIndexService.rebuild(songs);
+  }
+
   async flagSong(songId: string, adminId: string, reason?: string): Promise<Song> {
     const song = await this.songRepo.findOneBy({ id: songId });
     if (!song) throw new Error("Song not found");
@@ -272,6 +325,9 @@ export class SongService {
       action: "song_flag",
       details: { songId, reason: reason || null },
     });
+
+    // Flagged songs must not surface in search results (Issue #135).
+    SearchIndexService.scheduleRemoval(songId);
 
     return song;
   }
@@ -292,6 +348,15 @@ export class SongService {
       action: "song_unflag",
       details: { songId },
     });
+
+    // Restore the song to the search index once it's unflagged (Issue #135).
+    if (song.status === "ready") {
+      const full = await this.songRepo.findOne({
+        where: { id: songId },
+        relations: ["user"],
+      });
+      if (full) SearchIndexService.scheduleIndexUpdate(full);
+    }
 
     return song;
   }

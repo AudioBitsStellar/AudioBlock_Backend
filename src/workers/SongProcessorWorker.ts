@@ -34,6 +34,7 @@ import { Song } from "../entities/Song";
 import { PinataService } from "../services/PinataService";
 import { precomputeSignedManifest } from "./precomputeManifest";
 import { TransactionLogService } from '../services/TransactionLogService';
+import { SearchIndexService } from "../services/SearchIndexService";
 import logger from "../config/logger";
 
 const MAIN_QUEUE = "song_processing";
@@ -173,6 +174,10 @@ export async function startSongWorker() {
         );
 
         await CacheService.cacheSong(songId, song);
+
+        // Song is now live and searchable — update the precomputed search
+        // index asynchronously (Issue #135).
+        SearchIndexService.scheduleIndexUpdate(song);
 
         await logService.createLogEntry(
           song.user.id,
