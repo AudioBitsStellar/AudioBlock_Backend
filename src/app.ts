@@ -16,6 +16,8 @@ import walletRoutes from "./routes/walletRoutes";
 import SongRoutes from "./routes/SongRoutes";
 import marketplaceRoutes from "./routes/marketplaceRoutes";
 import adminRoutes from "./routes/adminRoutes";
+import AppDataSource from "./config/db";
+import { getPoolStats, checkDbHealth } from "./services/DbPoolMonitor";
 
 
 // Route imports
@@ -72,8 +74,19 @@ app.use((req, res, next) => {
 
 
 // Define routes
-app.use("/health", (req, res) => {
+app.get("/health", (req, res) => {
   res.json({ status: "ok" });
+});
+
+// Database connection-pool status (Issue #134). Reports live pool metrics and
+// runs a health-check query; returns 503 when the pool can't serve a query.
+app.get("/health/db", async (req, res) => {
+  const healthy = await checkDbHealth(AppDataSource);
+  const pool = getPoolStats(AppDataSource);
+  res.status(healthy ? 200 : 503).json({
+    status: healthy ? "ok" : "unhealthy",
+    pool,
+  });
 });
 
 app.use("/api/auth", authRoutes);
