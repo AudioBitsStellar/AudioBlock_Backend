@@ -5,7 +5,8 @@ import express, {
   RequestHandler,
   ErrorRequestHandler,
 } from "express";
-import morgan from "morgan";
+import logger from "./config/logger";
+import { requestLoggerMiddleware } from "./middlewares/requestLogger";
 import cors from "cors";
 import redis from "./config/redis";
 import authRoutes from "./routes/authRoutes";
@@ -25,7 +26,8 @@ const app = express();
 // Apply middleware
 // Apply global middlewares
 app.use(cookieParser());
-app.use(morgan("dev"));
+// Structured request logging with correlation id (Issue #33)
+app.use(requestLoggerMiddleware);
 
 // CORS configuration
 // In production set ALLOWED_ORIGINS to a comma-separated list of the deployed
@@ -103,7 +105,10 @@ app.get('/redis-test', async (req, res) => {
 
 // Error handling middleware
 const customErrorHandler: ErrorRequestHandler = (err, req, res, _next) => {
-  console.error("Unhandled error:", err);
+  logger.error(
+    { reqId: (req as any).id, err, route: req.originalUrl, method: req.method },
+    "Unhandled error"
+  );
 
   // Multer errors (file filter rejections, size limits)
   if (err.name === "MulterError") {
@@ -134,7 +139,7 @@ app.use(customErrorHandler);
 
 // Handle 404 errors
 app.use(((req: Request, res: Response) => {
-  console.log("404 - Route not found:", req.originalUrl);
+  logger.warn({ reqId: (req as any).id, route: req.originalUrl }, "404 - Route not found");
   res.status(404).json({
     error: "error",
     message: `Route ${req.originalUrl} not found`,
