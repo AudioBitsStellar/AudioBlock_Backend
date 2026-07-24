@@ -7,6 +7,7 @@ import {
 } from "../entities/RoyaltyPayout";
 import { SorobanContracts } from "../config/soroban";
 import { SorobanService } from "./Soroban/SorobanService";
+import { RoyaltyPayoutEvent } from "../types";
 
 export interface CreateRoyaltyPayoutInput {
   saleEventId: string;
@@ -21,12 +22,7 @@ export interface CreateRoyaltyPayoutInput {
   expectedSplits: RoyaltySplit[];
 }
 
-export interface RoyaltyPayoutEvent {
-  saleEventId: string;
-  onChainEventId: string;
-  recipientPublicKey: string;
-  amountStroops: string;
-}
+
 
 export interface RoyaltyReconciliationResult {
   reconciled: RoyaltyPayout[];
