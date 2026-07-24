@@ -515,6 +515,9 @@ npm run dev
 | `npm run migration:generate -- -n DescribeYourChange` | Generates a new migration file based on entity changes |
 | `npm run migration:run` | Applies pending migrations to the database |
 | `npm run migration:revert` | Reverts the last applied migration |
+| `npm test` | Runs the full Jest suite (`src/__tests__/**/*.test.ts`) |
+| `npm test -- src/__tests__/health.test.ts` | Runs a single test file (swap in any path under `src/__tests__`) |
+| `npm run test:watch` | Runs Jest in watch mode |
 
 ## Known Issues / Cleanup Backlog
 
