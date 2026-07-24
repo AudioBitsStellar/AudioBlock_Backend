@@ -8,6 +8,7 @@ import {
   xdr,
 } from "@stellar/stellar-sdk";
 import { getNetworkPassphrase, getSorobanServer } from "../../config/soroban";
+import { RoyaltyPayoutEvent } from "../../types";
 
 const POLL_INTERVAL_MS = 1500;
 const POLL_TIMEOUT_MS = 30000;
@@ -17,12 +18,6 @@ export interface SorobanSubmitResult {
   returnValue: unknown;
 }
 
-export interface RoyaltyPayoutEvent {
-  saleEventId: string;
-  onChainEventId: string;
-  recipientPublicKey: string;
-  amountStroops: string;
-}
 
 /**
  * Generic helper for the "client signs, backend relays" Soroban flow:

@@ -14,7 +14,14 @@
     "reconcile:royalties": "ts-node src/jobs/RoyaltyReconciliationJob.ts",
     "migration:generate": "typeorm migration:generate",
     "migration:run": "typeorm migration:run -d dist/config/db.js",
-    "migration:revert": "typeorm migration:revert -d dist/config/db.js"
+    "migration:revert": "typeorm migration:revert -d dist/config/db.js",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.ts": [
+      "eslint --fix",
+      "prettier --write"
+    ]
   },
   "author": "",
   "license": "ISC",
@@ -74,6 +81,10 @@
     "ts-jest": "^29.4.11",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.3.0",
+    "eslint": "^9.18.0",
+    "prettier": "^3.4.2"
   }
 }
