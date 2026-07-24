@@ -5,6 +5,7 @@ import redis from "../config/redis";
 import { precomputeSignedManifest } from "../workers/precomputeManifest";
 import { handleError, handleOnChainError } from "../utils/helpers";
 import { SongService } from "../services/SongService";
+import logger from "../config/logger";
 
 const songService = new SongService();
 
@@ -82,7 +83,7 @@ export class SongController {
       res.setHeader("Access-Control-Allow-Origin", "*");
       return res.send(generated);
     } catch (err) {
-      console.error("Stream error:", err);
+      logger.error({ reqId: (req as any).id, route: req.path, err }, 'Stream error');
       handleError(res, err);
     }
   };
