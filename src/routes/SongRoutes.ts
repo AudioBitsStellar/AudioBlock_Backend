@@ -35,14 +35,27 @@ const router = Router();
 //               to enforce a maximum.
 const CHUNK_MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB per chunk (safety cap)
 
-const storage = multer.diskStorage({
+const ALLOWED_AUDIO_MIMES = [
+  "audio/mpeg",        // .mp3
+  "audio/wav",         // .wav
+  "audio/x-wav",       // .wav (alt)
+  "audio/flac",        // .flac
+  "audio/x-flac",      // .flac (alt)
+  "audio/ogg",         // .ogg
+  "audio/aac",         // .aac
+  "audio/mp4",         // .m4a
+  "audio/x-m4a",       // .m4a (alt)
+  "audio/webm",        // .webm
+];
+
+const ALLOWED_IMAGE_MIMES = ["image/jpeg", "image/png", "image/jpg"];
+
+const chunkStorage = multer.diskStorage({
   destination: (req, file, cb) => {
     const uploadDir = "uploads/temp";
-
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
-
     cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
@@ -50,10 +63,43 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ storage, limits: { fileSize: CHUNK_MAX_SIZE_BYTES } });
+const coverStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = "uploads/temp";
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    cb(null, `${Date.now()}-${Math.random().toString(36).substring(7)}`);
+  }
+});
+
+const chunkUpload = multer({
+  storage: chunkStorage,
+  limits: { fileSize: CHUNK_MAX_SIZE_BYTES },
+  fileFilter: (req, file, cb) => {
+    if (!ALLOWED_AUDIO_MIMES.includes(file.mimetype)) {
+      return cb(new Error("Invalid file type. Allowed audio formats: MP3, WAV, FLAC, OGG, AAC, M4A, WebM"));
+    }
+    cb(null, true);
+  }
+});
+
+const coverUpload = multer({
+  storage: coverStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB for cover images
+  fileFilter: (req, file, cb) => {
+    if (!ALLOWED_IMAGE_MIMES.includes(file.mimetype)) {
+      return cb(new Error("Invalid file type. Allowed image formats: JPG, PNG"));
+    }
+    cb(null, true);
+  }
+});
 // const upload = multer({ dest: "uploads/temp/" });
-router.post("/upload/chunk", authArtistMiddleware, upload.single("chunk"), validateDTO(UploadChunkDTO), uploadController.uploadChunk);
-router.post("/upload/cover", authArtistMiddleware, upload.single("cover"), validateDTO(CreateCoverDTO), uploadController.uploadCover);
+router.post("/upload/chunk", authArtistMiddleware, chunkUpload.single("chunk"), validateDTO(UploadChunkDTO), uploadController.uploadChunk);
+router.post("/upload/cover", authArtistMiddleware, coverUpload.single("cover"), validateDTO(CreateCoverDTO), uploadController.uploadCover);
 router.post("/upload/finalize", authArtistMiddleware, validateDTO(FinalizeUploadDTO), uploadController.finalizeUpload);
 
 
