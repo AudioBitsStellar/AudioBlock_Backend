@@ -13,6 +13,7 @@ import authRoutes from "./routes/authRoutes";
 import artistRoutes from "./routes/artistRoutes";
 import twitterRoutes from "./routes/twitterRoutes";
 import walletRoutes from "./routes/walletRoutes";
+import userRoutes from "./routes/userRoutes";
 import SongRoutes from "./routes/SongRoutes";
 import marketplaceRoutes from "./routes/marketplaceRoutes";
 import adminRoutes from "./routes/adminRoutes";
@@ -89,11 +90,56 @@ app.get("/health/db", async (req, res) => {
   });
 });
 
+// Comprehensive health check endpoint (uptime monitoring)
+// Checks both database and Redis connectivity
+app.get("/healthz", async (req, res) => {
+  try {
+    const dbHealthy = await checkDbHealth(AppDataSource);
+    const pool = getPoolStats(AppDataSource);
+    let redisHealthy = false;
+    let redisError: string | null = null;
+
+    try {
+      await redis.ping();
+      redisHealthy = true;
+    } catch (err) {
+      redisError = err instanceof Error ? err.message : String(err);
+    }
+
+    const overallHealthy = dbHealthy && redisHealthy;
+    const statusCode = overallHealthy ? 200 : 503;
+
+    res.status(statusCode).json({
+      status: overallHealthy ? "healthy" : "unhealthy",
+      timestamp: new Date().toISOString(),
+      dependencies: {
+        database: {
+          status: dbHealthy ? "ok" : "failing",
+          pool,
+        },
+        redis: {
+          status: redisHealthy ? "ok" : "failing",
+          error: redisError,
+        },
+      },
+    });
+  } catch (err) {
+    res.status(503).json({
+      status: "unhealthy",
+      timestamp: new Date().toISOString(),
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
 app.use("/api/auth", authRoutes);
 app.use("/api/artist", artistRoutes);
 
 // Dynamic wallet routes
 app.use("/api/wallet", walletRoutes);
+
+// User profile routes
+app.use("/api/user", userRoutes);
 
 // Song wallet
 app.use("/api/song", SongRoutes);
@@ -107,13 +153,6 @@ app.use("/api/admin", adminRoutes);
 
 //TWITTER CALLBACK ROUTE
 app.use("/api/auth/twitter", twitterRoutes);
-
-
-app.get('/redis-test', async (req, res) => {
-  await redis.set('greeting', 'hello world');
-  const value = await redis.get('greeting');
-  res.send({ value });
-});
 
 
 // Error handling middleware
