@@ -1,10 +1,11 @@
 /**
  * HTTP request logging middleware (Issue #33)
  *
- * Attaches a unique request-id to every incoming request and logs the method,
- * route, status code and response time as a structured pino record.
+ * Attaches a unique request-id to every incoming request (honoring an
+ * incoming X-Request-Id header when present) and logs the method, route,
+ * status code and response time as a structured pino record.
  *
- * The generated `req.id` (uuid-like) is also forwarded to the client in the
+ * The resulting `req.id` is also forwarded to the client in the
  * X-Request-Id response header so callers can correlate logs to requests.
  */
 import { Request, Response, NextFunction, RequestHandler } from "express";
@@ -25,7 +26,8 @@ export const requestLoggerMiddleware: RequestHandler = (
   res: Response,
   next: NextFunction
 ) => {
-  req.id = randomUUID();
+  const incomingId = req.headers["x-request-id"];
+  req.id = (typeof incomingId === "string" && incomingId) || randomUUID();
   res.setHeader("X-Request-Id", req.id);
 
   const start = Date.now();
