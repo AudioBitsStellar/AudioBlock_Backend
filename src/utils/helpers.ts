@@ -6,6 +6,7 @@ import {
   mapToOnChainError,
   OnChainErrorCode,
 } from "../types/OnChainErrorCodes";
+import { AppError } from "../errors/AppError";
 
 export function formatValidationErrors(
   errors: ValidationError[],
@@ -31,6 +32,16 @@ export function formatValidationErrors(
 }
 
 export function handleError(res: Response, error: unknown): void {
+  // Handle AppError with structured response
+  if (error instanceof AppError) {
+    return res.status(error.statusCode).json({
+      success: false,
+      message: error.message,
+      type: error.type,
+      ...(error.details && { details: error.details }),
+    });
+  }
+
   if (error instanceof Error) {
     console.error("Handled Error:", error.message, error.stack);
     res.status(400).json({ message: error.message });
