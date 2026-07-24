@@ -33,7 +33,9 @@ const router = Router();
 // Max file:    Total audio file size is not bounded at the chunk layer.
 //               Add a per-session size accumulator in saveChunk() if you need
 //               to enforce a maximum.
-const CHUNK_MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB per chunk (safety cap)
+const CHUNK_MAX_SIZE_BYTES = process.env.CHUNK_UPLOAD_MAX_BYTES
+  ? Number(process.env.CHUNK_UPLOAD_MAX_BYTES)
+  : 10 * 1024 * 1024; // 10 MB per chunk (safety cap), configurable via CHUNK_UPLOAD_MAX_BYTES
 
 const ALLOWED_AUDIO_MIMES = [
   "audio/mpeg",        // .mp3

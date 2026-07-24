@@ -110,7 +110,15 @@ const customErrorHandler: ErrorRequestHandler = (err, req, res, _next) => {
     "Unhandled error"
   );
 
-  // Multer errors (file filter rejections, size limits)
+  // Multer file-size limit exceeded
+  if (err.name === "MulterError" && err.code === "LIMIT_FILE_SIZE") {
+    return res.status(413).json({
+      error: "Payload Too Large",
+      message: "Uploaded file exceeds the maximum allowed size.",
+    });
+  }
+
+  // Other multer errors (file filter rejections, unexpected fields, etc.)
   if (err.name === "MulterError") {
     return res.status(400).json({
       error: "Bad Request",
