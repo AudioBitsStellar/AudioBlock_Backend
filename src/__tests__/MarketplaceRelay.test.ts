@@ -14,29 +14,29 @@
  *   submit-buy       → success, Soroban rejection
  */
 
-import "reflect-metadata";
+import 'reflect-metadata';
 
 // ── Module-level mock variables (must be prefixed "mock" for Jest hoisting) ──
 
 const mockPrepareListing = jest.fn();
-const mockSubmitListing  = jest.fn();
-const mockPrepareBuy     = jest.fn();
-const mockSubmitBuy      = jest.fn();
+const mockSubmitListing = jest.fn();
+const mockPrepareBuy = jest.fn();
+const mockSubmitBuy = jest.fn();
 
 // Mock the service so the controller's module-level singleton uses our fns
-jest.mock("../services/Marketplace/MarketplaceService", () => ({
+jest.mock('../services/Marketplace/MarketplaceService', () => ({
   MarketplaceService: jest.fn().mockImplementation(() => ({
     prepareListing: mockPrepareListing,
-    submitListing:  mockSubmitListing,
-    prepareBuy:     mockPrepareBuy,
-    submitBuy:      mockSubmitBuy,
+    submitListing: mockSubmitListing,
+    prepareBuy: mockPrepareBuy,
+    submitBuy: mockSubmitBuy,
   })),
 }));
 
 // ── Imports (after mocks) ──────────────────────────────────────────────────────
 
-import { MarketplaceController } from "../controllers/MarketplaceController";
-import { Request, Response } from "express";
+import { MarketplaceController } from '../controllers/MarketplaceController';
+import { Request, Response } from 'express';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -45,7 +45,7 @@ function mockReq(overrides: Record<string, unknown> = {}): Request {
 }
 
 function mockRes(): { res: Response; json: jest.Mock; status: jest.Mock } {
-  const json   = jest.fn();
+  const json = jest.fn();
   const status = jest.fn().mockReturnThis();
   return { res: { json, status } as unknown as Response, json, status };
 }
@@ -63,18 +63,18 @@ beforeEach(() => {
 // Listing relay flow: prepare → (client mock-signs) → submit
 // ══════════════════════════════════════════════════════════════════════════════
 
-describe("Relay flow: prepare-listing → submit-listing", () => {
+describe('Relay flow: prepare-listing → submit-listing', () => {
   // Step 1: backend prepares unsigned XDR ─────────────────────────────────────
 
-  it("prepareListing returns unsigned XDR and network passphrase on success", async () => {
+  it('prepareListing returns unsigned XDR and network passphrase on success', async () => {
     mockPrepareListing.mockResolvedValue({
-      xdr: "UNSIGNED_LISTING_XDR",
-      networkPassphrase: "Test SDF Network ; September 2015",
+      xdr: 'UNSIGNED_LISTING_XDR',
+      networkPassphrase: 'Test SDF Network ; September 2015',
     });
 
     const req = mockReq({
       body: { tokenId: 42, priceInStroops: 5_000_000 },
-      user: { stellarPublicKey: "GSELLER_PK" },
+      user: { stellarPublicKey: 'GSELLER_PK' },
     });
     const { res, json, status } = mockRes();
 
@@ -84,12 +84,12 @@ describe("Relay flow: prepare-listing → submit-listing", () => {
     expect(json).toHaveBeenCalledWith(
       expect.objectContaining({
         success: true,
-        data: expect.objectContaining({ xdr: "UNSIGNED_LISTING_XDR" }),
-      })
+        data: expect.objectContaining({ xdr: 'UNSIGNED_LISTING_XDR' }),
+      }),
     );
   });
 
-  it("prepareListing rejects when stellar wallet is not connected", async () => {
+  it('prepareListing rejects when stellar wallet is not connected', async () => {
     const req = mockReq({
       body: { tokenId: 1, priceInStroops: 100 },
       user: { stellarPublicKey: undefined },
@@ -102,12 +102,12 @@ describe("Relay flow: prepare-listing → submit-listing", () => {
     expect(mockPrepareListing).not.toHaveBeenCalled();
   });
 
-  it("prepareListing propagates Soroban RPC errors", async () => {
-    mockPrepareListing.mockRejectedValue(new Error("RPC timeout"));
+  it('prepareListing propagates Soroban RPC errors', async () => {
+    mockPrepareListing.mockRejectedValue(new Error('RPC timeout'));
 
     const req = mockReq({
       body: { tokenId: 5, priceInStroops: 1_000_000 },
-      user: { stellarPublicKey: "GSELLER_PK" },
+      user: { stellarPublicKey: 'GSELLER_PK' },
     });
     const { res, status } = mockRes();
 
@@ -119,30 +119,28 @@ describe("Relay flow: prepare-listing → submit-listing", () => {
 
   // Step 2: client signs, backend receives signed XDR ─────────────────────────
 
-  it("submitListing accepts mock-signed XDR and returns txHash (success path)", async () => {
-    const TX_HASH = "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890";
+  it('submitListing accepts mock-signed XDR and returns txHash (success path)', async () => {
+    const TX_HASH = 'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890';
     mockSubmitListing.mockResolvedValue({ txHash: TX_HASH });
 
-    const req = mockReq({ body: { signedXdr: "MOCK_SIGNED_LISTING_XDR" } });
+    const req = mockReq({ body: { signedXdr: 'MOCK_SIGNED_LISTING_XDR' } });
     const { res, json } = mockRes();
 
     await MarketplaceController.submitListing(req, res);
 
-    expect(mockSubmitListing).toHaveBeenCalledWith("MOCK_SIGNED_LISTING_XDR");
+    expect(mockSubmitListing).toHaveBeenCalledWith('MOCK_SIGNED_LISTING_XDR');
     expect(json).toHaveBeenCalledWith(
       expect.objectContaining({
         success: true,
         data: expect.objectContaining({ txHash: TX_HASH }),
-      })
+      }),
     );
   });
 
-  it("submitListing returns error for invalid (unparseable) signed XDR", async () => {
-    mockSubmitListing.mockRejectedValue(
-      new Error("Soroban transaction rejected: invalid_xdr")
-    );
+  it('submitListing returns error for invalid (unparseable) signed XDR', async () => {
+    mockSubmitListing.mockRejectedValue(new Error('Soroban transaction rejected: invalid_xdr'));
 
-    const req = mockReq({ body: { signedXdr: "NOT_VALID_XDR" } });
+    const req = mockReq({ body: { signedXdr: 'NOT_VALID_XDR' } });
     const { res, status } = mockRes();
 
     await MarketplaceController.submitListing(req, res);
@@ -150,14 +148,14 @@ describe("Relay flow: prepare-listing → submit-listing", () => {
     expect(status).toHaveBeenCalledWith(400); // handleError maps Error → 400
   });
 
-  it("submitListing returns error for expired transaction (TRANSACTION_EXPIRED)", async () => {
+  it('submitListing returns error for expired transaction (TRANSACTION_EXPIRED)', async () => {
     // Simulates a transaction signed outside the 120-second window set in
     // SorobanService.prepareInvocation (see docs/ON_CHAIN_INTEGRATION.md).
     mockSubmitListing.mockRejectedValue(
-      new Error("Soroban transaction rejected: TRANSACTION_EXPIRED")
+      new Error('Soroban transaction rejected: TRANSACTION_EXPIRED'),
     );
 
-    const req = mockReq({ body: { signedXdr: "EXPIRED_SIGNED_XDR" } });
+    const req = mockReq({ body: { signedXdr: 'EXPIRED_SIGNED_XDR' } });
     const { res, status } = mockRes();
 
     await MarketplaceController.submitListing(req, res);
@@ -170,16 +168,16 @@ describe("Relay flow: prepare-listing → submit-listing", () => {
 // Buy relay flow: prepare → (client mock-signs) → submit
 // ══════════════════════════════════════════════════════════════════════════════
 
-describe("Relay flow: prepare-buy → submit-buy", () => {
-  it("prepareBuy returns unsigned XDR on success", async () => {
+describe('Relay flow: prepare-buy → submit-buy', () => {
+  it('prepareBuy returns unsigned XDR on success', async () => {
     mockPrepareBuy.mockResolvedValue({
-      xdr: "UNSIGNED_BUY_XDR",
-      networkPassphrase: "Test SDF Network ; September 2015",
+      xdr: 'UNSIGNED_BUY_XDR',
+      networkPassphrase: 'Test SDF Network ; September 2015',
     });
 
     const req = mockReq({
       body: { tokenId: 99 },
-      user: { stellarPublicKey: "GBUYER_PK" },
+      user: { stellarPublicKey: 'GBUYER_PK' },
     });
     const { res, json } = mockRes();
 
@@ -188,12 +186,12 @@ describe("Relay flow: prepare-buy → submit-buy", () => {
     expect(json).toHaveBeenCalledWith(
       expect.objectContaining({
         success: true,
-        data: expect.objectContaining({ xdr: "UNSIGNED_BUY_XDR" }),
-      })
+        data: expect.objectContaining({ xdr: 'UNSIGNED_BUY_XDR' }),
+      }),
     );
   });
 
-  it("prepareBuy rejects when stellar wallet is not connected", async () => {
+  it('prepareBuy rejects when stellar wallet is not connected', async () => {
     const req = mockReq({
       body: { tokenId: 1 },
       user: { stellarPublicKey: undefined },
@@ -206,29 +204,29 @@ describe("Relay flow: prepare-buy → submit-buy", () => {
     expect(mockPrepareBuy).not.toHaveBeenCalled();
   });
 
-  it("submitBuy accepts mock-signed XDR and returns txHash", async () => {
-    mockSubmitBuy.mockResolvedValue({ txHash: "buy-tx-hash-0000" });
+  it('submitBuy accepts mock-signed XDR and returns txHash', async () => {
+    mockSubmitBuy.mockResolvedValue({ txHash: 'buy-tx-hash-0000' });
 
-    const req = mockReq({ body: { signedXdr: "MOCK_SIGNED_BUY_XDR" } });
+    const req = mockReq({ body: { signedXdr: 'MOCK_SIGNED_BUY_XDR' } });
     const { res, json } = mockRes();
 
     await MarketplaceController.submitBuy(req, res);
 
-    expect(mockSubmitBuy).toHaveBeenCalledWith("MOCK_SIGNED_BUY_XDR");
+    expect(mockSubmitBuy).toHaveBeenCalledWith('MOCK_SIGNED_BUY_XDR');
     expect(json).toHaveBeenCalledWith(
       expect.objectContaining({
         success: true,
-        data: expect.objectContaining({ txHash: "buy-tx-hash-0000" }),
-      })
+        data: expect.objectContaining({ txHash: 'buy-tx-hash-0000' }),
+      }),
     );
   });
 
-  it("submitBuy propagates on-chain rejection (e.g. not-listed, insufficient balance)", async () => {
+  it('submitBuy propagates on-chain rejection (e.g. not-listed, insufficient balance)', async () => {
     mockSubmitBuy.mockRejectedValue(
-      new Error("Soroban transaction rejected: CONTRACT_CALL_FAILED")
+      new Error('Soroban transaction rejected: CONTRACT_CALL_FAILED'),
     );
 
-    const req = mockReq({ body: { signedXdr: "SIGNED_BUY_XDR" } });
+    const req = mockReq({ body: { signedXdr: 'SIGNED_BUY_XDR' } });
     const { res, status } = mockRes();
 
     await MarketplaceController.submitBuy(req, res);
@@ -241,7 +239,7 @@ describe("Relay flow: prepare-buy → submit-buy", () => {
 // Full relay round-trip (prepare → mock-sign → submit) documented
 // ══════════════════════════════════════════════════════════════════════════════
 
-describe("Full relay round-trip (simulated)", () => {
+describe('Full relay round-trip (simulated)', () => {
   /**
    * Documents the relay pattern end-to-end:
    *   1. prepareListing   → backend builds unsigned XDR
@@ -252,21 +250,21 @@ describe("Full relay round-trip (simulated)", () => {
    * that must be signed with the artist's secret key; in tests we pass a
    * fake string that the mocked service accepts without validation.
    */
-  it("listing: prepare returns XDR, client signs it, submit returns txHash", async () => {
-    const UNSIGNED_XDR = "PREPARE_STEP_XDR";
-    const SIGNED_XDR   = "WALLET_SIGNED_XDR"; // what Freighter would produce
-    const TX_HASH      = "relay-success-txhash";
+  it('listing: prepare returns XDR, client signs it, submit returns txHash', async () => {
+    const UNSIGNED_XDR = 'PREPARE_STEP_XDR';
+    const SIGNED_XDR = 'WALLET_SIGNED_XDR'; // what Freighter would produce
+    const TX_HASH = 'relay-success-txhash';
 
     mockPrepareListing.mockResolvedValue({
       xdr: UNSIGNED_XDR,
-      networkPassphrase: "Test SDF Network ; September 2015",
+      networkPassphrase: 'Test SDF Network ; September 2015',
     });
     mockSubmitListing.mockResolvedValue({ txHash: TX_HASH });
 
     // Step 1: prepare
     const prepareReq = mockReq({
       body: { tokenId: 10, priceInStroops: 2_000_000 },
-      user: { stellarPublicKey: "GSELLER" },
+      user: { stellarPublicKey: 'GSELLER' },
     });
     const { res: prepareRes, json: prepareJson } = mockRes();
     await MarketplaceController.prepareListing(prepareReq, prepareRes);

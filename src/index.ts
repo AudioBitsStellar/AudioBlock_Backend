@@ -1,19 +1,24 @@
-import "reflect-metadata";
-import app from "./app";
-import AppDataSource from "./config/db";
-import { initRabbitMQ } from "./config/rabbitmq";
-import { startSongWorker } from "./workers/SongProcessorWorker";
-import fs from "fs";
-import path from "path";
-import { runSeeders } from "./seeders";
-import { validateSorobanConfig } from "./config/soroban";
-import { validateEnvironment } from "./config/env";
-import { startDbPoolMonitor } from "./services/DbPoolMonitor";
-import { startJobQueueWorker, startJobQueueMonitor } from "./workers/JobQueueWorker";
+import 'reflect-metadata';
+import app from './app';
+import AppDataSource from './config/db';
+import { initRabbitMQ } from './config/rabbitmq';
+import { startSongWorker } from './workers/SongProcessorWorker';
+import fs from 'fs';
+import path from 'path';
+import { runSeeders } from './seeders';
+import { validateSorobanConfig } from './config/soroban';
+import { validateEnvironment } from './config/env';
+import { startDbPoolMonitor } from './services/DbPoolMonitor';
+import { startJobQueueWorker, startJobQueueMonitor } from './workers/JobQueueWorker';
 
 // Ensure upload directories exist
-const uploadDirs = ["uploads/temp", "uploads/merged", "uploads/profile-images",
-  "uploads/page-covers", "uploads/covers"];
+const uploadDirs = [
+  'uploads/temp',
+  'uploads/merged',
+  'uploads/profile-images',
+  'uploads/page-covers',
+  'uploads/covers',
+];
 
 async function main() {
   try {
@@ -22,7 +27,7 @@ async function main() {
 
     // Initialize the database connection
     await AppDataSource.initialize();
-    console.log("✅ Database connected successfully");
+    console.log('✅ Database connected successfully');
 
     // Start connection-pool metrics + health monitoring (Issue #134)
     startDbPoolMonitor(AppDataSource);
@@ -44,11 +49,11 @@ async function main() {
       console.log(`🚀 Server is listening on port ${PORT}`);
     });
 
-    server.on("error", (error: NodeJS.ErrnoException) => {
-      if (error.code === "EADDRINUSE") {
+    server.on('error', (error: NodeJS.ErrnoException) => {
+      if (error.code === 'EADDRINUSE') {
         console.error(`❌ Port ${PORT} is already in use`);
       } else {
-        console.error("❌ Server error:", error);
+        console.error('❌ Server error:', error);
       }
       process.exit(1);
     });
@@ -59,29 +64,30 @@ async function main() {
     startJobQueueMonitor();
 
     // Initialize RabbitMQ in background (non-blocking)
-    initRabbitMQ().then(() => {
-      console.log("✅ RabbitMQ initialized, starting workers");
-      startSongWorker();
-      console.log("✅ Background workers started");
-    }).catch(err => {
-      console.error("⚠️ RabbitMQ initialization failed:", err);
-      console.log("⚠️ Server running without workers");
-    });
-
+    initRabbitMQ()
+      .then(() => {
+        console.log('✅ RabbitMQ initialized, starting workers');
+        startSongWorker();
+        console.log('✅ Background workers started');
+      })
+      .catch((err) => {
+        console.error('⚠️ RabbitMQ initialization failed:', err);
+        console.log('⚠️ Server running without workers');
+      });
   } catch (error) {
-    console.error("❌ Failed to start the server:", error);
+    console.error('❌ Failed to start the server:', error);
     process.exit(1);
   }
 }
 
-process.on("uncaughtException", (error) => {
-  console.error("❌ Uncaught Exception:", error);
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
   process.exit(1);
 });
 
 // Handle unhandled promise rejections
-process.on("unhandledRejection", (reason, promise) => {
-  console.error("❌ Unhandled Rejection at:", promise, "reason:", reason);
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
   process.exit(1);
 });
 

@@ -20,6 +20,7 @@ an artist's behalf without ever holding their private key.
 - [Getting Started](#getting-started)
 - [Scripts](#scripts)
 - [Known Issues / Cleanup Backlog](#known-issues--cleanup-backlog)
+- [Contributing](#contributing)
 
 ## Architecture
 
@@ -529,3 +530,7 @@ npm run dev
 - A handful of variables in `.env.example` (`REDIS_URL`, `JWT_EXPIRER_AT`,
   `PRIVATE_KEY`, `PRIVATE_KEY_2`, several OAuth1-style Twitter vars) are not
   currently read by any code.
+
+## Contributing
+
+Please read our [Contributing Guide](CONTRIBUTING.md) for details on our code of conduct, and the process for submitting pull requests to us.

@@ -1,27 +1,27 @@
-import { Repository } from "typeorm";
-import AppDataSource from "../config/db";
-import { User } from "../entities/User";
-import { CreateUserDTO } from "../dtos/CreateUserDTO";
-import { validate } from "class-validator";
-import { verifyMessage } from "ethers";
-import jwt from "jsonwebtoken";
-import dotenv from "dotenv";
-import redis from "../config/redis";
-import { TransactionLog } from "../entities/TransactionLog";
-import { AppError } from "../errors/AppError";
+import { Repository } from 'typeorm';
+import AppDataSource from '../config/db';
+import { User } from '../entities/User';
+import { CreateUserDTO } from '../dtos/CreateUserDTO';
+import { validate } from 'class-validator';
+import { verifyMessage } from 'ethers';
+import jwt from 'jsonwebtoken';
+import dotenv from 'dotenv';
+import redis from '../config/redis';
+import { TransactionLog } from '../entities/TransactionLog';
+import { AppError } from '../errors/AppError';
 import {
   validateRequired,
   validateEmail,
   validateUsername,
   validateEthereumAddress,
-} from "../validators/ServiceValidator";
+} from '../validators/ServiceValidator';
 import {
   ERROR_MESSAGES,
   SUCCESS_MESSAGES,
   JWT_EXPIRATION,
   TRANSACTION_ACTIONS,
   REGEX_PATTERNS,
-} from "../config/constants";
+} from '../config/constants';
 
 export class UserService {
   private userRepo: Repository<User>;
@@ -33,14 +33,12 @@ export class UserService {
     dotenv.config();
   }
 
-  async createUser(
-    data: CreateUserDTO,
-  ): Promise<{ user: User; token: string }> {
+  async createUser(data: CreateUserDTO): Promise<{ user: User; token: string }> {
     // Service-layer input validation
-    validateRequired(data.email, "email");
-    validateRequired(data.walletAddress, "walletAddress");
-    validateRequired(data.signature, "signature");
-    validateRequired(data.message, "message");
+    validateRequired(data.email, 'email');
+    validateRequired(data.walletAddress, 'walletAddress');
+    validateRequired(data.signature, 'signature');
+    validateRequired(data.message, 'message');
 
     validateEmail(data.email);
     validateEthereumAddress(data.walletAddress);
@@ -88,7 +86,7 @@ export class UserService {
 
     const log = this.transactionLogRepo.create({
       user_id: savedUser.id,
-      txHash: "",
+      txHash: '',
       action: TRANSACTION_ACTIONS.CREATE_USER,
       description: `User with wallet ${savedUser.walletAddress} created.`,
     });
@@ -100,7 +98,7 @@ export class UserService {
   }
 
   async getUserByWalletAddress(walletAddress: string): Promise<User | null> {
-    validateRequired(walletAddress, "walletAddress");
+    validateRequired(walletAddress, 'walletAddress');
     validateEthereumAddress(walletAddress);
 
     return await this.userRepo.findOneBy({ walletAddress });
@@ -111,13 +109,13 @@ export class UserService {
   }
 
   async getUserById(id: string): Promise<User | null> {
-    validateRequired(id, "id");
+    validateRequired(id, 'id');
 
     return await this.userRepo.findOneBy({ id });
   }
 
   async updateUser(id: string, data: Partial<User>): Promise<User | null> {
-    validateRequired(id, "id");
+    validateRequired(id, 'id');
 
     const user = await this.userRepo.findOneBy({ id });
     if (!user) {
@@ -158,7 +156,7 @@ export class UserService {
   }
 
   async deleteUser(id: string): Promise<User | null> {
-    validateRequired(id, "id");
+    validateRequired(id, 'id');
 
     const user = await this.userRepo.findOneBy({ id });
     if (!user) {

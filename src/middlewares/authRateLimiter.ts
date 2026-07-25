@@ -15,16 +15,13 @@
  * The limiter uses Redis as its backing store so limits are shared across all
  * application instances / workers.
  */
-import rateLimit from "express-rate-limit";
-import { RedisStore } from "rate-limit-redis";
-import redis from "../config/redis";
-import { Request, Response } from "express";
+import rateLimit from 'express-rate-limit';
+import { RedisStore } from 'rate-limit-redis';
+import redis from '../config/redis';
+import { Request, Response } from 'express';
 
-const windowMs = parseInt(
-  process.env.AUTH_RATE_LIMIT_WINDOW_MS || String(15 * 60 * 1000),
-  10
-);
-const max = parseInt(process.env.AUTH_RATE_LIMIT_MAX || "20", 10);
+const windowMs = parseInt(process.env.AUTH_RATE_LIMIT_WINDOW_MS || String(15 * 60 * 1000), 10);
+const max = parseInt(process.env.AUTH_RATE_LIMIT_MAX || '20', 10);
 
 /**
  * Build a key that combines the client IP with the email present in the
@@ -37,28 +34,28 @@ const keyGenerator = (req: Request): string => {
       ? Array.isArray(req.params.email)
         ? req.params.email[0]
         : req.params.email
-      : "") ||
-    "unknown";
+      : '') ||
+    'unknown';
   return `auth:rl:${req.ip}:${email}`;
 };
 
 export const authRateLimiter = rateLimit({
   windowMs,
   max,
-  standardHeaders: true,   // Return `RateLimit-*` headers
+  standardHeaders: true, // Return `RateLimit-*` headers
   legacyHeaders: false,
   keyGenerator,
   store: new RedisStore({
     // rate-limit-redis expects a sendCommand function compatible with ioredis
     sendCommand: (...args: string[]) => (redis as any).call(...args),
-    prefix: "auth:rl:",
+    prefix: 'auth:rl:',
   }),
   handler: (req: Request, res: Response) => {
     const retryAfterSec = Math.ceil(windowMs / 1000);
-    res.setHeader("Retry-After", String(retryAfterSec));
+    res.setHeader('Retry-After', String(retryAfterSec));
     res.status(429).json({
       success: false,
-      message: "Too many requests. Please try again later.",
+      message: 'Too many requests. Please try again later.',
       retryAfter: retryAfterSec,
     });
   },
@@ -74,9 +71,9 @@ export const authRateLimiter = rateLimit({
  */
 const nonceWindowMs = parseInt(
   process.env.NONCE_RATE_LIMIT_WINDOW_MS || String(15 * 60 * 1000),
-  10
+  10,
 );
-const nonceMax = parseInt(process.env.NONCE_RATE_LIMIT_MAX || "10", 10);
+const nonceMax = parseInt(process.env.NONCE_RATE_LIMIT_MAX || '10', 10);
 
 export const nonceRateLimiter = rateLimit({
   windowMs: nonceWindowMs,
@@ -86,14 +83,14 @@ export const nonceRateLimiter = rateLimit({
   keyGenerator,
   store: new RedisStore({
     sendCommand: (...args: string[]) => (redis as any).call(...args),
-    prefix: "nonce:rl:",
+    prefix: 'nonce:rl:',
   }),
   handler: (req: Request, res: Response) => {
     const retryAfterSec = Math.ceil(nonceWindowMs / 1000);
-    res.setHeader("Retry-After", String(retryAfterSec));
+    res.setHeader('Retry-After', String(retryAfterSec));
     res.status(429).json({
       success: false,
-      message: "Too many requests. Please try again later.",
+      message: 'Too many requests. Please try again later.',
       retryAfter: retryAfterSec,
     });
   },

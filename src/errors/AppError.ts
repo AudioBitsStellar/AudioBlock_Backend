@@ -4,15 +4,15 @@
  */
 
 export enum ErrorType {
-  VALIDATION_ERROR = "VALIDATION_ERROR",
-  AUTHENTICATION_ERROR = "AUTHENTICATION_ERROR",
-  AUTHORIZATION_ERROR = "AUTHORIZATION_ERROR",
-  NOT_FOUND_ERROR = "NOT_FOUND_ERROR",
-  CONFLICT_ERROR = "CONFLICT_ERROR",
-  BUSINESS_LOGIC_ERROR = "BUSINESS_LOGIC_ERROR",
-  EXTERNAL_SERVICE_ERROR = "EXTERNAL_SERVICE_ERROR",
-  DATABASE_ERROR = "DATABASE_ERROR",
-  INTERNAL_ERROR = "INTERNAL_ERROR",
+  VALIDATION_ERROR = 'VALIDATION_ERROR',
+  AUTHENTICATION_ERROR = 'AUTHENTICATION_ERROR',
+  AUTHORIZATION_ERROR = 'AUTHORIZATION_ERROR',
+  NOT_FOUND_ERROR = 'NOT_FOUND_ERROR',
+  CONFLICT_ERROR = 'CONFLICT_ERROR',
+  BUSINESS_LOGIC_ERROR = 'BUSINESS_LOGIC_ERROR',
+  EXTERNAL_SERVICE_ERROR = 'EXTERNAL_SERVICE_ERROR',
+  DATABASE_ERROR = 'DATABASE_ERROR',
+  INTERNAL_ERROR = 'INTERNAL_ERROR',
 }
 
 export interface ErrorDetails {
@@ -53,39 +53,21 @@ export class AppError extends Error {
    * Create a validation error
    */
   static validation(message: string, details?: ErrorDetails): AppError {
-    return new AppError(
-      message,
-      ErrorType.VALIDATION_ERROR,
-      400,
-      true,
-      details,
-    );
+    return new AppError(message, ErrorType.VALIDATION_ERROR, 400, true, details);
   }
 
   /**
    * Create an authentication error
    */
   static authentication(message: string, details?: ErrorDetails): AppError {
-    return new AppError(
-      message,
-      ErrorType.AUTHENTICATION_ERROR,
-      401,
-      true,
-      details,
-    );
+    return new AppError(message, ErrorType.AUTHENTICATION_ERROR, 401, true, details);
   }
 
   /**
    * Create an authorization error
    */
   static authorization(message: string, details?: ErrorDetails): AppError {
-    return new AppError(
-      message,
-      ErrorType.AUTHORIZATION_ERROR,
-      403,
-      true,
-      details,
-    );
+    return new AppError(message, ErrorType.AUTHORIZATION_ERROR, 403, true, details);
   }
 
   /**
@@ -106,26 +88,14 @@ export class AppError extends Error {
    * Create a business logic error
    */
   static businessLogic(message: string, details?: ErrorDetails): AppError {
-    return new AppError(
-      message,
-      ErrorType.BUSINESS_LOGIC_ERROR,
-      400,
-      true,
-      details,
-    );
+    return new AppError(message, ErrorType.BUSINESS_LOGIC_ERROR, 400, true, details);
   }
 
   /**
    * Create an external service error
    */
   static externalService(message: string, details?: ErrorDetails): AppError {
-    return new AppError(
-      message,
-      ErrorType.EXTERNAL_SERVICE_ERROR,
-      502,
-      true,
-      details,
-    );
+    return new AppError(message, ErrorType.EXTERNAL_SERVICE_ERROR, 502, true, details);
   }
 
   /**

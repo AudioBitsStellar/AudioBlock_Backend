@@ -24,12 +24,12 @@
  *   JOB_COMPLETED_TTL_S     – how long to keep finished jobs (default 3600)
  *   JOB_QUEUE_WARN_THRESHOLD– warn when queued jobs exceed   (default 100)
  */
-import redis from "../config/redis";
-import logger from "../config/logger";
-import { randomUUID } from "crypto";
+import redis from '../config/redis';
+import logger from '../config/logger';
+import { randomUUID } from 'crypto';
 
-export type JobPriority = "critical" | "normal" | "low";
-export type JobStatus = "pending" | "processing" | "completed" | "failed";
+export type JobPriority = 'critical' | 'normal' | 'low';
+export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
 export interface Job<T = any> {
   id: string;
@@ -49,20 +49,17 @@ export interface EnqueueOptions {
   maxAttempts?: number;
 }
 
-const PRIORITIES: JobPriority[] = ["critical", "normal", "low"];
+const PRIORITIES: JobPriority[] = ['critical', 'normal', 'low'];
 const QUEUE_KEY = (p: JobPriority) => `jobs:queue:${p}`;
 const RECORD_KEY = (id: string) => `jobs:record:${id}`;
-const DLQ_KEY = "jobs:dlq";
-const STATS_KEY = "jobs:stats";
+const DLQ_KEY = 'jobs:dlq';
+const STATS_KEY = 'jobs:stats';
 
-const MAX_ATTEMPTS = parseInt(process.env.JOB_MAX_ATTEMPTS || "3", 10);
-const BACKOFF_BASE_MS = parseInt(process.env.JOB_BACKOFF_BASE_MS || "2000", 10);
-const BACKOFF_MAX_MS = parseInt(process.env.JOB_BACKOFF_MAX_MS || "30000", 10);
-const COMPLETED_TTL_S = parseInt(process.env.JOB_COMPLETED_TTL_S || "3600", 10);
-const QUEUE_WARN_THRESHOLD = parseInt(
-  process.env.JOB_QUEUE_WARN_THRESHOLD || "100",
-  10
-);
+const MAX_ATTEMPTS = parseInt(process.env.JOB_MAX_ATTEMPTS || '3', 10);
+const BACKOFF_BASE_MS = parseInt(process.env.JOB_BACKOFF_BASE_MS || '2000', 10);
+const BACKOFF_MAX_MS = parseInt(process.env.JOB_BACKOFF_MAX_MS || '30000', 10);
+const COMPLETED_TTL_S = parseInt(process.env.JOB_COMPLETED_TTL_S || '3600', 10);
+const QUEUE_WARN_THRESHOLD = parseInt(process.env.JOB_QUEUE_WARN_THRESHOLD || '100', 10);
 
 export interface JobQueueStats {
   queues: Record<JobPriority, number>;
@@ -80,7 +77,7 @@ export class JobQueueService {
   private static async saveRecord(job: Job, ttlSeconds?: number): Promise<void> {
     const key = RECORD_KEY(job.id);
     if (ttlSeconds && ttlSeconds > 0) {
-      await redis.set(key, JSON.stringify(job), "EX", ttlSeconds);
+      await redis.set(key, JSON.stringify(job), 'EX', ttlSeconds);
     } else {
       await redis.set(key, JSON.stringify(job));
     }
@@ -106,15 +103,15 @@ export class JobQueueService {
   static async enqueue<T = any>(
     type: string,
     payload: T,
-    options: EnqueueOptions = {}
+    options: EnqueueOptions = {},
   ): Promise<Job<T>> {
     const now = new Date().toISOString();
     const job: Job<T> = {
       id: randomUUID(),
       type,
       payload,
-      priority: options.priority ?? "normal",
-      status: "pending",
+      priority: options.priority ?? 'normal',
+      status: 'pending',
       attempts: 0,
       maxAttempts: options.maxAttempts ?? MAX_ATTEMPTS,
       createdAt: now,
@@ -122,10 +119,10 @@ export class JobQueueService {
     };
 
     await this.saveRecord(job);
-    await redis.hincrby(STATS_KEY, "pending", 1);
+    await redis.hincrby(STATS_KEY, 'pending', 1);
     await redis.lpush(QUEUE_KEY(job.priority), job.id);
 
-    logger.debug({ jobId: job.id, type, priority: job.priority }, "Job enqueued");
+    logger.debug({ jobId: job.id, type, priority: job.priority }, 'Job enqueued');
     return job;
   }
 
@@ -141,10 +138,7 @@ export class JobQueueService {
    * connection. Returns null on timeout. The reserved job is marked
    * `processing`.
    */
-  static async reserve(
-    blockingClient: typeof redis,
-    timeoutSeconds = 5
-  ): Promise<Job | null> {
+  static async reserve(blockingClient: typeof redis, timeoutSeconds = 5): Promise<Job | null> {
     const keys = PRIORITIES.map(QUEUE_KEY);
     const popped = await blockingClient.brpop(...keys, timeoutSeconds);
     if (!popped) return null;
@@ -154,16 +148,16 @@ export class JobQueueService {
     if (!job) return null;
 
     job.attempts += 1;
-    await this.setStatus(job, "processing");
+    await this.setStatus(job, 'processing');
     await this.saveRecord(job);
     return job;
   }
 
   /** Mark a job completed. The record is kept briefly (TTL) for inspection. */
   static async complete(job: Job): Promise<void> {
-    await this.setStatus(job, "completed");
+    await this.setStatus(job, 'completed');
     await this.saveRecord(job, COMPLETED_TTL_S);
-    logger.debug({ jobId: job.id, type: job.type }, "Job completed");
+    logger.debug({ jobId: job.id, type: job.type }, 'Job completed');
   }
 
   /**
@@ -176,12 +170,12 @@ export class JobQueueService {
 
     if (job.attempts < job.maxAttempts) {
       const delay = this.backoffDelay(job.attempts);
-      await this.setStatus(job, "pending");
+      await this.setStatus(job, 'pending');
       await this.saveRecord(job);
 
       logger.warn(
         { jobId: job.id, type: job.type, attempt: job.attempts, delay },
-        `Job failed, retrying in ${delay}ms`
+        `Job failed, retrying in ${delay}ms`,
       );
 
       // Re-queue after the backoff delay. Keeps priority (critical retries stay
@@ -189,9 +183,7 @@ export class JobQueueService {
       setTimeout(() => {
         redis
           .lpush(QUEUE_KEY(job.priority), job.id)
-          .catch((err) =>
-            logger.error({ jobId: job.id, err }, "Failed to re-queue job")
-          );
+          .catch((err) => logger.error({ jobId: job.id, err }, 'Failed to re-queue job'));
       }, delay);
 
       return true;
@@ -203,12 +195,12 @@ export class JobQueueService {
 
   /** Permanently dead-letter a job, preserving its metadata for debugging. */
   static async moveToDLQ(job: Job): Promise<void> {
-    await this.setStatus(job, "failed");
+    await this.setStatus(job, 'failed');
     await this.saveRecord(job); // no TTL — keep DLQ records for investigation
     await redis.lpush(DLQ_KEY, job.id);
     logger.error(
       { jobId: job.id, type: job.type, attempts: job.attempts, error: job.lastError },
-      `Job moved to dead-letter queue after ${job.attempts} attempts`
+      `Job moved to dead-letter queue after ${job.attempts} attempts`,
     );
   }
 

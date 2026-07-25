@@ -1,23 +1,22 @@
 // src/dtos/CreateUserDto.ts
-import { IsEmail, IsEnum, IsOptional, IsString, IsNumber, IsNotEmpty } from "class-validator";
-import { UserRole } from "../entities/User";
+import { IsEmail, IsEnum, IsOptional, IsString, IsNumber, IsNotEmpty } from 'class-validator';
+import { UserRole } from '../entities/User';
 
 export class CreateUserDTO {
-
   @IsOptional()
   @IsString()
   profileImage?: string;
 
   @IsString()
-  @IsNotEmpty({ message: "Artist name is required." })
+  @IsNotEmpty({ message: 'Artist name is required.' })
   dynamixUserId!: string;
 
   @IsEnum(UserRole)
-  @IsNotEmpty({ message: "Role is required." })
+  @IsNotEmpty({ message: 'Role is required.' })
   role!: UserRole;
 
   @IsString()
-  @IsNotEmpty({ message: "Wallet address is required." })
+  @IsNotEmpty({ message: 'Wallet address is required.' })
   walletAddress!: string;
 
   @IsString()
@@ -52,5 +51,4 @@ export class CreateUserDTO {
 
   @IsString()
   message!: string;
-
 }

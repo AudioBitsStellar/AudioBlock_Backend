@@ -6,9 +6,9 @@ import {
   scValToNative,
   BASE_FEE,
   xdr,
-} from "@stellar/stellar-sdk";
-import { getNetworkPassphrase, getSorobanServer } from "../../config/soroban";
-import { RoyaltyPayoutEvent } from "../../types";
+} from '@stellar/stellar-sdk';
+import { getNetworkPassphrase, getSorobanServer } from '../../config/soroban';
+import { RoyaltyPayoutEvent } from '../../types';
 
 const POLL_INTERVAL_MS = 1500;
 const POLL_TIMEOUT_MS = 30000;
@@ -17,7 +17,6 @@ export interface SorobanSubmitResult {
   hash: string;
   returnValue: unknown;
 }
-
 
 /**
  * Generic helper for the "client signs, backend relays" Soroban flow:
@@ -64,19 +63,12 @@ export class SorobanService {
   }
 
   /** Submits a wallet-signed XDR and waits for it to land. */
-  async submitSignedTransaction(
-    signedXdr: string,
-  ): Promise<SorobanSubmitResult> {
-    const transaction = TransactionBuilder.fromXDR(
-      signedXdr,
-      getNetworkPassphrase(),
-    );
+  async submitSignedTransaction(signedXdr: string): Promise<SorobanSubmitResult> {
+    const transaction = TransactionBuilder.fromXDR(signedXdr, getNetworkPassphrase());
     const sendResponse = await this.server.sendTransaction(transaction);
 
-    if (sendResponse.status === "ERROR") {
-      throw new Error(
-        `Soroban transaction rejected: ${JSON.stringify(sendResponse.errorResult)}`,
-      );
+    if (sendResponse.status === 'ERROR') {
+      throw new Error(`Soroban transaction rejected: ${JSON.stringify(sendResponse.errorResult)}`);
     }
 
     const hash = sendResponse.hash;
@@ -92,9 +84,7 @@ export class SorobanService {
     }
 
     if (getResponse.status !== rpc.Api.GetTransactionStatus.SUCCESS) {
-      throw new Error(
-        `Soroban transaction ${hash} failed with status ${getResponse.status}`,
-      );
+      throw new Error(`Soroban transaction ${hash} failed with status ${getResponse.status}`);
     }
 
     const returnValue = getResponse.returnValue
@@ -113,17 +103,17 @@ export class SorobanService {
 
     const serverWithEvents = this.server as unknown as {
       getEvents?: (request: {
-        filters: Array<{ type: "contract"; contractIds: string[] }>;
+        filters: Array<{ type: 'contract'; contractIds: string[] }>;
         limit: number;
       }) => Promise<{ events: Array<{ id?: string; value?: unknown; topic?: unknown[] }> }>;
     };
 
     if (!serverWithEvents.getEvents) {
-      throw new Error("Configured Soroban RPC client does not support event reads");
+      throw new Error('Configured Soroban RPC client does not support event reads');
     }
 
     const response = await serverWithEvents.getEvents({
-      filters: [{ type: "contract", contractIds: [royaltyContractId] }],
+      filters: [{ type: 'contract', contractIds: [royaltyContractId] }],
       limit: 200,
     });
 
@@ -141,18 +131,13 @@ export class SorobanService {
   }): RoyaltyPayoutEvent | undefined {
     const value = event.value as Partial<RoyaltyPayoutEvent> | undefined;
 
-    if (
-      !value ||
-      !value.saleEventId ||
-      !value.recipientPublicKey ||
-      !value.amountStroops
-    ) {
+    if (!value || !value.saleEventId || !value.recipientPublicKey || !value.amountStroops) {
       return undefined;
     }
 
     return {
       saleEventId: String(value.saleEventId),
-      onChainEventId: String(value.onChainEventId || event.id || ""),
+      onChainEventId: String(value.onChainEventId || event.id || ''),
       recipientPublicKey: String(value.recipientPublicKey),
       amountStroops: String(value.amountStroops),
     };
@@ -160,13 +145,13 @@ export class SorobanService {
 }
 
 export function addressArg(value: string): xdr.ScVal {
-  return nativeToScVal(value, { type: "address" });
+  return nativeToScVal(value, { type: 'address' });
 }
 
 export function stringArg(value: string): xdr.ScVal {
-  return nativeToScVal(value, { type: "string" });
+  return nativeToScVal(value, { type: 'string' });
 }
 
 export function u64Arg(value: number | string): xdr.ScVal {
-  return nativeToScVal(BigInt(value), { type: "u64" });
+  return nativeToScVal(BigInt(value), { type: 'u64' });
 }

@@ -33,7 +33,7 @@ export class ServiceRegistry {
     const { singleton = true } = options;
 
     const serviceFactory =
-      typeof factory === "function" && factory.prototype
+      typeof factory === 'function' && factory.prototype
         ? () => new (factory as ServiceConstructor<T>)()
         : (factory as ServiceFactory<T>);
 
@@ -114,18 +114,18 @@ export class ServiceRegistry {
  * Type-safe service name constants to prevent typos
  */
 export const SERVICE_NAMES = {
-  USER_SERVICE: "UserService",
-  AUTH_SERVICE: "AuthService",
-  SONG_SERVICE: "SongService",
-  ALBUM_SERVICE: "AlbumService",
-  ARTIST_SERVICE: "ArtistService",
-  ARTIST_PROFILE_SERVICE: "ArtistProfileService",
-  SOROBAN_SERVICE: "SorobanService",
-  TRANSACTION_LOG_SERVICE: "TransactionLogService",
-  CACHE_SERVICE: "CacheService",
-  EMAIL_SERVICE: "EmailService",
-  PINATA_SERVICE: "PinataService",
-  WALLET_SERVICE: "WalletService",
+  USER_SERVICE: 'UserService',
+  AUTH_SERVICE: 'AuthService',
+  SONG_SERVICE: 'SongService',
+  ALBUM_SERVICE: 'AlbumService',
+  ARTIST_SERVICE: 'ArtistService',
+  ARTIST_PROFILE_SERVICE: 'ArtistProfileService',
+  SOROBAN_SERVICE: 'SorobanService',
+  TRANSACTION_LOG_SERVICE: 'TransactionLogService',
+  CACHE_SERVICE: 'CacheService',
+  EMAIL_SERVICE: 'EmailService',
+  PINATA_SERVICE: 'PinataService',
+  WALLET_SERVICE: 'WalletService',
 } as const;
 
 /**

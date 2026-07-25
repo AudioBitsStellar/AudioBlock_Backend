@@ -1,14 +1,12 @@
-import "reflect-metadata";
-import { DataSource } from "typeorm";
-import dotenv from "dotenv";
-import { User } from "../entities/User";
-import { Song } from "../entities/Song";
-import { TransactionLog } from "../entities/TransactionLog";
-import { Genre } from "../entities/Genre";
-import { Album } from "../entities/Album";
-import { RoyaltyPayout } from "../entities/RoyaltyPayout";
-
-
+import 'reflect-metadata';
+import { DataSource } from 'typeorm';
+import dotenv from 'dotenv';
+import { User } from '../entities/User';
+import { Song } from '../entities/Song';
+import { TransactionLog } from '../entities/TransactionLog';
+import { Genre } from '../entities/Genre';
+import { Album } from '../entities/Album';
+import { RoyaltyPayout } from '../entities/RoyaltyPayout';
 
 dotenv.config();
 
@@ -35,13 +33,13 @@ export const dbPoolConfig = {
 };
 
 const AppDataSource = new DataSource({
-  type: "postgres",
-  host: process.env.POSTGRES_HOST || "localhost",
+  type: 'postgres',
+  host: process.env.POSTGRES_HOST || 'localhost',
   port: Number(process.env.POSTGRES_PORT || 5321),
-  username: process.env.POSTGRES_USER || "postgres",
-  password: process.env.POSTGRES_PASSWORD || "1234",
-  database: process.env.POSTGRES_DATABASE || "audioblocks",
-  synchronize: process.env.NODE_ENV !== "production",
+  username: process.env.POSTGRES_USER || 'postgres',
+  password: process.env.POSTGRES_PASSWORD || '1234',
+  database: process.env.POSTGRES_DATABASE || 'audioblocks',
+  synchronize: process.env.NODE_ENV !== 'production',
   dropSchema: false,
   ssl: false,
   logging: true,
@@ -54,16 +52,9 @@ const AppDataSource = new DataSource({
     connectionTimeoutMillis: dbPoolConfig.connectionTimeoutMillis,
     idleTimeoutMillis: dbPoolConfig.idleTimeoutMillis,
   },
-  entities: [
-    User,
-    Song,
-    TransactionLog,
-    Genre,
-    Album,
-    RoyaltyPayout
-  ],
-  migrations: ["src/migrations/*.ts", "dist/migrations/*.js"],
-  migrationsTableName: "migrations",
+  entities: [User, Song, TransactionLog, Genre, Album, RoyaltyPayout],
+  migrations: ['src/migrations/*.ts', 'dist/migrations/*.js'],
+  migrationsTableName: 'migrations',
 });
 
 export default AppDataSource;

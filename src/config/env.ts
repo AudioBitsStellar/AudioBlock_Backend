@@ -1,4 +1,4 @@
-import dotenv from "dotenv";
+import dotenv from 'dotenv';
 
 dotenv.config();
 
@@ -21,18 +21,18 @@ export interface ValidatedEnv {
 }
 
 const requiredVars: (keyof ValidatedEnv)[] = [
-  "POSTGRES_HOST",
-  "POSTGRES_PORT",
-  "POSTGRES_USER",
-  "POSTGRES_PASSWORD",
-  "POSTGRES_DATABASE",
-  "JWT_SECRET",
-  "AWS_ACCESS_KEY_ID",
-  "AWS_SECRET_ACCESS_KEY",
-  "AWS_REGION",
-  "AWS_BUCKET_NAME",
-  "PINATA_JWT",
-  "PINATA_GATEWAY",
+  'POSTGRES_HOST',
+  'POSTGRES_PORT',
+  'POSTGRES_USER',
+  'POSTGRES_PASSWORD',
+  'POSTGRES_DATABASE',
+  'JWT_SECRET',
+  'AWS_ACCESS_KEY_ID',
+  'AWS_SECRET_ACCESS_KEY',
+  'AWS_REGION',
+  'AWS_BUCKET_NAME',
+  'PINATA_JWT',
+  'PINATA_GATEWAY',
 ];
 
 export function validateEnvironment(): ValidatedEnv {
@@ -45,19 +45,17 @@ export function validateEnvironment(): ValidatedEnv {
   });
 
   if (missing.length > 0) {
-    console.error("❌ Missing required environment variables:");
+    console.error('❌ Missing required environment variables:');
     missing.forEach((varName) => {
       console.error(`   - ${varName}`);
     });
-    console.error(
-      "\nℹ️  Copy .env.example to .env and fill in all required values."
-    );
+    console.error('\nℹ️  Copy .env.example to .env and fill in all required values.');
     process.exit(1);
   }
 
   return {
-    NODE_ENV: process.env.NODE_ENV || "development",
-    PORT: process.env.PORT || "4000",
+    NODE_ENV: process.env.NODE_ENV || 'development',
+    PORT: process.env.PORT || '4000',
     POSTGRES_HOST: process.env.POSTGRES_HOST!,
     POSTGRES_PORT: process.env.POSTGRES_PORT!,
     POSTGRES_USER: process.env.POSTGRES_USER!,
@@ -68,7 +66,7 @@ export function validateEnvironment(): ValidatedEnv {
     AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY!,
     AWS_REGION: process.env.AWS_REGION!,
     AWS_BUCKET_NAME: process.env.AWS_BUCKET_NAME!,
-    SOROBAN_NETWORK: process.env.SOROBAN_NETWORK || "testnet",
+    SOROBAN_NETWORK: process.env.SOROBAN_NETWORK || 'testnet',
     PINATA_JWT: process.env.PINATA_JWT!,
     PINATA_GATEWAY: process.env.PINATA_GATEWAY!,
   };

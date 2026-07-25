@@ -1,14 +1,10 @@
-import { In, Repository } from "typeorm";
-import AppDataSource from "../config/db";
-import {
-  RoyaltyPayout,
-  RoyaltyPayoutStatus,
-  RoyaltySplit,
-} from "../entities/RoyaltyPayout";
-import { SorobanContracts } from "../config/soroban";
-import { SorobanService } from "./Soroban/SorobanService";
-import { royaltiesPaidTotal } from "./MetricsService";
-import { RoyaltyPayoutEvent } from "../types";
+import { In, Repository } from 'typeorm';
+import AppDataSource from '../config/db';
+import { RoyaltyPayout, RoyaltyPayoutStatus, RoyaltySplit } from '../entities/RoyaltyPayout';
+import { SorobanContracts } from '../config/soroban';
+import { SorobanService } from './Soroban/SorobanService';
+import { royaltiesPaidTotal } from './MetricsService';
+import { RoyaltyPayoutEvent } from '../types';
 
 export interface CreateRoyaltyPayoutInput {
   saleEventId: string;
@@ -22,8 +18,6 @@ export interface CreateRoyaltyPayoutInput {
   grossAmountStroops: string;
   expectedSplits: RoyaltySplit[];
 }
-
-
 
 export interface RoyaltyReconciliationResult {
   reconciled: RoyaltyPayout[];
@@ -48,7 +42,7 @@ export class RoyaltyPayoutService {
       buyerPublicKey: input.buyerPublicKey,
       sellerPublicKey: input.sellerPublicKey,
       artist_id: input.artistId,
-      currency: input.currency || "stroops",
+      currency: input.currency || 'stroops',
       grossAmountStroops: input.grossAmountStroops,
       expectedSplits: input.expectedSplits,
       status: RoyaltyPayoutStatus.PENDING,
@@ -109,10 +103,10 @@ export class RoyaltyPayoutService {
         payout.status = RoyaltyPayoutStatus.DISCREPANCY;
         payout.discrepancyReason = missingOrMismatched
           .map((split) => {
-            const actual = split.actualAmountStroops || "missing";
+            const actual = split.actualAmountStroops || 'missing';
             return `${split.recipientPublicKey} expected ${split.expectedAmountStroops}, actual ${actual}`;
           })
-          .join("; ");
+          .join('; ');
         discrepancies.push(await this.royaltyPayoutRepo.save(payout));
       } else {
         payout.status = RoyaltyPayoutStatus.RECONCILED;

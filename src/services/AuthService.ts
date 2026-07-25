@@ -1,17 +1,17 @@
-import { validate } from "class-validator";
-import { JWTDTO } from "../dtos/JWTDTO";
-import { RegisterWithEmailDTO } from "../dtos/RegisterWithEmailDTO";
-import { LoginWithEmailDTO } from "../dtos/LoginWithEmailDTO";
-import { Repository } from "typeorm";
-import { User } from "../entities/User";
-import AppDataSource from "../config/db";
-import jwt from "jsonwebtoken";
-import redis from "../config/redis";
-import { randomBytes } from "crypto";
-import bcrypt from "bcrypt";
-import { generateSecret, generateURI, verifySync } from "otplib";
-import QRCode from "qrcode";
-import { EmailService } from "./EmailService";
+import { validate } from 'class-validator';
+import { JWTDTO } from '../dtos/JWTDTO';
+import { RegisterWithEmailDTO } from '../dtos/RegisterWithEmailDTO';
+import { LoginWithEmailDTO } from '../dtos/LoginWithEmailDTO';
+import { Repository } from 'typeorm';
+import { User } from '../entities/User';
+import AppDataSource from '../config/db';
+import jwt from 'jsonwebtoken';
+import redis from '../config/redis';
+import { randomBytes } from 'crypto';
+import bcrypt from 'bcrypt';
+import { generateSecret, generateURI, verifySync } from 'otplib';
+import QRCode from 'qrcode';
+import { EmailService } from './EmailService';
 
 const PASSWORD_SALT_ROUNDS = 12;
 const RECOVERY_CODE_COUNT = 10;
@@ -19,7 +19,7 @@ const RECOVERY_CODE_BYTES = 5;
 
 type LoginWithEmailResult =
   | { user: User; token: string; twoFactorRequired?: false }
-  | { twoFactorRequired: true; user: Pick<User, "id" | "email" | "role"> };
+  | { twoFactorRequired: true; user: Pick<User, 'id' | 'email' | 'role'> };
 
 export class AuthService {
   private userRepo: Repository<User>;
@@ -33,7 +33,7 @@ export class AuthService {
   private signToken(user: User): string {
     const JWT_SECRET = process.env.JWT_SECRET as string;
     if (!JWT_SECRET) {
-      throw new Error("JWT_SECRET not set in environment variables");
+      throw new Error('JWT_SECRET not set in environment variables');
     }
 
     const payload = {
@@ -53,7 +53,7 @@ export class AuthService {
       emailVerified: user.emailVerified ?? (user.passwordHash ? false : undefined),
     };
 
-    return jwt.sign(payload, JWT_SECRET, { expiresIn: "1d" });
+    return jwt.sign(payload, JWT_SECRET, { expiresIn: '1d' });
   }
 
   /** Registers a user with email + password instead of a wallet signature. */
@@ -61,11 +61,13 @@ export class AuthService {
     const dto = Object.assign(new RegisterWithEmailDTO(), data);
     const errors = await validate(dto);
     if (errors.length > 0) {
-      throw new Error(errors.map((error) => Object.values(error.constraints || {}).join(", ")).join(", "));
+      throw new Error(
+        errors.map((error) => Object.values(error.constraints || {}).join(', ')).join(', '),
+      );
     }
 
     if (await this.userRepo.findOneBy({ email: dto.email })) {
-      throw new Error("User already exists");
+      throw new Error('User already exists');
     }
 
     const passwordHash = await bcrypt.hash(dto.password, PASSWORD_SALT_ROUNDS);
@@ -84,11 +86,11 @@ export class AuthService {
     });
     const savedUser = await this.userRepo.save(user);
 
-    const appUrl = process.env.APP_URL || "http://localhost:3000";
+    const appUrl = process.env.APP_URL || 'http://localhost:3000';
     await this.emailService.sendEmail(
       dto.email,
-      "Verify your email",
-      `<p>Please click <a href="${appUrl}/verify-email/${verificationToken}">here</a> to verify your email.</p>`
+      'Verify your email',
+      `<p>Please click <a href="${appUrl}/verify-email/${verificationToken}">here</a> to verify your email.</p>`,
     );
 
     const token = this.signToken(savedUser);
@@ -100,17 +102,19 @@ export class AuthService {
     const dto = Object.assign(new LoginWithEmailDTO(), data);
     const errors = await validate(dto);
     if (errors.length > 0) {
-      throw new Error(errors.map((error) => Object.values(error.constraints || {}).join(", ")).join(", "));
+      throw new Error(
+        errors.map((error) => Object.values(error.constraints || {}).join(', ')).join(', '),
+      );
     }
 
     const user = await this.userRepo.findOneBy({ email: dto.email });
     if (!user || !user.passwordHash) {
-      throw new Error("Invalid email or password");
+      throw new Error('Invalid email or password');
     }
 
     const matches = await bcrypt.compare(dto.password, user.passwordHash);
     if (!matches) {
-      throw new Error("Invalid email or password");
+      throw new Error('Invalid email or password');
     }
 
     if (user.twoFactorEnabled) {
@@ -126,7 +130,7 @@ export class AuthService {
         : await this.verifyAndConsumeRecoveryCode(user, dto.recoveryCode as string);
 
       if (!verified) {
-        throw new Error("Invalid two-factor code");
+        throw new Error('Invalid two-factor code');
       }
     }
 
@@ -142,20 +146,22 @@ export class AuthService {
   }> {
     const user = await this.userRepo.findOneBy({ id: userId });
     if (!user) {
-      throw new Error("User not found");
+      throw new Error('User not found');
     }
 
     if (!user.passwordHash) {
-      throw new Error("Two-factor authentication is only available for email/password accounts");
+      throw new Error('Two-factor authentication is only available for email/password accounts');
     }
 
     const secret = generateSecret();
     const label = user.email || user.username || user.id;
-    const issuer = "AudioBlocks";
+    const issuer = 'AudioBlocks';
     const otpauthUrl = generateURI({ label, issuer, secret });
     const backupCodes = this.generateRecoveryCodes();
     const recoveryCodeHashes = await Promise.all(
-      backupCodes.map((code) => bcrypt.hash(this.normalizeRecoveryCode(code), PASSWORD_SALT_ROUNDS)),
+      backupCodes.map((code) =>
+        bcrypt.hash(this.normalizeRecoveryCode(code), PASSWORD_SALT_ROUNDS),
+      ),
     );
 
     user.twoFactorEnabled = true;
@@ -177,7 +183,7 @@ export class AuthService {
     }
 
     return verifySync({
-      token: code.replace(/\s/g, ""),
+      token: code.replace(/\s/g, ''),
       secret: user.twoFactorSecret,
     }).valid;
   }
@@ -199,27 +205,27 @@ export class AuthService {
 
   private generateRecoveryCodes(): string[] {
     return Array.from({ length: RECOVERY_CODE_COUNT }, () => {
-      const value = randomBytes(RECOVERY_CODE_BYTES).toString("hex").toUpperCase();
+      const value = randomBytes(RECOVERY_CODE_BYTES).toString('hex').toUpperCase();
       return `${value.slice(0, 5)}-${value.slice(5)}`;
     });
   }
 
   private normalizeRecoveryCode(code: string): string {
-    return code.trim().replace(/\s/g, "").toUpperCase();
+    return code.trim().replace(/\s/g, '').toUpperCase();
   }
 
   async getNonce(email: string): Promise<any> {
     if (!email) {
-      throw new Error("Email is required");
+      throw new Error('Email is required');
     }
 
-    const nonce = randomBytes(16).toString("hex");
+    const nonce = randomBytes(16).toString('hex');
 
     // store nonce with 5-min expiry
-    await redis.set(`nonce:${email}`, nonce, "EX", 300);
+    await redis.set(`nonce:${email}`, nonce, 'EX', 300);
 
-    console.log("Generated nonce:", nonce);
-    console.log("Nonce from redis:", await redis.get(`nonce:${email}`));
+    console.log('Generated nonce:', nonce);
+    console.log('Nonce from redis:', await redis.get(`nonce:${email}`));
     return nonce;
   }
 
@@ -228,18 +234,18 @@ export class AuthService {
     const errors = await validate(dto);
 
     if (errors.length > 0) {
-      throw new Error(errors.map((error) => error.constraints).join(", "));
+      throw new Error(errors.map((error) => error.constraints).join(', '));
     }
 
     if (dto.message) {
       const nonceMatch = dto.message.match(/Nonce: (\w+)/);
-      if (!nonceMatch) throw new Error("Nonce missing in message");
+      if (!nonceMatch) throw new Error('Nonce missing in message');
       const nonce = nonceMatch[1];
 
       const storedNonce = await redis.get(`nonce:${dto.email}`);
-      console.log("Stored nonce:", storedNonce);
+      console.log('Stored nonce:', storedNonce);
       if (!storedNonce || storedNonce !== nonce) {
-        throw new Error("Invalid or expired nonce");
+        throw new Error('Invalid or expired nonce');
       }
 
       // Delete nonce immediately (one-time use)
@@ -248,7 +254,7 @@ export class AuthService {
 
     const user = await this.userRepo.findOneBy({ email: dto.email });
     if (!user) {
-      throw new Error("User not found");
+      throw new Error('User not found');
     }
 
     const token = this.signToken(user);
@@ -261,11 +267,11 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new Error("Invalid verification token");
+      throw new Error('Invalid verification token');
     }
 
     if (user.emailVerificationTokenExpiry && user.emailVerificationTokenExpiry < new Date()) {
-      throw new Error("Verification token has expired");
+      throw new Error('Verification token has expired');
     }
 
     user.emailVerified = true;
@@ -285,11 +291,11 @@ export class AuthService {
     user.passwordResetTokenExpiry = tokenExpiry;
     await this.userRepo.save(user);
 
-    const appUrl = process.env.APP_URL || "http://localhost:3000";
+    const appUrl = process.env.APP_URL || 'http://localhost:3000';
     await this.emailService.sendEmail(
       email,
-      "Reset your password",
-      `<p>Please click <a href="${appUrl}/reset-password/${resetToken}">here</a> to reset your password. This link expires in 30 minutes.</p>`
+      'Reset your password',
+      `<p>Please click <a href="${appUrl}/reset-password/${resetToken}">here</a> to reset your password. This link expires in 30 minutes.</p>`,
     );
   }
 
@@ -299,11 +305,11 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new Error("Invalid reset token");
+      throw new Error('Invalid reset token');
     }
 
     if (user.passwordResetTokenExpiry && user.passwordResetTokenExpiry < new Date()) {
-      throw new Error("Reset token has expired");
+      throw new Error('Reset token has expired');
     }
 
     user.passwordHash = await bcrypt.hash(newPassword, PASSWORD_SALT_ROUNDS);

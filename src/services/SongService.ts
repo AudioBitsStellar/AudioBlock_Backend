@@ -1,20 +1,20 @@
-import { In, Repository } from "typeorm";
-import { Song } from "../entities/Song";
-import { User } from "../entities/User";
-import { TransactionLog } from "../entities/TransactionLog";
-import AppDataSource from "../config/db";
-import dotenv from "dotenv";
-import path from "path";
-import fs from "fs";
-import { s3 } from "../config/s3";
-import { getChannel } from "../config/rabbitmq";
-import { SorobanContracts } from "../config/soroban";
-import { SorobanService, addressArg, stringArg, u64Arg } from "./Soroban/SorobanService";
-import { PreparedTransaction } from "./Artist/ArtistService";
-import { ScanService } from "./ScanService";
-import { SearchIndexService } from "./SearchIndexService";
-import logger from "../config/logger";
-import { songsUploadedTotal } from "./MetricsService";
+import { In, Repository } from 'typeorm';
+import { Song } from '../entities/Song';
+import { User } from '../entities/User';
+import { TransactionLog } from '../entities/TransactionLog';
+import AppDataSource from '../config/db';
+import dotenv from 'dotenv';
+import path from 'path';
+import fs from 'fs';
+import { s3 } from '../config/s3';
+import { getChannel } from '../config/rabbitmq';
+import { SorobanContracts } from '../config/soroban';
+import { SorobanService, addressArg, stringArg, u64Arg } from './Soroban/SorobanService';
+import { PreparedTransaction } from './Artist/ArtistService';
+import { ScanService } from './ScanService';
+import { SearchIndexService } from './SearchIndexService';
+import logger from '../config/logger';
+import { songsUploadedTotal } from './MetricsService';
 
 export class SongService {
   private songRepo: Repository<Song>;
@@ -44,9 +44,9 @@ export class SongService {
   // }
 
   async saveChunk(fileId: string, chunkIndex: number, chunkPath: string) {
-    const uploadDir = path.join("uploads", "temp", fileId);
+    const uploadDir = path.join('uploads', 'temp', fileId);
 
-    logger.debug({ fileId, chunkIndex }, "Saving chunk");
+    logger.debug({ fileId, chunkIndex }, 'Saving chunk');
 
     // Ensure folder exists
     if (!fs.existsSync(uploadDir)) {
@@ -70,7 +70,7 @@ export class SongService {
         Bucket: process.env.AWS_BUCKET_NAME!,
         Key: `covers/${coverFileName}`,
         Body: coverBuffer,
-        ContentType: "image/png",
+        ContentType: 'image/png',
         // ACL: "public-read",
       })
       .promise();
@@ -92,10 +92,10 @@ export class SongService {
     description: string,
     genre: string,
     coverArtPath: string,
-    composers: string
+    composers: string,
   ): Promise<Song> {
-    const tempDir = path.join("uploads/temp", fileId);
-    const mergedDir = "uploads/merged";
+    const tempDir = path.join('uploads/temp', fileId);
+    const mergedDir = 'uploads/merged';
     const finalPath = path.join(mergedDir, `${fileId}.mp3`);
 
     // Ensure merged directory exists
@@ -115,9 +115,7 @@ export class SongService {
 
     const chunkFiles = fs.readdirSync(tempDir);
     if (chunkFiles.length !== totalChunks) {
-      throw new Error(
-        `Expected ${totalChunks} chunks but found ${chunkFiles.length}`
-      );
+      throw new Error(`Expected ${totalChunks} chunks but found ${chunkFiles.length}`);
     }
 
     // if (!fs.existsSync(mergedDir)) fs.mkdirSync(mergedDir, { recursive: true });
@@ -136,8 +134,8 @@ export class SongService {
     await new Promise<void>((resolve, reject) => {
       const writeStream = fs.createWriteStream(finalPath);
 
-      writeStream.on("error", reject);
-      writeStream.on("finish", resolve);
+      writeStream.on('error', reject);
+      writeStream.on('finish', resolve);
 
       // Write chunks sequentially
       for (let i = 0; i < totalChunks; i++) {
@@ -156,24 +154,28 @@ export class SongService {
     // ── Malware scan (Issue #38) ───────────────────────────────────────────────
     // Scan the merged file BEFORE uploading to S3 or queuing the worker.
     // Flagged files are deleted and the finalize call is aborted with a 422.
-    logger.info({ fileId }, "Running malware scan on merged upload");
+    logger.info({ fileId }, 'Running malware scan on merged upload');
     const scanResult = await ScanService.scanFile(finalPath);
     if (!scanResult.clean) {
-      logger.warn({ fileId, threat: scanResult.threat }, "Malware detected — rejecting upload");
+      logger.warn({ fileId, threat: scanResult.threat }, 'Malware detected — rejecting upload');
       // Delete the merged file so nothing lands in S3
-      try { fs.unlinkSync(finalPath); } catch { /* best-effort */ }
+      try {
+        fs.unlinkSync(finalPath);
+      } catch {
+        /* best-effort */
+      }
       throw Object.assign(
-        new Error(`Upload rejected: malware detected (${scanResult.threat ?? "unknown threat"})`),
-        { statusCode: 422, code: "MALWARE_DETECTED", threat: scanResult.threat }
+        new Error(`Upload rejected: malware detected (${scanResult.threat ?? 'unknown threat'})`),
+        { statusCode: 422, code: 'MALWARE_DETECTED', threat: scanResult.threat },
       );
     }
-    logger.info({ fileId }, "Malware scan passed");
+    logger.info({ fileId }, 'Malware scan passed');
     const s3Res = await s3
       .upload({
         Bucket: process.env.AWS_BUCKET_NAME!,
         Key: `uploads/${fileId}.mp3`,
         Body: fs.createReadStream(finalPath),
-        ContentType: "audio/mpeg",
+        ContentType: 'audio/mpeg',
         // ACL: "public-read",
       })
       .promise();
@@ -184,7 +186,7 @@ export class SongService {
       artistAddress,
       artistId,
       s3OriginalUrl: s3Res.Location,
-      status: "processing",
+      status: 'processing',
       description,
       genre,
       coverArtPath,
@@ -197,8 +199,8 @@ export class SongService {
     const channel = getChannel();
     if (channel) {
       channel.sendToQueue(
-        "song_processing",
-        Buffer.from(JSON.stringify({ songId: song.id, fileId }))
+        'song_processing',
+        Buffer.from(JSON.stringify({ songId: song.id, fileId })),
       );
     }
 
@@ -216,29 +218,32 @@ export class SongService {
    * artist's key.
    */
   async prepareSongMintTx(songId: string, albumId: number = 0): Promise<PreparedTransaction> {
-    const song = await this.songRepo.findOne({ where: { id: songId }, relations: ["user"] });
-    if (!song) throw new Error("Song not found");
-    if (!song.metadataCid) throw new Error("Song has no metadata CID yet");
+    const song = await this.songRepo.findOne({ where: { id: songId }, relations: ['user'] });
+    if (!song) throw new Error('Song not found');
+    if (!song.metadataCid) throw new Error('Song has no metadata CID yet');
 
     const user = song.user ?? (await this.userRepo.findOneBy({ id: song.artistId }));
     if (!user?.stellarPublicKey) {
-      throw new Error("Connect a Stellar wallet before minting this song");
+      throw new Error('Connect a Stellar wallet before minting this song');
     }
 
     const xdrTx = await this.soroban.prepareInvocation(
       user.stellarPublicKey,
       SorobanContracts.catalog,
-      "upload_and_mint_song",
-      [addressArg(user.stellarPublicKey), stringArg(song.metadataCid), u64Arg(albumId)]
+      'upload_and_mint_song',
+      [addressArg(user.stellarPublicKey), stringArg(song.metadataCid), u64Arg(albumId)],
     );
 
-    return { xdr: xdrTx, networkPassphrase: process.env.SOROBAN_NETWORK_PASSPHRASE || "" };
+    return { xdr: xdrTx, networkPassphrase: process.env.SOROBAN_NETWORK_PASSPHRASE || '' };
   }
 
   /** Submits the artist's signed `upload_and_mint_song` transaction and records the result. */
-  async submitSongMintTx(songId: string, signedXdr: string): Promise<{ txHash: string; songId: string; tokenId: string }> {
+  async submitSongMintTx(
+    songId: string,
+    signedXdr: string,
+  ): Promise<{ txHash: string; songId: string; tokenId: string }> {
     const song = await this.songRepo.findOneBy({ id: songId });
-    if (!song) throw new Error("Song not found");
+    if (!song) throw new Error('Song not found');
 
     try {
       const { hash, returnValue } = await this.soroban.submitSignedTransaction(signedXdr);
@@ -248,12 +253,12 @@ export class SongService {
 
       song.onChainSongId = onChainSongId.toString();
       song.onChainTokenId = tokenId.toString();
-      song.mintStatus = "minted";
+      song.mintStatus = 'minted';
       await this.songRepo.save(song);
 
       return { txHash: hash, songId: song.onChainSongId, tokenId: song.onChainTokenId };
     } catch (error) {
-      song.mintStatus = "failed";
+      song.mintStatus = 'failed';
       await this.songRepo.save(song);
       throw error;
     }
@@ -268,33 +273,31 @@ export class SongService {
    * are returned.
    */
   async searchSongs(query: string, limit = 20): Promise<Song[]> {
-    const trimmed = (query || "").trim();
+    const trimmed = (query || '').trim();
     if (!trimmed) return [];
 
     const indexedIds = await SearchIndexService.search(trimmed, limit);
 
     if (indexedIds.length > 0) {
       const songs = await this.songRepo.find({
-        where: { id: In(indexedIds), status: "ready", flagged: false },
+        where: { id: In(indexedIds), status: 'ready', flagged: false },
       });
       // Preserve the index's relevance ordering (DB `IN` doesn't guarantee it).
       const rank = new Map(indexedIds.map((id, i) => [id, i]));
-      return songs.sort(
-        (a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0)
-      );
+      return songs.sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
     }
 
     // Index miss — fall back to the database.
     const like = `%${trimmed}%`;
     return this.songRepo
-      .createQueryBuilder("song")
-      .where("song.status = :status", { status: "ready" })
-      .andWhere("song.flagged = false")
+      .createQueryBuilder('song')
+      .where('song.status = :status', { status: 'ready' })
+      .andWhere('song.flagged = false')
       .andWhere(
-        "(song.title ILIKE :like OR song.genre ILIKE :like OR song.composers ILIKE :like)",
-        { like }
+        '(song.title ILIKE :like OR song.genre ILIKE :like OR song.composers ILIKE :like)',
+        { like },
       )
-      .orderBy("song.playCount", "DESC")
+      .orderBy('song.playCount', 'DESC')
       .take(limit)
       .getMany();
   }
@@ -305,16 +308,16 @@ export class SongService {
    */
   async rebuildSearchIndex(): Promise<number> {
     const songs = await this.songRepo.find({
-      where: { status: "ready", flagged: false },
-      relations: ["user"],
+      where: { status: 'ready', flagged: false },
+      relations: ['user'],
     });
     return SearchIndexService.rebuild(songs);
   }
 
   async flagSong(songId: string, adminId: string, reason?: string): Promise<Song> {
     const song = await this.songRepo.findOneBy({ id: songId });
-    if (!song) throw new Error("Song not found");
-    if (song.flagged) throw new Error("Song is already flagged");
+    if (!song) throw new Error('Song not found');
+    if (song.flagged) throw new Error('Song is already flagged');
 
     song.flagged = true;
     song.flaggedAt = new Date();
@@ -324,7 +327,7 @@ export class SongService {
 
     await this.logRepo.save({
       userId: adminId,
-      action: "song_flag",
+      action: 'song_flag',
       details: { songId, reason: reason || null },
     });
 
@@ -336,8 +339,8 @@ export class SongService {
 
   async unflagSong(songId: string, adminId: string): Promise<Song> {
     const song = await this.songRepo.findOneBy({ id: songId });
-    if (!song) throw new Error("Song not found");
-    if (!song.flagged) throw new Error("Song is not flagged");
+    if (!song) throw new Error('Song not found');
+    if (!song.flagged) throw new Error('Song is not flagged');
 
     song.flagged = false;
     song.flaggedAt = null;
@@ -347,15 +350,15 @@ export class SongService {
 
     await this.logRepo.save({
       userId: adminId,
-      action: "song_unflag",
+      action: 'song_unflag',
       details: { songId },
     });
 
     // Restore the song to the search index once it's unflagged (Issue #135).
-    if (song.status === "ready") {
+    if (song.status === 'ready') {
       const full = await this.songRepo.findOne({
         where: { id: songId },
-        relations: ["user"],
+        relations: ['user'],
       });
       if (full) SearchIndexService.scheduleIndexUpdate(full);
     }

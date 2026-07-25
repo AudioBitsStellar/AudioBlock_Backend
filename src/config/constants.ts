@@ -22,7 +22,7 @@
 export const PASSWORD_SALT_ROUNDS = 12;
 
 /** JWT token expiration time */
-export const JWT_EXPIRATION = "1d";
+export const JWT_EXPIRATION = '1d';
 
 /** Number of recovery codes generated for 2FA */
 export const RECOVERY_CODE_COUNT = 10;
@@ -90,7 +90,7 @@ export const ALBUM_TITLE_MAX_LENGTH = 200;
 export const STELLAR_PUBLIC_KEY_LENGTH = 56;
 
 /** Stellar public key prefix */
-export const STELLAR_PUBLIC_KEY_PREFIX = "G";
+export const STELLAR_PUBLIC_KEY_PREFIX = 'G';
 
 /** Ethereum address length (with 0x prefix) */
 export const ETHEREUM_ADDRESS_LENGTH = 42;
@@ -118,55 +118,54 @@ export const HTTP_STATUS = {
 
 export const ERROR_MESSAGES = {
   // Authentication errors
-  INVALID_SIGNATURE: "Invalid signature",
-  NONCE_MISSING: "Nonce missing in message",
-  NONCE_EXPIRED: "Nonce expired",
-  NONCE_MISMATCH: "Nonce mismatch",
-  INVALID_EMAIL_PASSWORD: "Invalid email or password",
-  INVALID_TWO_FACTOR_CODE: "Invalid two-factor code",
-  UNAUTHORIZED: "Unauthorized",
+  INVALID_SIGNATURE: 'Invalid signature',
+  NONCE_MISSING: 'Nonce missing in message',
+  NONCE_EXPIRED: 'Nonce expired',
+  NONCE_MISMATCH: 'Nonce mismatch',
+  INVALID_EMAIL_PASSWORD: 'Invalid email or password',
+  INVALID_TWO_FACTOR_CODE: 'Invalid two-factor code',
+  UNAUTHORIZED: 'Unauthorized',
 
   // User errors
-  USER_NOT_FOUND: "User not found",
-  USER_ALREADY_EXISTS: "User already exists",
-  EMAIL_ALREADY_EXISTS: "Email already exists",
-  USERNAME_ALREADY_EXISTS: "Username already exists",
-  WALLET_ADDRESS_ALREADY_EXISTS: "Wallet address already exists",
+  USER_NOT_FOUND: 'User not found',
+  USER_ALREADY_EXISTS: 'User already exists',
+  EMAIL_ALREADY_EXISTS: 'Email already exists',
+  USERNAME_ALREADY_EXISTS: 'Username already exists',
+  WALLET_ADDRESS_ALREADY_EXISTS: 'Wallet address already exists',
 
   // Validation errors
-  EMAIL_REQUIRED: "Email is required",
-  PASSWORD_REQUIRED: "Password is required",
-  BODY_REQUIRED: "Request body is required",
-  INVALID_VERIFICATION_TOKEN: "Invalid verification token",
-  VERIFICATION_TOKEN_EXPIRED: "Verification token has expired",
-  INVALID_RESET_TOKEN: "Invalid reset token",
-  RESET_TOKEN_EXPIRED: "Reset token has expired",
+  EMAIL_REQUIRED: 'Email is required',
+  PASSWORD_REQUIRED: 'Password is required',
+  BODY_REQUIRED: 'Request body is required',
+  INVALID_VERIFICATION_TOKEN: 'Invalid verification token',
+  VERIFICATION_TOKEN_EXPIRED: 'Verification token has expired',
+  INVALID_RESET_TOKEN: 'Invalid reset token',
+  RESET_TOKEN_EXPIRED: 'Reset token has expired',
 
   // Blockchain errors
-  WALLET_NOT_CONNECTED: "Connect a Stellar wallet before proceeding",
-  ARTIST_NOT_SETUP: "Artist profile not set up on-chain",
-  METADATA_NOT_READY: "Song metadata not ready for minting",
-  TRANSACTION_FAILED: "Transaction failed",
+  WALLET_NOT_CONNECTED: 'Connect a Stellar wallet before proceeding',
+  ARTIST_NOT_SETUP: 'Artist profile not set up on-chain',
+  METADATA_NOT_READY: 'Song metadata not ready for minting',
+  TRANSACTION_FAILED: 'Transaction failed',
 
   // Song errors
-  SONG_NOT_FOUND: "Song not found",
-  SONG_NOT_READY: "Song not ready",
-  ALBUM_NOT_FOUND: "Album not found",
+  SONG_NOT_FOUND: 'Song not found',
+  SONG_NOT_READY: 'Song not ready',
+  ALBUM_NOT_FOUND: 'Album not found',
 
   // File upload errors
-  TEMP_DIR_NOT_FOUND: "Temporary directory not found for fileId",
-  CHUNK_COUNT_MISMATCH: "Expected chunk count mismatch",
-  FILE_UPLOAD_FAILED: "File upload failed",
+  TEMP_DIR_NOT_FOUND: 'Temporary directory not found for fileId',
+  CHUNK_COUNT_MISMATCH: 'Expected chunk count mismatch',
+  FILE_UPLOAD_FAILED: 'File upload failed',
 
   // Generic errors
-  INTERNAL_SERVER_ERROR: "Internal server error",
-  JWT_SECRET_NOT_SET: "JWT_SECRET not set in environment variables",
-  TWO_FACTOR_EMAIL_ONLY:
-    "Two-factor authentication is only available for email/password accounts",
+  INTERNAL_SERVER_ERROR: 'Internal server error',
+  JWT_SECRET_NOT_SET: 'JWT_SECRET not set in environment variables',
+  TWO_FACTOR_EMAIL_ONLY: 'Two-factor authentication is only available for email/password accounts',
 
   // Input validation
-  INVALID_INPUT: "Invalid input provided",
-  MISSING_REQUIRED_FIELDS: "Missing required fields",
+  INVALID_INPUT: 'Invalid input provided',
+  MISSING_REQUIRED_FIELDS: 'Missing required fields',
 } as const;
 
 // ============================================================================
@@ -174,16 +173,16 @@ export const ERROR_MESSAGES = {
 // ============================================================================
 
 export const SUCCESS_MESSAGES = {
-  USER_CREATED: "User created successfully",
-  USER_REGISTERED: "User registered successfully",
-  USER_LOGGED_IN: "User logged in successfully",
-  EMAIL_VERIFIED: "Email verified successfully",
-  PASSWORD_RESET: "Password reset successfully",
-  PASSWORD_RESET_EMAIL_SENT: "If the email exists, a reset link has been sent",
-  TWO_FACTOR_ENABLED: "Two-factor authentication enabled",
-  PROFILE_UPDATED: "Profile updated successfully",
-  SONG_UPLOADED: "Song uploaded successfully",
-  SONG_MINTED: "Song minted successfully",
+  USER_CREATED: 'User created successfully',
+  USER_REGISTERED: 'User registered successfully',
+  USER_LOGGED_IN: 'User logged in successfully',
+  EMAIL_VERIFIED: 'Email verified successfully',
+  PASSWORD_RESET: 'Password reset successfully',
+  PASSWORD_RESET_EMAIL_SENT: 'If the email exists, a reset link has been sent',
+  TWO_FACTOR_ENABLED: 'Two-factor authentication enabled',
+  PROFILE_UPDATED: 'Profile updated successfully',
+  SONG_UPLOADED: 'Song uploaded successfully',
+  SONG_MINTED: 'Song minted successfully',
 } as const;
 
 // ============================================================================
@@ -191,10 +190,10 @@ export const SUCCESS_MESSAGES = {
 // ============================================================================
 
 /** Stellar network passphrase placeholder */
-export const DEFAULT_NETWORK_PASSPHRASE = "Test SDF Network ; September 2015";
+export const DEFAULT_NETWORK_PASSPHRASE = 'Test SDF Network ; September 2015';
 
 /** Base fee for Stellar transactions */
-export const STELLAR_BASE_FEE = "100";
+export const STELLAR_BASE_FEE = '100';
 
 /** Regular expressions for blockchain addresses */
 export const BLOCKCHAIN_REGEX = {
@@ -217,18 +216,18 @@ export const MAX_COVER_ART_SIZE_BYTES = 5 * 1024 * 1024;
 
 /** Allowed audio file MIME types */
 export const ALLOWED_AUDIO_MIME_TYPES = [
-  "audio/mpeg",
-  "audio/mp3",
-  "audio/wav",
-  "audio/flac",
+  'audio/mpeg',
+  'audio/mp3',
+  'audio/wav',
+  'audio/flac',
 ] as const;
 
 /** Allowed image MIME types */
 export const ALLOWED_IMAGE_MIME_TYPES = [
-  "image/jpeg",
-  "image/jpg",
-  "image/png",
-  "image/webp",
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
 ] as const;
 
 // ============================================================================
@@ -237,10 +236,10 @@ export const ALLOWED_IMAGE_MIME_TYPES = [
 
 /** Redis key prefixes */
 export const REDIS_KEY_PREFIX = {
-  NONCE: "nonce:",
-  SESSION: "session:",
-  MANIFEST: "manifest:",
-  USER: "user:",
+  NONCE: 'nonce:',
+  SESSION: 'session:',
+  MANIFEST: 'manifest:',
+  USER: 'user:',
 } as const;
 
 /** Database connection pool limits */
@@ -267,10 +266,10 @@ export const RATE_LIMIT_MAX_REQUESTS = 100;
 
 /** Log levels */
 export const LOG_LEVEL = {
-  ERROR: "error",
-  WARN: "warn",
-  INFO: "info",
-  DEBUG: "debug",
+  ERROR: 'error',
+  WARN: 'warn',
+  INFO: 'info',
+  DEBUG: 'debug',
 } as const;
 
 // ============================================================================
@@ -279,13 +278,13 @@ export const LOG_LEVEL = {
 
 /** Transaction log action types */
 export const TRANSACTION_ACTIONS = {
-  CREATE_USER: "CREATE_USER",
-  UPDATE_USER: "UPDATE_USER",
-  DELETE_USER: "DELETE_USER",
-  SETUP_ARTIST: "SETUP_ARTIST",
-  MINT_SONG: "MINT_SONG",
-  CREATE_ALBUM: "CREATE_ALBUM",
-  PURCHASE_SONG: "PURCHASE_SONG",
+  CREATE_USER: 'CREATE_USER',
+  UPDATE_USER: 'UPDATE_USER',
+  DELETE_USER: 'DELETE_USER',
+  SETUP_ARTIST: 'SETUP_ARTIST',
+  MINT_SONG: 'MINT_SONG',
+  CREATE_ALBUM: 'CREATE_ALBUM',
+  PURCHASE_SONG: 'PURCHASE_SONG',
 } as const;
 
 // ============================================================================
@@ -294,18 +293,18 @@ export const TRANSACTION_ACTIONS = {
 
 /** Song processing status values */
 export const SONG_STATUS = {
-  PENDING: "pending",
-  PROCESSING: "processing",
-  READY: "ready",
-  FAILED: "failed",
+  PENDING: 'pending',
+  PROCESSING: 'processing',
+  READY: 'ready',
+  FAILED: 'failed',
 } as const;
 
 /** Song mint status values */
 export const MINT_STATUS = {
-  PENDING: "pending",
-  MINTING: "minting",
-  MINTED: "minted",
-  FAILED: "failed",
+  PENDING: 'pending',
+  MINTING: 'minting',
+  MINTED: 'minted',
+  FAILED: 'failed',
 } as const;
 
 // ============================================================================
@@ -314,9 +313,9 @@ export const MINT_STATUS = {
 
 /** User role values */
 export const USER_ROLES = {
-  ARTIST: "artist",
-  LISTENER: "listener",
-  ADMIN: "admin",
+  ARTIST: 'artist',
+  LISTENER: 'listener',
+  ADMIN: 'admin',
 } as const;
 
 // ============================================================================
@@ -325,9 +324,9 @@ export const USER_ROLES = {
 
 /** RabbitMQ queue names */
 export const QUEUE_NAMES = {
-  SONG_PROCESSING: "song_processing",
-  SONG_TRANSCODING: "song_transcoding",
-  EMAIL_NOTIFICATION: "email_notification",
+  SONG_PROCESSING: 'song_processing',
+  SONG_TRANSCODING: 'song_transcoding',
+  EMAIL_NOTIFICATION: 'email_notification',
 } as const;
 
 // ============================================================================
