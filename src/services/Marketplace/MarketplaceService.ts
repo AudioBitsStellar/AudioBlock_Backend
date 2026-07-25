@@ -29,7 +29,14 @@ export class MarketplaceService {
     return { xdr, networkPassphrase: process.env.SOROBAN_NETWORK_PASSPHRASE || '' };
   }
 
-  /** Submits the seller's signed `list_nft` transaction and returns the tx hash. */
+  /**
+   * Submits the seller's signed `list_nft` transaction to the Soroban RPC
+   * and waits for confirmation.
+   *
+   * @param signedXdr - The wallet-signed XDR transaction string.
+   * @returns Transaction hash.
+   * @throws {Error} If Soroban submission fails.
+   */
   async submitListing(signedXdr: string): Promise<{ txHash: string }> {
     const { hash } = await this.soroban.submitSignedTransaction(signedXdr);
     return { txHash: hash };
@@ -50,7 +57,15 @@ export class MarketplaceService {
     return { xdr, networkPassphrase: process.env.SOROBAN_NETWORK_PASSPHRASE || '' };
   }
 
-  /** Submits the buyer's signed `buy_nft` transaction and returns the tx hash. */
+  /**
+   * Submits the buyer's signed `buy_nft` transaction to the Soroban RPC,
+   * waits for confirmation, and optionally increments the marketplace volume metric.
+   *
+   * @param signedXdr - The wallet-signed XDR transaction string.
+   * @param priceStroops - Optional price in stroops to record in metrics.
+   * @returns Transaction hash.
+   * @throws {Error} If Soroban submission fails.
+   */
   async submitBuy(signedXdr: string, priceStroops?: number): Promise<{ txHash: string }> {
     const { hash } = await this.soroban.submitSignedTransaction(signedXdr);
     if (priceStroops) {

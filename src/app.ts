@@ -19,7 +19,9 @@ import SongRoutes from './routes/SongRoutes';
 import userRoutes from './routes/userRoutes';
 import marketplaceRoutes from './routes/marketplaceRoutes';
 import adminRoutes from './routes/adminRoutes';
+import healthRoutes from './routes/healthRoutes';
 import { getPoolStats, checkDbHealth } from './services/DbPoolMonitor';
+import { dbConnectionState } from './services/DatabaseConnectionManager';
 
 // Route imports
 
@@ -88,6 +90,10 @@ app.get('/metrics', async (_req: Request, res: Response) => {
 
 // Define routes
 app.get('/health', (req, res) => {
+  if (isShuttingDown()) {
+    res.status(503).json({ status: 'shutting_down' });
+    return;
+  }
   res.json({ status: 'ok' });
 });
 
@@ -99,43 +105,14 @@ app.get('/health/db', async (req, res) => {
   res.status(healthy ? 200 : 503).json({
     status: healthy ? 'ok' : 'unhealthy',
     pool,
+    connection: dbConnectionState,
   });
 });
 
-// Comprehensive health check endpoint for uptime monitoring
-// Contract: 200 + per-dependency status when DB + Redis are healthy, 503 otherwise.
-app.get("/healthz", async (req, res) => {
-  try {
-    const dbInitialized = AppDataSource.isInitialized;
-    const dbHealthy = dbInitialized ? await checkDbHealth(AppDataSource) : false;
-
-    let redisHealthy = false;
-    let redisError: string | null = null;
-    try {
-      await redis.ping();
-      redisHealthy = true;
-    } catch (err) {
-      redisError = err instanceof Error ? err.message : String(err);
-    }
-
-    const overallHealthy = dbInitialized && dbHealthy && redisHealthy;
-
-    res.status(overallHealthy ? 200 : 503).json({
-      status: overallHealthy ? "healthy" : "unhealthy",
-      timestamp: new Date().toISOString(),
-      dependencies: {
-        database: { status: dbInitialized && dbHealthy ? "ok" : "failing" },
-        redis: { status: redisHealthy ? "ok" : "failing", error: redisError },
-      },
-    });
-  } catch (err) {
-    res.status(503).json({
-      status: "unhealthy",
-      timestamp: new Date().toISOString(),
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
-});
+// Liveness / readiness / detailed health probes for orchestration and load
+// balancer configuration (Issue #146): GET /health/live, /health/ready,
+// /health/detailed.
+app.use('/health', healthRoutes);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/artist', artistRoutes);
@@ -174,6 +151,24 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 // Error handling middleware
+
+// Circuit breaker middleware (Issue #127): returns 503 with Retry-After for
+// write operations when database connection is unavailable.
+const circuitBreakerMiddleware: RequestHandler = (req, res, next) => {
+  if (!dbConnectionState.connected && !dbConnectionState.reconnecting) {
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+      res.setHeader('Retry-After', '30');
+      return res.status(503).json({
+        error: 'Service Unavailable',
+        message: 'Database connection unavailable — write operations suspended. Please try again later.',
+      });
+    }
+  }
+  next();
+};
+
+app.use(circuitBreakerMiddleware);
+
 const customErrorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   logger.error(
     { reqId: (req as any).id, err, route: req.originalUrl, method: req.method },

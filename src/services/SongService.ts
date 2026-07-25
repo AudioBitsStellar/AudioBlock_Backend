@@ -13,6 +13,7 @@ import { SorobanService, addressArg, stringArg, u64Arg } from './Soroban/Soroban
 import { PreparedTransaction } from './Artist/ArtistService';
 import { ScanService } from './ScanService';
 import { SearchIndexService } from './SearchIndexService';
+import { CacheService } from './CacheService';
 import logger from '../config/logger';
 import { songsUploadedTotal } from './MetricsService';
 
@@ -43,6 +44,14 @@ export class SongService {
   //   fs.renameSync(tempFilePath, path.join(dir, `chunk_${chunkIndex}`));
   // }
 
+  /**
+   * Save an uploaded audio chunk to the temporary upload directory.
+   *
+   * @param fileId - Unique identifier for the upload session (UUID).
+   * @param chunkIndex - Zero-based index of this chunk in the sequence.
+   * @param chunkPath - Absolute path to the temporary chunk file on disk.
+   * @returns The destination path where the chunk was saved.
+   */
   async saveChunk(fileId: string, chunkIndex: number, chunkPath: string) {
     const uploadDir = path.join('uploads', 'temp', fileId);
 
@@ -61,6 +70,13 @@ export class SongService {
     return destination;
   }
 
+  /**
+   * Upload cover art to S3 and return the public URL.
+   *
+   * @param fileId - Unique identifier for the upload session (UUID).
+   * @param coverPath - Absolute path to the cover image file on disk.
+   * @returns The S3 URL of the uploaded cover art.
+   */
   async saveCover(fileId: string, coverPath: string) {
     const coverBuffer = fs.readFileSync(coverPath);
     const coverFileName = `${fileId}_cover.png`;
@@ -81,7 +97,20 @@ export class SongService {
   }
 
   /**
-   * Merge all chunks, upload to S3, save song record, and queue processing
+   * Merge all uploaded chunks, run a malware scan, upload to S3, persist the
+   * song record, and enqueue background processing (HLS transcoding + IPFS pinning).
+   *
+   * @param fileId - Unique identifier for the upload session.
+   * @param totalChunks - Expected number of chunks to merge.
+   * @param title - Song title.
+   * @param artistId - ID of the artist User record.
+   * @param artistAddress - Ethereum wallet address of the artist.
+   * @param description - Song description.
+   * @param genre - Genre label.
+   * @param coverArtPath - Path to the cover art image on disk.
+   * @param composers - Comma-separated list of composer names.
+   * @returns The persisted Song entity with status "processing".
+   * @throws {Error} If chunk count mismatch, malware detected, or S3 upload fails.
    */
   async finalizeUpload(
     fileId: string,
@@ -211,11 +240,14 @@ export class SongService {
   }
 
   /**
-   * Builds the unsigned `upload_and_mint_song` invocation for the catalog
-   * contract. The song's artist must already be registered on-chain and
-   * have a connected Stellar wallet; that wallet signs and returns the
-   * transaction via `submitSongMintTx` — the backend never holds the
-   * artist's key.
+   * Builds the unsigned `upload_and_mint_song` Soroban transaction for the catalog
+   * contract. The song must have a `metadataCid` and the artist must have a
+   * connected Stellar wallet. The artist signs and submits via `submitSongMintTx`.
+   *
+   * @param songId - ID of the song to mint.
+   * @param albumId - Optional album ID to associate (defaults to 0).
+   * @returns PreparedTransaction containing the XDR and network passphrase.
+   * @throws {Error} If song not found, no metadata CID, or no Stellar wallet.
    */
   async prepareSongMintTx(songId: string, albumId: number = 0): Promise<PreparedTransaction> {
     const song = await this.songRepo.findOne({ where: { id: songId }, relations: ['user'] });
@@ -237,7 +269,15 @@ export class SongService {
     return { xdr: xdrTx, networkPassphrase: process.env.SOROBAN_NETWORK_PASSPHRASE || '' };
   }
 
-  /** Submits the artist's signed `upload_and_mint_song` transaction and records the result. */
+  /**
+   * Submits the artist's signed `upload_and_mint_song` transaction to Soroban,
+   * persists the on-chain song and token IDs, and updates the mint status.
+   *
+   * @param songId - ID of the song being minted.
+   * @param signedXdr - The wallet-signed XDR transaction string.
+   * @returns Transaction hash, on-chain song ID, and token ID.
+   * @throws {Error} If song not found or Soroban submission fails (mintStatus set to "failed").
+   */
   async submitSongMintTx(
     songId: string,
     signedXdr: string,
@@ -255,6 +295,7 @@ export class SongService {
       song.onChainTokenId = tokenId.toString();
       song.mintStatus = 'minted';
       await this.songRepo.save(song);
+      await CacheService.clearSong(songId);
 
       return { txHash: hash, songId: song.onChainSongId, tokenId: song.onChainTokenId };
     } catch (error) {
@@ -303,8 +344,9 @@ export class SongService {
   }
 
   /**
-   * Rebuild the entire search index from the current catalog (Issue #135).
-   * Returns the number of songs indexed.
+   * Rebuild the entire search index from the current ready, unflagged catalog.
+   *
+   * @returns Number of songs indexed.
    */
   async rebuildSearchIndex(): Promise<number> {
     const songs = await this.songRepo.find({
@@ -314,6 +356,16 @@ export class SongService {
     return SearchIndexService.rebuild(songs);
   }
 
+  /**
+   * Flag a song as inappropriate, removing it from search results and creating
+   * an audit log entry.
+   *
+   * @param songId - ID of the song to flag.
+   * @param adminId - ID of the admin performing the action.
+   * @param reason - Optional reason for flagging.
+   * @returns Updated Song entity.
+   * @throws {Error} If song not found or already flagged.
+   */
   async flagSong(songId: string, adminId: string, reason?: string): Promise<Song> {
     const song = await this.songRepo.findOneBy({ id: songId });
     if (!song) throw new Error('Song not found');
@@ -337,6 +389,15 @@ export class SongService {
     return song;
   }
 
+  /**
+   * Remove a flag from a song, restoring it to search results if its status
+   * is "ready". Creates an audit log entry.
+   *
+   * @param songId - ID of the song to unflag.
+   * @param adminId - ID of the admin performing the action.
+   * @returns Updated Song entity.
+   * @throws {Error} If song not found or not currently flagged.
+   */
   async unflagSong(songId: string, adminId: string): Promise<Song> {
     const song = await this.songRepo.findOneBy({ id: songId });
     if (!song) throw new Error('Song not found');

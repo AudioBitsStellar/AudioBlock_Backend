@@ -138,6 +138,15 @@ export class AuthService {
     return { user, token };
   }
 
+  /**
+   * Enable TOTP two-factor authentication for an email/password account.
+   * Generates a secret, otpauth URL, QR code data URL, and one-time backup
+   * recovery codes. Stores hashed recovery codes on the user record.
+   *
+   * @param userId - ID of the user enabling 2FA.
+   * @returns Secret, otpauth URL, QR code data URL, and plaintext backup codes.
+   * @throws {Error} If user not found or not an email/password account.
+   */
   async enableTwoFactor(userId: string): Promise<{
     secret: string;
     otpauthUrl: string;
@@ -214,6 +223,14 @@ export class AuthService {
     return code.trim().replace(/\s/g, '').toUpperCase();
   }
 
+  /**
+   * Generate a one-time login nonce for wallet-signature authentication.
+   * The nonce is stored in Redis with a 5-minute TTL.
+   *
+   * @param email - Email address to associate with the nonce.
+   * @returns The generated hex nonce string.
+   * @throws {Error} If email is not provided.
+   */
   async getNonce(email: string): Promise<any> {
     if (!email) {
       throw new Error('Email is required');
@@ -229,6 +246,15 @@ export class AuthService {
     return nonce;
   }
 
+  /**
+   * Authenticate a user via wallet-signature verification.
+   * Validates the nonce embedded in the signed message against Redis,
+   * then issues a JWT.
+   *
+   * @param data - JWTDTO containing email, message, signature, and nonce.
+   * @returns User entity and JWT token.
+   * @throws {Error} If nonce invalid/expired, user not found, or validation fails.
+   */
   async login(data: JWTDTO): Promise<{ user: User; token: string }> {
     const dto = Object.assign(new JWTDTO(), data);
     const errors = await validate(dto);
@@ -261,6 +287,13 @@ export class AuthService {
     return { user, token };
   }
 
+  /**
+   * Verify a user's email address using the token sent during registration.
+   *
+   * @param token - The email verification token.
+   * @returns Updated User entity with emailVerified set to true.
+   * @throws {Error} If token invalid or expired.
+   */
   async verifyEmail(token: string): Promise<User> {
     const user = await this.userRepo.findOne({
       where: { emailVerificationToken: token },
@@ -280,6 +313,13 @@ export class AuthService {
     return this.userRepo.save(user);
   }
 
+  /**
+   * Initiate a password reset flow. Generates a reset token with a 30-minute
+   * expiry and sends a reset link via email. Silently succeeds if user not found
+   * (prevents email enumeration).
+   *
+   * @param email - Email address of the account to reset.
+   */
   async forgotPassword(email: string): Promise<void> {
     const user = await this.userRepo.findOneBy({ email });
     if (!user) return;
@@ -299,6 +339,14 @@ export class AuthService {
     );
   }
 
+  /**
+   * Reset a user's password using a valid reset token. Hashes the new password
+   * and clears the reset token from the user record.
+   *
+   * @param token - The password reset token.
+   * @param newPassword - The new plaintext password to set.
+   * @throws {Error} If token invalid or expired.
+   */
   async resetPassword(token: string, newPassword: string): Promise<void> {
     const user = await this.userRepo.findOne({
       where: { passwordResetToken: token },

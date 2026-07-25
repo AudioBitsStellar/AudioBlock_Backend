@@ -1,5 +1,6 @@
 import AppDataSource from '../config/db';
 import { Genre } from '../entities/Genre';
+import { CacheService } from '../services/CacheService';
 
 export async function seedGenres() {
   const genreRepo = AppDataSource.getRepository(Genre);
@@ -32,7 +33,6 @@ export async function seedGenres() {
     'Latin',
   ];
 
-  // Avoid inserting duplicates
   for (const name of genres) {
     const exists = await genreRepo.findOne({ where: { name } });
     if (!exists) {
@@ -44,5 +44,6 @@ export async function seedGenres() {
     }
   }
 
+  await CacheService.invalidateGenreList();
   console.log('🎵 Genre seeding complete!');
 }

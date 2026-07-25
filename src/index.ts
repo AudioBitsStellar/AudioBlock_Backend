@@ -4,14 +4,14 @@ import AppDataSource from './config/db';
 import { initRabbitMQ } from './config/rabbitmq';
 import { startSongWorker } from './workers/SongProcessorWorker';
 import fs from 'fs';
-import path from 'path';
 import { runSeeders } from './seeders';
 import { validateSorobanConfig } from './config/soroban';
 import { validateEnvironment } from './config/env';
 import { startDbPoolMonitor } from './services/DbPoolMonitor';
 import { startJobQueueWorker, startJobQueueMonitor } from './workers/JobQueueWorker';
+import logger from './config/logger';
+import { startConnectionStateLogger } from './services/DatabaseConnectionManager';
 
-// Ensure upload directories exist
 const uploadDirs = [
   'uploads/temp',
   'uploads/merged',
@@ -25,69 +25,72 @@ async function main() {
     validateEnvironment();
     validateSorobanConfig();
 
-    // Initialize the database connection
     await AppDataSource.initialize();
-    console.log('✅ Database connected successfully');
+    logger.info('Database connected successfully');
 
-    // Start connection-pool metrics + health monitoring (Issue #134)
     startDbPoolMonitor(AppDataSource);
+
+    // Start connection state logging (Issue #127)
+    startConnectionStateLogger();
 
     // Run Seeders
     await runSeeders();
 
-    // Create upload directories
     uploadDirs.forEach((dir) => {
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
-        console.log(`✅ Created directory: ${dir}`);
+        logger.info(`Created directory: ${dir}`);
       }
     });
 
-    // START THE SERVER FIRST - This is critical for Render
     const PORT = process.env.PORT || 4000;
     const server = app.listen(PORT, () => {
-      console.log(`🚀 Server is listening on port ${PORT}`);
+      logger.info(`Server is listening on port ${PORT}`);
     });
+
+    registerServer(server);
 
     server.on('error', (error: NodeJS.ErrnoException) => {
       if (error.code === 'EADDRINUSE') {
-        console.error(`❌ Port ${PORT} is already in use`);
+        logger.error(`Port ${PORT} is already in use`);
       } else {
-        console.error('❌ Server error:', error);
+        logger.error({ err: error }, 'Server error');
       }
       process.exit(1);
     });
 
-    // Start the background job queue worker + depth monitor (Issue #132).
-    // Backed by Redis, independent of RabbitMQ.
     startJobQueueWorker();
     startJobQueueMonitor();
 
-    // Initialize RabbitMQ in background (non-blocking)
     initRabbitMQ()
       .then(() => {
-        console.log('✅ RabbitMQ initialized, starting workers');
+        logger.info('RabbitMQ initialized, starting workers');
         startSongWorker();
-        console.log('✅ Background workers started');
+        logger.info('Background workers started');
       })
       .catch((err) => {
-        console.error('⚠️ RabbitMQ initialization failed:', err);
-        console.log('⚠️ Server running without workers');
+        logger.error({ err }, 'RabbitMQ initialization failed');
+        logger.warn('Server running without workers');
       });
+
+    registerShutdownHook('database', closeDatabase);
+    registerShutdownHook('worker-queues', drainWorkerQueues);
+
+    attachProcessHandlers();
   } catch (error) {
-    console.error('❌ Failed to start the server:', error);
+    logger.error({ err: error }, 'Failed to start the server');
     process.exit(1);
   }
 }
 
 process.on('uncaughtException', (error) => {
-  console.error('❌ Uncaught Exception:', error);
+  logger.error({ err: error }, 'Uncaught Exception');
   process.exit(1);
 });
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  logger.error({ reason, promise: String(promise) }, 'Unhandled Rejection');
   process.exit(1);
 });
 
