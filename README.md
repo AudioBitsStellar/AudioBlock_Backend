@@ -1,5 +1,13 @@
 # AudioBlocks Backend
 
+[![CI](https://github.com/AudioBitsStellar/AudioBlock_Backend/actions/workflows/ci.yml/badge.svg)](https://github.com/AudioBitsStellar/AudioBlock_Backend/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-ISC-blue.svg)](./LICENSE)
+[![Version](https://img.shields.io/github/package-json/v/AudioBitsStellar/AudioBlock_Backend)](https://github.com/AudioBitsStellar/AudioBlock_Backend)
+[![Coverage](https://img.shields.io/badge/coverage-report-blue)](https://github.com/AudioBitsStellar/AudioBlock_Backend/actions/workflows/ci.yml)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
+[![TypeScript](https://img.shields.io/badge/typescript-5.8-blue)](https://www.typescriptlang.org)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](./CONTRIBUTING.md)
+
 The shared API and processing pipeline behind **AudioBlocks**, a music NFT
 platform on Stellar/Soroban. It handles user authentication, song/album
 upload and transcoding, IPFS metadata pinning, and acts as a **non-custodial
