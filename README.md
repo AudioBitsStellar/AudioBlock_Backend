@@ -521,8 +521,7 @@ npm run dev
 
 ## Known Issues / Cleanup Backlog
 
-- `src/routes/twitterRoutesOld.ts` and `src/workers/transcode.worker.ts` are
-  unused/superseded code paths still present in the repo.
+- `src/workers/transcode.worker.ts` is an unused/superseded code path still present in the repo.
 - `GET /redis-test` in `src/app.ts` is a debug-only endpoint with no auth —
   should be removed before production use.
 - `UserController.ts` exists with several methods (`getAllUsers`,
