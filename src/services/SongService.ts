@@ -13,6 +13,7 @@ import { SorobanService, addressArg, stringArg, u64Arg } from './Soroban/Soroban
 import { PreparedTransaction } from './Artist/ArtistService';
 import { ScanService } from './ScanService';
 import { SearchIndexService } from './SearchIndexService';
+import { CacheService } from './CacheService';
 import logger from '../config/logger';
 import { songsUploadedTotal } from './MetricsService';
 
@@ -255,6 +256,7 @@ export class SongService {
       song.onChainTokenId = tokenId.toString();
       song.mintStatus = 'minted';
       await this.songRepo.save(song);
+      await CacheService.clearSong(songId);
 
       return { txHash: hash, songId: song.onChainSongId, tokenId: song.onChainTokenId };
     } catch (error) {

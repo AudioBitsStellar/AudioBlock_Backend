@@ -19,7 +19,7 @@ import SongRoutes from './routes/SongRoutes';
 import marketplaceRoutes from './routes/marketplaceRoutes';
 import adminRoutes from './routes/adminRoutes';
 import { getPoolStats, checkDbHealth } from './services/DbPoolMonitor';
-import { isShuttingDown } from './utils/gracefulShutdown';
+import { dbConnectionState } from './services/DatabaseConnectionManager';
 
 // Route imports
 
@@ -103,6 +103,7 @@ app.get('/health/db', async (req, res) => {
   res.status(healthy ? 200 : 503).json({
     status: healthy ? 'ok' : 'unhealthy',
     pool,
+    connection: dbConnectionState,
   });
 });
 
@@ -138,6 +139,24 @@ app.get('/redis-test', async (req, res) => {
 });
 
 // Error handling middleware
+
+// Circuit breaker middleware (Issue #127): returns 503 with Retry-After for
+// write operations when database connection is unavailable.
+const circuitBreakerMiddleware: RequestHandler = (req, res, next) => {
+  if (!dbConnectionState.connected && !dbConnectionState.reconnecting) {
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+      res.setHeader('Retry-After', '30');
+      return res.status(503).json({
+        error: 'Service Unavailable',
+        message: 'Database connection unavailable — write operations suspended. Please try again later.',
+      });
+    }
+  }
+  next();
+};
+
+app.use(circuitBreakerMiddleware);
+
 const customErrorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   logger.error(
     { reqId: (req as any).id, err, route: req.originalUrl, method: req.method },

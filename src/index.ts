@@ -10,13 +10,7 @@ import { validateEnvironment } from './config/env';
 import { startDbPoolMonitor } from './services/DbPoolMonitor';
 import { startJobQueueWorker, startJobQueueMonitor } from './workers/JobQueueWorker';
 import logger from './config/logger';
-import {
-  attachProcessHandlers,
-  registerServer,
-  registerShutdownHook,
-  closeDatabase,
-  drainWorkerQueues,
-} from './utils/gracefulShutdown';
+import { startConnectionStateLogger } from './services/DatabaseConnectionManager';
 
 const uploadDirs = [
   'uploads/temp',
@@ -36,6 +30,10 @@ async function main() {
 
     startDbPoolMonitor(AppDataSource);
 
+    // Start connection state logging (Issue #127)
+    startConnectionStateLogger();
+
+    // Run Seeders
     await runSeeders();
 
     uploadDirs.forEach((dir) => {
@@ -84,5 +82,16 @@ async function main() {
     process.exit(1);
   }
 }
+
+process.on('uncaughtException', (error) => {
+  logger.error({ err: error }, 'Uncaught Exception');
+  process.exit(1);
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error({ reason, promise: String(promise) }, 'Unhandled Rejection');
+  process.exit(1);
+});
 
 main();
