@@ -7,8 +7,11 @@ import express, {
 } from "express";
 import logger from "./config/logger";
 import { requestLoggerMiddleware } from "./middlewares/requestLogger";
+import { metricsMiddleware } from "./middlewares/metricsMiddleware";
+import { getMetrics, getMetricsContentType, updateDbPoolMetrics } from "./services/MetricsService";
 import cors from "cors";
 import redis from "./config/redis";
+import AppDataSource from "./config/db";
 import authRoutes from "./routes/authRoutes";
 import artistRoutes from "./routes/artistRoutes";
 import twitterRoutes from "./routes/twitterRoutes";
@@ -30,6 +33,8 @@ const app = express();
 app.use(cookieParser());
 // Structured request logging with correlation id (Issue #33)
 app.use(requestLoggerMiddleware);
+// Prometheus metrics tracking (skips /metrics path internally)
+app.use(metricsMiddleware);
 
 // CORS configuration
 // In production set ALLOWED_ORIGINS to a comma-separated list of the deployed
@@ -72,6 +77,20 @@ app.use((req, res, next) => {
 
 // Log application startup
 
+
+// Prometheus metrics endpoint
+app.get("/metrics", async (_req: Request, res: Response) => {
+  try {
+    const pool = (AppDataSource.driver as any).master;
+    if (pool?.totalCount !== undefined) {
+      await updateDbPoolMetrics(pool);
+    }
+  } catch {
+    // DB not connected — report zeros
+  }
+  res.setHeader("Content-Type", await getMetricsContentType());
+  res.end(await getMetrics());
+});
 
 // Define routes
 app.get("/health", (req, res) => {
