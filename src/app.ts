@@ -19,6 +19,7 @@ import SongRoutes from './routes/SongRoutes';
 import marketplaceRoutes from './routes/marketplaceRoutes';
 import adminRoutes from './routes/adminRoutes';
 import { getPoolStats, checkDbHealth } from './services/DbPoolMonitor';
+import { isShuttingDown } from './utils/gracefulShutdown';
 
 // Route imports
 
@@ -87,6 +88,10 @@ app.get('/metrics', async (_req: Request, res: Response) => {
 
 // Define routes
 app.get('/health', (req, res) => {
+  if (isShuttingDown()) {
+    res.status(503).json({ status: 'shutting_down' });
+    return;
+  }
   res.json({ status: 'ok' });
 });
 
