@@ -15,3 +15,4 @@ router.put("/:id", requireAuth, userController.updateUser);
 router.delete("/:id", requireAuth, userController.deleteUser);
 
 export default router;
+
