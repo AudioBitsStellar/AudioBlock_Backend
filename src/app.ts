@@ -1,5 +1,9 @@
 import cookieParser from 'cookie-parser';
 import express, { Request, Response, RequestHandler, ErrorRequestHandler } from 'express';
+import swaggerUi from 'swagger-ui-express';
+import yaml from 'js-yaml';
+import fs from 'fs';
+import path from 'path';
 import logger from './config/logger';
 import { requestLoggerMiddleware } from './middlewares/requestLogger';
 import { metricsMiddleware } from './middlewares/metricsMiddleware';
@@ -14,7 +18,6 @@ import walletRoutes from './routes/walletRoutes';
 import SongRoutes from './routes/SongRoutes';
 import marketplaceRoutes from './routes/marketplaceRoutes';
 import adminRoutes from './routes/adminRoutes';
-import AppDataSource from './config/db';
 import { getPoolStats, checkDbHealth } from './services/DbPoolMonitor';
 
 // Route imports
@@ -115,6 +118,13 @@ app.use('/api/admin', adminRoutes);
 
 //TWITTER CALLBACK ROUTE
 app.use('/api/auth/twitter', twitterRoutes);
+
+// Swagger UI — served at /api/docs in all environments
+const openapiPath = path.resolve(__dirname, '../../docs/openapi.yaml');
+if (fs.existsSync(openapiPath)) {
+  const openapiDoc = yaml.load(fs.readFileSync(openapiPath, 'utf8')) as object;
+  app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openapiDoc));
+}
 
 app.get('/redis-test', async (req, res) => {
   await redis.set('greeting', 'hello world');
