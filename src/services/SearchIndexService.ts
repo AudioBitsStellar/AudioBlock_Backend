@@ -15,12 +15,12 @@
  * asynchronously (off the request path) whenever a song is created, updated,
  * flagged or deleted.
  */
-import redis from "../config/redis";
-import logger from "../config/logger";
+import redis from '../config/redis';
+import logger from '../config/logger';
 
-const TOKEN_PREFIX = "search:token:";
-const DOC_PREFIX = "search:doc:";
-const DOCS_SET = "search:docs";
+const TOKEN_PREFIX = 'search:token:';
+const DOC_PREFIX = 'search:doc:';
+const DOCS_SET = 'search:docs';
 
 /** Fields we keep per indexed song. */
 interface IndexedDoc {
@@ -57,11 +57,9 @@ export function tokenize(text: string): string[] {
 export class SearchIndexService {
   /** Derive the token set + stored fields for a song. */
   private static buildDoc(song: IndexableSong): IndexedDoc {
-    const title = song.title ?? "";
-    const artist = song.user?.name || song.user?.username || song.artistAddress || "";
-    const keywords = [song.genre ?? "", song.composers ?? ""]
-      .filter(Boolean)
-      .join(" ");
+    const title = song.title ?? '';
+    const artist = song.user?.name || song.user?.username || song.artistAddress || '';
+    const keywords = [song.genre ?? '', song.composers ?? ''].filter(Boolean).join(' ');
 
     const tokens = tokenize(`${title} ${artist} ${keywords}`);
     return { id: song.id, title, artist, keywords, tokens };
@@ -85,7 +83,7 @@ export class SearchIndexService {
     pipeline.sadd(DOCS_SET, doc.id);
     await pipeline.exec();
 
-    logger.debug({ songId: doc.id, tokens: doc.tokens.length }, "Search index updated");
+    logger.debug({ songId: doc.id, tokens: doc.tokens.length }, 'Search index updated');
   }
 
   /** Remove a song from the index (on delete, or when flagged/unpublished). */
@@ -152,7 +150,7 @@ export class SearchIndexService {
   static scheduleIndexUpdate(song: IndexableSong): void {
     setImmediate(() => {
       this.indexSong(song).catch((err) =>
-        logger.warn({ err, songId: song.id }, "Async search index update failed")
+        logger.warn({ err, songId: song.id }, 'Async search index update failed'),
       );
     });
   }
@@ -161,7 +159,7 @@ export class SearchIndexService {
   static scheduleRemoval(songId: string): void {
     setImmediate(() => {
       this.removeSong(songId).catch((err) =>
-        logger.warn({ err, songId }, "Async search index removal failed")
+        logger.warn({ err, songId }, 'Async search index removal failed'),
       );
     });
   }
@@ -171,14 +169,14 @@ export class SearchIndexService {
    * postings first, then indexes each song. Returns the number indexed.
    */
   static async rebuild(songs: IndexableSong[]): Promise<number> {
-    logger.info({ count: songs.length }, "Rebuilding search index");
+    logger.info({ count: songs.length }, 'Rebuilding search index');
     await this.clear();
 
     for (const song of songs) {
       await this.indexSong(song);
     }
 
-    logger.info({ count: songs.length }, "Search index rebuild complete");
+    logger.info({ count: songs.length }, 'Search index rebuild complete');
     return songs.length;
   }
 

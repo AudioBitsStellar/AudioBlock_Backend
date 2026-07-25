@@ -1,16 +1,11 @@
-import { ValidationError } from "class-validator";
-import { IValidationFormatResult } from "../interfaces/IValidateErrorFormat";
-import { Request, Response } from "express";
-import crypto from "crypto";
-import {
-  mapToOnChainError,
-  OnChainErrorCode,
-} from "../types/OnChainErrorCodes";
-import { AppError } from "../errors/AppError";
+import { ValidationError } from 'class-validator';
+import { IValidationFormatResult } from '../interfaces/IValidateErrorFormat';
+import { Request, Response } from 'express';
+import crypto from 'crypto';
+import { mapToOnChainError, OnChainErrorCode } from '../types/OnChainErrorCodes';
+import { AppError } from '../errors/AppError';
 
-export function formatValidationErrors(
-  errors: ValidationError[],
-): IValidationFormatResult {
+export function formatValidationErrors(errors: ValidationError[]): IValidationFormatResult {
   const fields: Record<string, string> = {};
   const message: string[] = [];
 
@@ -43,14 +38,14 @@ export function handleError(res: Response, error: unknown): void {
   }
 
   if (error instanceof Error) {
-    console.error("Handled Error:", error.message, error.stack);
+    console.error('Handled Error:', error.message, error.stack);
     res.status(400).json({ message: error.message });
-  } else if (typeof error === "string") {
-    console.error("String Error:", error);
+  } else if (typeof error === 'string') {
+    console.error('String Error:', error);
     res.status(400).json({ message: error });
   } else {
-    console.error("Unknown Error:", error);
-    res.status(500).json({ message: "Internal server error" });
+    console.error('Unknown Error:', error);
+    res.status(500).json({ message: 'Internal server error' });
   }
 }
 
@@ -60,7 +55,7 @@ export function handleError(res: Response, error: unknown): void {
  */
 export function handleOnChainError(res: Response, error: unknown): void {
   const errorResponse = mapToOnChainError(error);
-  console.error("On-chain Error:", errorResponse);
+  console.error('On-chain Error:', errorResponse);
 
   // Return 400 for retryable errors, 500 for non-retryable
   const statusCode = errorResponse.retryable ? 400 : 500;
@@ -68,11 +63,7 @@ export function handleOnChainError(res: Response, error: unknown): void {
 }
 
 export function base64URLEncode(str: Buffer) {
-  return str
-    .toString("base64")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
+  return str.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 export function generateCodeVerifier() {
@@ -80,5 +71,5 @@ export function generateCodeVerifier() {
 }
 
 export function generateCodeChallenge(verifier: string) {
-  return base64URLEncode(crypto.createHash("sha256").update(verifier).digest());
+  return base64URLEncode(crypto.createHash('sha256').update(verifier).digest());
 }

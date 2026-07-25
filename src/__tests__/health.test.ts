@@ -3,30 +3,30 @@
  * exercise a real HTTP request/response cycle.
  */
 
-import "reflect-metadata";
-import http from "http";
-import type { AddressInfo } from "net";
+import 'reflect-metadata';
+import http from 'http';
+import type { AddressInfo } from 'net';
 
-jest.mock("../config/db", () => ({
+jest.mock('../config/db', () => ({
   __esModule: true,
   default: { getRepository: jest.fn() },
 }));
-jest.mock("../config/redis", () => ({
+jest.mock('../config/redis', () => ({
   __esModule: true,
   default: { get: jest.fn(), set: jest.fn(), on: jest.fn() },
 }));
-jest.mock("../config/rabbitmq", () => ({
+jest.mock('../config/rabbitmq', () => ({
   getChannel: jest.fn().mockReturnValue({ sendToQueue: jest.fn() }),
   initRabbitMQ: jest.fn().mockResolvedValue(undefined),
 }));
-jest.mock("../config/s3", () => ({
+jest.mock('../config/s3', () => ({
   s3: {
     upload: jest.fn().mockReturnValue({
-      promise: jest.fn().mockResolvedValue({ Location: "s3://bucket/test-key" }),
+      promise: jest.fn().mockResolvedValue({ Location: 's3://bucket/test-key' }),
     }),
   },
 }));
-jest.mock("../services/Soroban/SorobanService", () => ({
+jest.mock('../services/Soroban/SorobanService', () => ({
   SorobanService: jest.fn().mockImplementation(() => ({
     prepareInvocation: jest.fn(),
     submitSignedTransaction: jest.fn(),
@@ -40,24 +40,25 @@ jest.mock("../services/Soroban/SorobanService", () => ({
 // app.ts, so stub out the feature routers rather than exercising their
 // full service/SDK import chains.
 for (const routeModule of [
-  "../routes/authRoutes",
-  "../routes/artistRoutes",
-  "../routes/twitterRoutes",
-  "../routes/walletRoutes",
-  "../routes/SongRoutes",
-  "../routes/marketplaceRoutes",
-  "../routes/adminRoutes",
+  '../routes/authRoutes',
+  '../routes/artistRoutes',
+  '../routes/twitterRoutes',
+  '../routes/walletRoutes',
+  '../routes/SongRoutes',
+  '../routes/marketplaceRoutes',
+  '../routes/adminRoutes',
 ]) {
   jest.mock(routeModule, () => {
-    const { Router } = require("express");
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { Router } = require('express');
     return { __esModule: true, default: Router() };
   });
 }
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const app = require("../app").default;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const app = require('../app').default;
 
-describe("GET /health", () => {
+describe('GET /health', () => {
   let server: http.Server;
   let baseUrl: string;
 
@@ -73,9 +74,9 @@ describe("GET /health", () => {
     server.close(done);
   });
 
-  it("returns a 200 ok status", async () => {
+  it('returns a 200 ok status', async () => {
     const res = await fetch(`${baseUrl}/health`);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ status: "ok" });
+    expect(await res.json()).toEqual({ status: 'ok' });
   });
 });

@@ -1,11 +1,11 @@
-import { Request, Response } from "express";
-import AppDataSource from "../config/db";
-import { Song } from "../entities/Song";
-import redis from "../config/redis";
-import { precomputeSignedManifest } from "../workers/precomputeManifest";
-import { handleError, handleOnChainError } from "../utils/helpers";
-import { SongService } from "../services/SongService";
-import logger from "../config/logger";
+import { Request, Response } from 'express';
+import AppDataSource from '../config/db';
+import { Song } from '../entities/Song';
+import redis from '../config/redis';
+import { precomputeSignedManifest } from '../workers/precomputeManifest';
+import { handleError, handleOnChainError } from '../utils/helpers';
+import { SongService } from '../services/SongService';
+import logger from '../config/logger';
 
 const songService = new SongService();
 
@@ -60,27 +60,27 @@ export class SongController {
     try {
       const songRepo = AppDataSource.getRepository(Song);
       const song = await songRepo.findOne({ where: { id: songId } });
-      if (!song || song.status !== "ready" || !song.hlsMasterUrl || song.flagged) {
-        return res.status(404).json({ error: "Song not available" });
+      if (!song || song.status !== 'ready' || !song.hlsMasterUrl || song.flagged) {
+        return res.status(404).json({ error: 'Song not available' });
       }
 
       const sessionKey = `play:throttle:${req.ip}:${songId}`;
       const recentlyPlayed = await redis.get(sessionKey);
       if (!recentlyPlayed) {
-        await songRepo.increment({ id: songId }, "playCount", 1);
-        await redis.set(sessionKey, "1", "EX", 30);
+        await songRepo.increment({ id: songId }, 'playCount', 1);
+        await redis.set(sessionKey, '1', 'EX', 30);
       }
 
       const cacheKey = `manifest:${songId}`;
       const cached = await redis.get(cacheKey);
       if (cached) {
-        res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
+        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
         return res.send(cached);
       }
 
       const generated = await precomputeSignedManifest(songId);
-      res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
-      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+      res.setHeader('Access-Control-Allow-Origin', '*');
       return res.send(generated);
     } catch (err) {
       logger.error({ reqId: (req as any).id, route: req.path, err }, 'Stream error');
@@ -90,7 +90,7 @@ export class SongController {
 
   static searchSongs = async (req: Request, res: Response) => {
     try {
-      const q = (req.query.q as string) || "";
+      const q = (req.query.q as string) || '';
       const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
 
       const songs = await songService.searchSongs(q, limit);
@@ -111,7 +111,7 @@ export class SongController {
       const indexed = await songService.rebuildSearchIndex();
       return res.status(200).json({
         success: true,
-        message: "Search index rebuilt",
+        message: 'Search index rebuilt',
         indexed,
       });
     } catch (error) {
@@ -127,8 +127,8 @@ export class SongController {
 
       const songRepo = AppDataSource.getRepository(Song);
       const [songs, total] = await songRepo.findAndCount({
-        where: { status: "ready" },
-        order: { playCount: "DESC" },
+        where: { status: 'ready' },
+        order: { playCount: 'DESC' },
         skip,
         take: limit,
       });

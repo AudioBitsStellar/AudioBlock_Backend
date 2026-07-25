@@ -1,10 +1,10 @@
-import { Repository } from "typeorm";
-import AppDataSource from "../config/db";
-import { User } from "../entities/User";
-import fs from "fs";
-import { s3 } from "../config/s3";
-import { UpdateArtistProfileDTO } from "../dtos/UpdateArtistProfileDTO";
-import path from "path";
+import { Repository } from 'typeorm';
+import AppDataSource from '../config/db';
+import { User } from '../entities/User';
+import fs from 'fs';
+import { s3 } from '../config/s3';
+import { UpdateArtistProfileDTO } from '../dtos/UpdateArtistProfileDTO';
+import path from 'path';
 
 export class ArtistProfileService {
   private userRepo: Repository<User>;
@@ -23,7 +23,7 @@ export class ArtistProfileService {
         Bucket: process.env.AWS_BUCKET_NAME!,
         Key: `${folder}/${fileName}`,
         Body: buffer,
-        ContentType: "image/png",
+        ContentType: 'image/png',
       })
       .promise();
 
@@ -33,10 +33,10 @@ export class ArtistProfileService {
 
   async updateArtistProfile(
     userId: string,
-    profileData: Partial<UpdateArtistProfileDTO>
+    profileData: Partial<UpdateArtistProfileDTO>,
   ): Promise<User> {
     const user = await this.userRepo.findOne({ where: { id: userId } });
-    if (!user) throw new Error("User not found");
+    if (!user) throw new Error('User not found');
 
     // Prepare the update data with processed files
     // exclude file objects (profileImage, pageCover) before assigning to Partial<User>
@@ -46,33 +46,26 @@ export class ArtistProfileService {
     // upload profile image if provided
     if (
       profileData.profileImage &&
-      typeof profileData.profileImage === "object" &&
-      "path" in profileData.profileImage
+      typeof profileData.profileImage === 'object' &&
+      'path' in profileData.profileImage
     ) {
-      const uploadedUrl = await this.uploadToS3(
-        profileData.profileImage.path,
-        "profile-images"
-      );
+      const uploadedUrl = await this.uploadToS3(profileData.profileImage.path, 'profile-images');
       updateData.profileImage = uploadedUrl;
     }
 
     // upload page cover if provided
     if (
       profileData.pageCover &&
-      typeof profileData.pageCover === "object" &&
-      "path" in profileData.pageCover
+      typeof profileData.pageCover === 'object' &&
+      'path' in profileData.pageCover
     ) {
-      const uploadedUrl = await this.uploadToS3(
-        profileData.pageCover.path,
-        "page-covers"
-      );
+      const uploadedUrl = await this.uploadToS3(profileData.pageCover.path, 'page-covers');
       updateData.pageCover = uploadedUrl;
     }
 
     Object.assign(user, updateData);
 
     // Save the updated user
-
 
     return this.userRepo.save(user);
   }

@@ -1,9 +1,9 @@
-import { PinataSDK } from "pinata";
-import fs from "fs";
+import { PinataSDK } from 'pinata';
+import fs from 'fs';
 
 const pinata = new PinataSDK({
   pinataJwt: process.env.PINATA_JWT!,
-  pinataGateway: process.env.PINATA_GATEWAY!
+  pinataGateway: process.env.PINATA_GATEWAY!,
 });
 
 export class PinataService {
@@ -14,7 +14,7 @@ export class PinataService {
   }
 
   static async uploadJSON(data: any, fileName: string) {
-    const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
     const file = new File([blob], fileName);
     const res = await pinata.upload.public.file(file);
     return res;

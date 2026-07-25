@@ -1,9 +1,9 @@
-import redis from "../config/redis";
-import { cacheHitsTotal, cacheMissesTotal } from "./MetricsService";
+import redis from '../config/redis';
+import { cacheHitsTotal, cacheMissesTotal } from './MetricsService';
 
 export class CacheService {
   static async cacheSong(songId: string, data: any) {
-    await redis.set(`song:${songId}`, JSON.stringify(data), "EX", 3600);
+    await redis.set(`song:${songId}`, JSON.stringify(data), 'EX', 3600);
   }
 
   static async getSong(songId: string) {

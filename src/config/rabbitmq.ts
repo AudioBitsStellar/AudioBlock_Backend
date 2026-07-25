@@ -1,4 +1,4 @@
-import amqp from "amqplib";
+import amqp from 'amqplib';
 
 let channel: amqp.Channel | null = null;
 
@@ -39,13 +39,13 @@ export async function initRabbitMQ(): Promise<void> {
   const connect = async () => {
     try {
       const rabbitmqUrl = process.env.RABBITMQ_URL;
-      
+
       if (!rabbitmqUrl) {
-        throw new Error("RABBITMQ_URL environment variable is required");
+        throw new Error('RABBITMQ_URL environment variable is required');
       }
 
       console.log(`🔄 Connecting to RabbitMQ (secure connection)...`);
-      
+
       // For amqps://, no additional config needed - amqplib handles TLS automatically
       const connection = await amqp.connect(rabbitmqUrl, {
         heartbeat: 60,
@@ -53,19 +53,19 @@ export async function initRabbitMQ(): Promise<void> {
       } as any);
 
       channel = await connection.createChannel();
-      console.log("✅ RabbitMQ connected and channel created");
+      console.log('✅ RabbitMQ connected and channel created');
 
-      connection.on("close", () => {
-        console.error("⚠️ RabbitMQ connection closed. Retrying...");
+      connection.on('close', () => {
+        console.error('⚠️ RabbitMQ connection closed. Retrying...');
         channel = null;
         setTimeout(connect, 5000);
       });
 
-      connection.on("error", (err) => {
-        console.error("⚠️ RabbitMQ connection error:", err.message);
+      connection.on('error', (err) => {
+        console.error('⚠️ RabbitMQ connection error:', err.message);
       });
     } catch (error: any) {
-      console.error("❌ RabbitMQ connection failed:", error.message);
+      console.error('❌ RabbitMQ connection failed:', error.message);
       channel = null;
       setTimeout(connect, 5000);
     }
@@ -75,7 +75,7 @@ export async function initRabbitMQ(): Promise<void> {
 }
 
 export function getChannel(): amqp.Channel {
-  if (!channel) throw new Error("RabbitMQ not initialized");
+  if (!channel) throw new Error('RabbitMQ not initialized');
   return channel;
 }
 
