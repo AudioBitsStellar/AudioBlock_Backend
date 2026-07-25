@@ -16,6 +16,7 @@ import artistRoutes from './routes/artistRoutes';
 import twitterRoutes from './routes/twitterRoutes';
 import walletRoutes from './routes/walletRoutes';
 import SongRoutes from './routes/SongRoutes';
+import userRoutes from './routes/userRoutes';
 import marketplaceRoutes from './routes/marketplaceRoutes';
 import adminRoutes from './routes/adminRoutes';
 import healthRoutes from './routes/healthRoutes';
@@ -128,6 +129,9 @@ app.use('/api/marketplace', marketplaceRoutes);
 // Admin moderation routes
 app.use('/api/admin', adminRoutes);
 
+// User profile routes
+app.use("/api/user", userRoutes);
+
 //TWITTER CALLBACK ROUTE
 app.use('/api/auth/twitter', twitterRoutes);
 
@@ -138,11 +142,13 @@ if (fs.existsSync(openapiPath)) {
   app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openapiDoc));
 }
 
-app.get('/redis-test', async (req, res) => {
-  await redis.set('greeting', 'hello world');
-  const value = await redis.get('greeting');
-  res.send({ value });
-});
+if (process.env.NODE_ENV !== "production") {
+  app.get('/redis-test', async (req, res) => {
+    await redis.set('greeting', 'hello world');
+    const value = await redis.get('greeting');
+    res.send({ value });
+  });
+}
 
 // Error handling middleware
 
