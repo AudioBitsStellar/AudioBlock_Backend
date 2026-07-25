@@ -18,7 +18,15 @@ export class ArtistService {
     this.soroban = new SorobanService();
   }
 
-  /** Records the Stellar account (e.g. Freighter) the artist will sign on-chain actions with. */
+  /**
+   * Records the Stellar public key (e.g. from Freighter wallet) that the artist
+   * will use to sign on-chain transactions.
+   *
+   * @param userId - ID of the artist user.
+   * @param stellarPublicKey - The Stellar account's public key.
+   * @returns Updated User entity with the connected wallet.
+   * @throws {Error} If user not found.
+   */
   async connectStellarWallet(userId: string, stellarPublicKey: string): Promise<User> {
     const user = await this.userRepo.findOneBy({ id: userId });
     if (!user) throw new Error('User not found');
@@ -28,9 +36,14 @@ export class ArtistService {
   }
 
   /**
-   * Builds the unsigned `setup_artist_profile` invocation for the artist
-   * contract. The artist's own wallet must sign and return it via
-   * `submitArtistOnChainSetup` — the backend never holds the artist's key.
+   * Builds the unsigned `setup_artist_profile` Soroban transaction for the
+   * artist contract. The artist must have a connected Stellar wallet and
+   * provide a metadata CID.
+   *
+   * @param userId - ID of the artist user.
+   * @param cid - IPFS CID of the artist profile metadata.
+   * @returns PreparedTransaction containing the XDR and network passphrase.
+   * @throws {Error} If user not found, no Stellar wallet, or CID missing.
    */
   async prepareArtistOnChainSetup(userId: string, cid: string): Promise<PreparedTransaction> {
     const user = await this.userRepo.findOneBy({ id: userId });
@@ -50,7 +63,15 @@ export class ArtistService {
     return { xdr: xdrTx, networkPassphrase: process.env.SOROBAN_NETWORK_PASSPHRASE || '' };
   }
 
-  /** Submits the artist's signed `setup_artist_profile` transaction and records the result. */
+  /**
+   * Submits the artist's signed `setup_artist_profile` transaction to Soroban,
+   * persists the on-chain artist ID and token ID on the user record.
+   *
+   * @param userId - ID of the artist user.
+   * @param signedXdr - The wallet-signed XDR transaction string.
+   * @returns Transaction hash, on-chain artist ID, and token ID.
+   * @throws {Error} If user not found or Soroban submission fails.
+   */
   async submitArtistOnChainSetup(
     userId: string,
     signedXdr: string,

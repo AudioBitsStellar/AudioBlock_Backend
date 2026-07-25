@@ -33,6 +33,15 @@ export class UserService {
     dotenv.config();
   }
 
+  /**
+   * Register a new user via wallet-signature authentication.
+   * Verifies the Ethereum signature, validates the nonce from Redis, creates
+   * the user record, logs the transaction, and issues a JWT.
+   *
+   * @param data - CreateUserDTO with email, walletAddress, signature, message, and role.
+   * @returns Created User entity and JWT token.
+   * @throws {AppError} If signature invalid, nonce expired/mismatch, or user already exists.
+   */
   async createUser(data: CreateUserDTO): Promise<{ user: User; token: string }> {
     // Service-layer input validation
     validateRequired(data.email, 'email');
@@ -97,6 +106,13 @@ export class UserService {
     return { user: savedUser, token };
   }
 
+  /**
+   * Look up a user by their Ethereum wallet address.
+   *
+   * @param walletAddress - The Ethereum wallet address to search for.
+   * @returns Matching User entity or null if not found.
+   * @throws {Error} If walletAddress is invalid.
+   */
   async getUserByWalletAddress(walletAddress: string): Promise<User | null> {
     validateRequired(walletAddress, 'walletAddress');
     validateEthereumAddress(walletAddress);
@@ -104,16 +120,36 @@ export class UserService {
     return await this.userRepo.findOneBy({ walletAddress });
   }
 
+  /**
+   * Retrieve all users from the database.
+   *
+   * @returns Array of all User entities.
+   */
   async getAllUsers(): Promise<User[]> {
     return await this.userRepo.find();
   }
 
+  /**
+   * Look up a user by their unique ID.
+   *
+   * @param id - The user's UUID.
+   * @returns Matching User entity or null if not found.
+   */
   async getUserById(id: string): Promise<User | null> {
     validateRequired(id, 'id');
 
     return await this.userRepo.findOneBy({ id });
   }
 
+  /**
+   * Update a user's profile fields. Validates uniqueness constraints for
+   * walletAddress, email, and username before saving.
+   *
+   * @param id - The user's UUID.
+   * @param data - Partial User fields to update.
+   * @returns Updated User entity.
+   * @throws {AppError} If user not found or uniqueness constraint violated.
+   */
   async updateUser(id: string, data: Partial<User>): Promise<User | null> {
     validateRequired(id, 'id');
 
@@ -155,6 +191,13 @@ export class UserService {
     return await this.userRepo.save(user);
   }
 
+  /**
+   * Permanently delete a user from the database.
+   *
+   * @param id - The user's UUID.
+   * @returns The removed User entity.
+   * @throws {AppError} If user not found.
+   */
   async deleteUser(id: string): Promise<User | null> {
     validateRequired(id, 'id');
 
