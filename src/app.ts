@@ -88,6 +88,10 @@ app.get('/metrics', async (_req: Request, res: Response) => {
 
 // Define routes
 app.get('/health', (req, res) => {
+  if (isShuttingDown()) {
+    res.status(503).json({ status: 'shutting_down' });
+    return;
+  }
   res.json({ status: 'ok' });
 });
 
