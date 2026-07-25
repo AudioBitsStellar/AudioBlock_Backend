@@ -16,6 +16,7 @@ import artistRoutes from './routes/artistRoutes';
 import twitterRoutes from './routes/twitterRoutes';
 import walletRoutes from './routes/walletRoutes';
 import SongRoutes from './routes/SongRoutes';
+import userRoutes from './routes/userRoutes';
 import marketplaceRoutes from './routes/marketplaceRoutes';
 import adminRoutes from './routes/adminRoutes';
 import { getPoolStats, checkDbHealth } from './services/DbPoolMonitor';
@@ -101,6 +102,41 @@ app.get('/health/db', async (req, res) => {
   });
 });
 
+// Comprehensive health check endpoint for uptime monitoring
+// Contract: 200 + per-dependency status when DB + Redis are healthy, 503 otherwise.
+app.get("/healthz", async (req, res) => {
+  try {
+    const dbInitialized = AppDataSource.isInitialized;
+    const dbHealthy = dbInitialized ? await checkDbHealth(AppDataSource) : false;
+
+    let redisHealthy = false;
+    let redisError: string | null = null;
+    try {
+      await redis.ping();
+      redisHealthy = true;
+    } catch (err) {
+      redisError = err instanceof Error ? err.message : String(err);
+    }
+
+    const overallHealthy = dbInitialized && dbHealthy && redisHealthy;
+
+    res.status(overallHealthy ? 200 : 503).json({
+      status: overallHealthy ? "healthy" : "unhealthy",
+      timestamp: new Date().toISOString(),
+      dependencies: {
+        database: { status: dbInitialized && dbHealthy ? "ok" : "failing" },
+        redis: { status: redisHealthy ? "ok" : "failing", error: redisError },
+      },
+    });
+  } catch (err) {
+    res.status(503).json({
+      status: "unhealthy",
+      timestamp: new Date().toISOString(),
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
 app.use('/api/auth', authRoutes);
 app.use('/api/artist', artistRoutes);
 
@@ -116,6 +152,9 @@ app.use('/api/marketplace', marketplaceRoutes);
 // Admin moderation routes
 app.use('/api/admin', adminRoutes);
 
+// User profile routes
+app.use("/api/user", userRoutes);
+
 //TWITTER CALLBACK ROUTE
 app.use('/api/auth/twitter', twitterRoutes);
 
@@ -126,11 +165,13 @@ if (fs.existsSync(openapiPath)) {
   app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openapiDoc));
 }
 
-app.get('/redis-test', async (req, res) => {
-  await redis.set('greeting', 'hello world');
-  const value = await redis.get('greeting');
-  res.send({ value });
-});
+if (process.env.NODE_ENV !== "production") {
+  app.get('/redis-test', async (req, res) => {
+    await redis.set('greeting', 'hello world');
+    const value = await redis.get('greeting');
+    res.send({ value });
+  });
+}
 
 // Error handling middleware
 const customErrorHandler: ErrorRequestHandler = (err, req, res, _next) => {
