@@ -18,6 +18,7 @@ import walletRoutes from './routes/walletRoutes';
 import SongRoutes from './routes/SongRoutes';
 import marketplaceRoutes from './routes/marketplaceRoutes';
 import adminRoutes from './routes/adminRoutes';
+import healthRoutes from './routes/healthRoutes';
 import { getPoolStats, checkDbHealth } from './services/DbPoolMonitor';
 import { dbConnectionState } from './services/DatabaseConnectionManager';
 
@@ -106,6 +107,11 @@ app.get('/health/db', async (req, res) => {
     connection: dbConnectionState,
   });
 });
+
+// Liveness / readiness / detailed health probes for orchestration and load
+// balancer configuration (Issue #146): GET /health/live, /health/ready,
+// /health/detailed.
+app.use('/health', healthRoutes);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/artist', artistRoutes);
