@@ -1,3 +1,7 @@
+/**
+ * Prometheus metrics for monitoring HTTP requests, database pool, uploads,
+ * royalties, marketplace volume, and cache performance.
+ */
 import client from 'prom-client';
 
 const register = new client.Registry();
@@ -73,6 +77,12 @@ export const cacheMissesTotal = new client.Counter({
   registers: [register],
 });
 
+/**
+ * Update the Prometheus gauges reflecting the current PostgreSQL connection
+ * pool state.
+ *
+ * @param pool - Object with totalCount, idleCount, and waitingCount from pg Pool.
+ */
 export async function updateDbPoolMetrics(pool: {
   totalCount: number;
   idleCount: number;
@@ -83,10 +93,20 @@ export async function updateDbPoolMetrics(pool: {
   dbPoolWaiting.set(pool.waitingCount);
 }
 
+/**
+ * Get the content type string for the Prometheus metrics endpoint.
+ *
+ * @returns Content type (e.g. "text/plain; version=0.0.4; charset=utf-8").
+ */
 export async function getMetricsContentType(): Promise<string> {
   return register.contentType;
 }
 
+/**
+ * Serialize all registered Prometheus metrics to the text exposition format.
+ *
+ * @returns Metrics payload string for the /metrics endpoint.
+ */
 export async function getMetrics(): Promise<string> {
   return register.metrics();
 }

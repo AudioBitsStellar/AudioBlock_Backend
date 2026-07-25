@@ -6,6 +6,10 @@ import { s3 } from '../config/s3';
 import { UpdateArtistProfileDTO } from '../dtos/UpdateArtistProfileDTO';
 import path from 'path';
 
+/**
+ * Service for managing artist profile updates including profile image
+ * and page cover uploads to S3.
+ */
 export class ArtistProfileService {
   private userRepo: Repository<User>;
 
@@ -13,6 +17,13 @@ export class ArtistProfileService {
     this.userRepo = AppDataSource.getRepository(User);
   }
 
+  /**
+   * Upload a local image file to S3 and return the public URL.
+   *
+   * @param localPath - Absolute path to the image file on disk.
+   * @param folder - S3 folder prefix (e.g. "profile-images", "page-covers").
+   * @returns The S3 URL of the uploaded file.
+   */
   private async uploadToS3(localPath: string, folder: string) {
     const buffer = fs.readFileSync(localPath);
     const fileId = crypto.randomUUID();
@@ -31,6 +42,15 @@ export class ArtistProfileService {
     return upload.Location;
   }
 
+  /**
+   * Update an artist's profile including bio, website, and optional image uploads.
+   * Profile images are uploaded to S3 and their URLs are stored on the user record.
+   *
+   * @param userId - ID of the artist user.
+   * @param profileData - Partial profile fields and optional file uploads.
+   * @returns Updated User entity.
+   * @throws {Error} If user not found.
+   */
   async updateArtistProfile(
     userId: string,
     profileData: Partial<UpdateArtistProfileDTO>,

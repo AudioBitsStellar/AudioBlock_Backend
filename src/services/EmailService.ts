@@ -1,6 +1,10 @@
 import axios from 'axios';
 import { randomBytes } from 'crypto';
 
+/**
+ * Email sending service supporting Resend and SendGrid providers.
+ * Falls back to console logging when no API key is configured (development).
+ */
 export class EmailService {
   private readonly apiKey: string;
   private readonly fromEmail: string;
@@ -10,6 +14,14 @@ export class EmailService {
     this.fromEmail = process.env.EMAIL_FROM || 'noreply@audioblocks.com';
   }
 
+  /**
+   * Send an HTML email to the specified recipient.
+   * Skips sending and logs to console if no API key is configured.
+   *
+   * @param to - Recipient email address.
+   * @param subject - Email subject line.
+   * @param html - HTML body content.
+   */
   async sendEmail(to: string, subject: string, html: string): Promise<void> {
     if (!this.apiKey) {
       console.log(
@@ -55,10 +67,20 @@ export class EmailService {
     }
   }
 
+  /**
+   * Generate a cryptographically secure hex token for email verification.
+   *
+   * @returns 64-character hex string.
+   */
   generateVerificationToken(): string {
     return randomBytes(32).toString('hex');
   }
 
+  /**
+   * Generate a cryptographically secure hex token for password reset.
+   *
+   * @returns 64-character hex string.
+   */
   generateResetToken(): string {
     return randomBytes(32).toString('hex');
   }
