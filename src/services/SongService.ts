@@ -14,6 +14,7 @@ import { PreparedTransaction } from "./Artist/ArtistService";
 import { ScanService } from "./ScanService";
 import { SearchIndexService } from "./SearchIndexService";
 import logger from "../config/logger";
+import { songsUploadedTotal } from "./MetricsService";
 
 export class SongService {
   private songRepo: Repository<Song>;
@@ -190,6 +191,7 @@ export class SongService {
       composers,
     });
     await this.songRepo.save(song);
+    songsUploadedTotal.inc();
 
     //  Send song for background processing via RabbitMQ
     const channel = getChannel();

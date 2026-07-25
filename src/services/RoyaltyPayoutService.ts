@@ -7,6 +7,7 @@ import {
 } from "../entities/RoyaltyPayout";
 import { SorobanContracts } from "../config/soroban";
 import { SorobanService } from "./Soroban/SorobanService";
+import { royaltiesPaidTotal } from "./MetricsService";
 import { RoyaltyPayoutEvent } from "../types";
 
 export interface CreateRoyaltyPayoutInput {
@@ -53,7 +54,9 @@ export class RoyaltyPayoutService {
       status: RoyaltyPayoutStatus.PENDING,
     });
 
-    return this.royaltyPayoutRepo.save(payout);
+    await this.royaltyPayoutRepo.save(payout);
+    royaltiesPaidTotal.inc();
+    return payout;
   }
 
   async reconcilePendingPayouts(): Promise<RoyaltyReconciliationResult> {

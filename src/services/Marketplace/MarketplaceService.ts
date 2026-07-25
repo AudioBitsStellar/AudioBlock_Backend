@@ -1,6 +1,7 @@
 import { SorobanContracts } from "../../config/soroban";
 import { SorobanService, addressArg, u64Arg } from "../Soroban/SorobanService";
 import { PreparedTransaction } from "../Artist/ArtistService";
+import { marketplaceVolumeStroops } from "../MetricsService";
 
 export class MarketplaceService {
   private soroban: SorobanService;
@@ -53,8 +54,11 @@ export class MarketplaceService {
   }
 
   /** Submits the buyer's signed `buy_nft` transaction and returns the tx hash. */
-  async submitBuy(signedXdr: string): Promise<{ txHash: string }> {
+  async submitBuy(signedXdr: string, priceStroops?: number): Promise<{ txHash: string }> {
     const { hash } = await this.soroban.submitSignedTransaction(signedXdr);
+    if (priceStroops) {
+      marketplaceVolumeStroops.inc(priceStroops);
+    }
     return { txHash: hash };
   }
 }
