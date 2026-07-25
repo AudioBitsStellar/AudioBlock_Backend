@@ -93,12 +93,30 @@ app.get("/health/db", async (req, res) => {
 // Comprehensive health check endpoint (uptime monitoring)
 // Checks both database and Redis connectivity
 app.get("/healthz", async (req, res) => {
+  // Health contract:
+  //  - Returns 200 and a JSON object listing dependency statuses when the
+  //    application is healthy (DB initialized + query succeeds + Redis ping
+  //    succeeds).
+  //  - Returns 503 when any dependency is failing.
+  //  - Response shape:
+  //    {
+  //      status: "healthy"|"unhealthy",
+  //      timestamp: ISOString,
+  //      dependencies: { database: { status, pool? }, redis: { status, error? } }
+  //    }
   try {
-    const dbHealthy = await checkDbHealth(AppDataSource);
-    const pool = getPoolStats(AppDataSource);
+    // First ensure the TypeORM DataSource has been initialized.
+    const dbInitialized = !!AppDataSource?.isInitialized;
+    let dbHealthy = false;
+    let pool = null;
+
+    if (dbInitialized) {
+      dbHealthy = await checkDbHealth(AppDataSource);
+      pool = getPoolStats(AppDataSource);
+    }
+
     let redisHealthy = false;
     let redisError: string | null = null;
-
     try {
       await redis.ping();
       redisHealthy = true;
@@ -106,7 +124,7 @@ app.get("/healthz", async (req, res) => {
       redisError = err instanceof Error ? err.message : String(err);
     }
 
-    const overallHealthy = dbHealthy && redisHealthy;
+    const overallHealthy = dbInitialized && dbHealthy && redisHealthy;
     const statusCode = overallHealthy ? 200 : 503;
 
     res.status(statusCode).json({
@@ -114,7 +132,8 @@ app.get("/healthz", async (req, res) => {
       timestamp: new Date().toISOString(),
       dependencies: {
         database: {
-          status: dbHealthy ? "ok" : "failing",
+          initialized: dbInitialized,
+          status: dbInitialized && dbHealthy ? "ok" : "failing",
           pool,
         },
         redis: {
