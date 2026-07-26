@@ -19,7 +19,9 @@
     "lint": "eslint \"src/**/*.ts\"",
     "lint:fix": "eslint \"src/**/*.ts\" --fix",
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
-    "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\""
+    "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\"",
+    "deadcode": "knip",
+    "deadcode:production": "knip --production"
   },
   "lint-staged": {
     "*.ts": [
@@ -27,9 +29,9 @@
       "prettier --write"
     ]
   },
-  "author": "",
+  "author": "AudioBitsStellar",
   "license": "ISC",
-  "description": "",
+  "description": "The backend API for AudioBlocks, a music NFT platform on Stellar/Soroban",
   "dependencies": {
     "@aws-sdk/client-s3": "^3.916.0",
     "@dynamic-labs-wallet/core": "^0.0.187",
@@ -92,6 +94,7 @@
     "eslint-plugin-prettier": "^5.5.6",
     "husky": "^9.1.7",
     "jest": "^30.4.2",
+    "knip": "^5.45.0",
     "lint-staged": "^15.3.0",
     "prettier": "^3.4.2",
     "ts-jest": "^29.4.11",
