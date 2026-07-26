@@ -10,31 +10,31 @@
  * run without a live database, RabbitMQ, or S3 connection.
  */
 
-import "reflect-metadata";
-import * as fs from "fs";
-import * as path from "path";
-import * as os from "os";
+import 'reflect-metadata';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 
 // ── Module-level mocks ────────────────────────────────────────────────────────
 
-jest.mock("../config/db", () => ({
+jest.mock('../config/db', () => ({
   __esModule: true,
   default: { getRepository: jest.fn() },
 }));
 
-jest.mock("../config/rabbitmq", () => ({
+jest.mock('../config/rabbitmq', () => ({
   getChannel: jest.fn().mockReturnValue({ sendToQueue: jest.fn() }),
 }));
 
-jest.mock("../config/s3", () => ({
+jest.mock('../config/s3', () => ({
   s3: {
     upload: jest.fn().mockReturnValue({
-      promise: jest.fn().mockResolvedValue({ Location: "s3://bucket/test-key" }),
+      promise: jest.fn().mockResolvedValue({ Location: 's3://bucket/test-key' }),
     }),
   },
 }));
 
-jest.mock("../services/Soroban/SorobanService", () => ({
+jest.mock('../services/Soroban/SorobanService', () => ({
   SorobanService: jest.fn().mockImplementation(() => ({
     prepareInvocation: jest.fn(),
     submitSignedTransaction: jest.fn(),
@@ -44,16 +44,16 @@ jest.mock("../services/Soroban/SorobanService", () => ({
   u64Arg: jest.fn((v) => v),
 }));
 
-jest.mock("../config/soroban", () => ({
-  SorobanContracts: { catalog: "CATALOG_CONTRACT" },
-  getNetworkPassphrase: jest.fn().mockReturnValue("Test SDF Network ; September 2015"),
+jest.mock('../config/soroban', () => ({
+  SorobanContracts: { catalog: 'CATALOG_CONTRACT' },
+  getNetworkPassphrase: jest.fn().mockReturnValue('Test SDF Network ; September 2015'),
   getSorobanServer: jest.fn(),
   getSorobanRpcUrl: jest.fn(),
 }));
 
 // ── Imports ────────────────────────────────────────────────────────────────────
 
-import { SongService } from "../services/SongService";
+import { SongService } from '../services/SongService';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -75,10 +75,10 @@ function rmrf(dir: string): void {
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-describe("SongService.saveChunk — single-chunk storage", () => {
+describe('SongService.saveChunk — single-chunk storage', () => {
   let svc: SongService;
   const fileId = `test-single-${Date.now()}`;
-  const uploadDir = path.join("uploads", "temp", fileId);
+  const uploadDir = path.join('uploads', 'temp', fileId);
 
   beforeEach(() => {
     svc = new SongService();
@@ -88,16 +88,16 @@ describe("SongService.saveChunk — single-chunk storage", () => {
     rmrf(uploadDir);
   });
 
-  it("stores a chunk file at the correct path", async () => {
+  it('stores a chunk file at the correct path', async () => {
     const tmpChunk = makeTempChunk(1024); // 1 KB chunk
 
     const destination = await svc.saveChunk(fileId, 0, tmpChunk);
 
-    expect(destination).toBe(path.join(uploadDir, "chunk_0"));
+    expect(destination).toBe(path.join(uploadDir, 'chunk_0'));
     expect(fs.existsSync(destination)).toBe(true);
   });
 
-  it("removes the source temp file after saving", async () => {
+  it('removes the source temp file after saving', async () => {
     const tmpChunk = makeTempChunk(512);
 
     await svc.saveChunk(fileId, 0, tmpChunk);
@@ -105,9 +105,9 @@ describe("SongService.saveChunk — single-chunk storage", () => {
     expect(fs.existsSync(tmpChunk)).toBe(false);
   });
 
-  it("creates the per-fileId directory if it does not exist", async () => {
+  it('creates the per-fileId directory if it does not exist', async () => {
     const newFileId = `test-mkdir-${Date.now()}`;
-    const newUploadDir = path.join("uploads", "temp", newFileId);
+    const newUploadDir = path.join('uploads', 'temp', newFileId);
     const tmpChunk = makeTempChunk(256);
 
     try {
@@ -119,10 +119,10 @@ describe("SongService.saveChunk — single-chunk storage", () => {
   });
 });
 
-describe("SongService.saveChunk — multi-chunk upload flow (#63)", () => {
+describe('SongService.saveChunk — multi-chunk upload flow (#63)', () => {
   let svc: SongService;
   const fileId = `test-multi-${Date.now()}`;
-  const uploadDir = path.join("uploads", "temp", fileId);
+  const uploadDir = path.join('uploads', 'temp', fileId);
 
   // Simulated artist-dashboard chunk size: 5 MB (CHUNK_SIZE = 5 * 1024 * 1024)
   const DASHBOARD_CHUNK_SIZE = 5 * 1024 * 1024;
@@ -135,7 +135,7 @@ describe("SongService.saveChunk — multi-chunk upload flow (#63)", () => {
     rmrf(uploadDir);
   });
 
-  it("stores 3 sequential chunks at correct indices (simulating dashboard serial upload)", async () => {
+  it('stores 3 sequential chunks at correct indices (simulating dashboard serial upload)', async () => {
     const TOTAL_CHUNKS = 3;
     const destinations: string[] = [];
 
@@ -154,7 +154,7 @@ describe("SongService.saveChunk — multi-chunk upload flow (#63)", () => {
     }
   });
 
-  it("each stored chunk has the correct byte size", async () => {
+  it('each stored chunk has the correct byte size', async () => {
     const chunkSizes = [DASHBOARD_CHUNK_SIZE, DASHBOARD_CHUNK_SIZE, 512 * 1024]; // last chunk smaller
 
     for (let i = 0; i < chunkSizes.length; i++) {
@@ -165,7 +165,7 @@ describe("SongService.saveChunk — multi-chunk upload flow (#63)", () => {
     }
   });
 
-  it("chunk_0 through chunk_N are all stored after sequential upload", async () => {
+  it('chunk_0 through chunk_N are all stored after sequential upload', async () => {
     const N = 4;
     for (let i = 0; i < N; i++) {
       const tmpChunk = makeTempChunk(1024);
@@ -173,12 +173,12 @@ describe("SongService.saveChunk — multi-chunk upload flow (#63)", () => {
     }
 
     const stored = fs.readdirSync(uploadDir).sort();
-    expect(stored).toEqual(["chunk_0", "chunk_1", "chunk_2", "chunk_3"]);
+    expect(stored).toEqual(['chunk_0', 'chunk_1', 'chunk_2', 'chunk_3']);
   });
 });
 
-describe("Chunk upload limits — documented constraints (#63)", () => {
-  it("chunk size constant matches artist-dashboard expectation (≤ 10 MB per chunk)", () => {
+describe('Chunk upload limits — documented constraints (#63)', () => {
+  it('chunk size constant matches artist-dashboard expectation (≤ 10 MB per chunk)', () => {
     // The backend cap is 10 MB (CHUNK_MAX_SIZE_BYTES in SongRoutes.ts).
     // The artist-dashboard sends 5 MB chunks — well within the cap.
     const BACKEND_CAP_BYTES = 10 * 1024 * 1024;
@@ -186,10 +186,10 @@ describe("Chunk upload limits — documented constraints (#63)", () => {
     expect(DASHBOARD_CHUNK_BYTES).toBeLessThanOrEqual(BACKEND_CAP_BYTES);
   });
 
-  it("upload is serial: saving chunk i does not conflict with chunk i+1 (no concurrent writes)", async () => {
+  it('upload is serial: saving chunk i does not conflict with chunk i+1 (no concurrent writes)', async () => {
     const svc = new SongService();
     const fileId = `test-serial-${Date.now()}`;
-    const uploadDir = path.join("uploads", "temp", fileId);
+    const uploadDir = path.join('uploads', 'temp', fileId);
 
     try {
       const tmp0 = makeTempChunk(1024);

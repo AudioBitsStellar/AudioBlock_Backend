@@ -8,12 +8,13 @@
  * The resulting `req.id` is also forwarded to the client in the
  * X-Request-Id response header so callers can correlate logs to requests.
  */
-import { Request, Response, NextFunction, RequestHandler } from "express";
-import { randomUUID } from "crypto";
-import logger from "../config/logger";
+import { Request, Response, NextFunction, RequestHandler } from 'express';
+import { randomUUID } from 'crypto';
+import logger from '../config/logger';
 
 /** Extend Express Request to carry our correlation id */
 declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
       id?: string;
@@ -24,22 +25,17 @@ declare global {
 export const requestLoggerMiddleware: RequestHandler = (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
-  const incomingId = req.headers["x-request-id"];
-  req.id = (typeof incomingId === "string" && incomingId) || randomUUID();
-  res.setHeader("X-Request-Id", req.id);
+  const incomingId = req.headers['x-request-id'];
+  req.id = (typeof incomingId === 'string' && incomingId) || randomUUID();
+  res.setHeader('X-Request-Id', req.id);
 
   const start = Date.now();
 
-  res.on("finish", () => {
+  res.on('finish', () => {
     const duration = Date.now() - start;
-    const level =
-      res.statusCode >= 500
-        ? "error"
-        : res.statusCode >= 400
-        ? "warn"
-        : "info";
+    const level = res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info';
 
     logger[level](
       {
@@ -50,7 +46,7 @@ export const requestLoggerMiddleware: RequestHandler = (
         durationMs: duration,
         ip: req.ip,
       },
-      `${req.method} ${req.originalUrl} ${res.statusCode} (${duration}ms)`
+      `${req.method} ${req.originalUrl} ${res.statusCode} (${duration}ms)`,
     );
   });
 

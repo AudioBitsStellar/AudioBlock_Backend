@@ -5,10 +5,10 @@
  */
 
 export enum MintStatus {
-  PENDING = "pending",
-  MINTING = "minting",
-  MINTED = "minted",
-  FAILED = "failed",
+  PENDING = 'pending',
+  MINTING = 'minting',
+  MINTED = 'minted',
+  FAILED = 'failed',
 }
 
 export interface MintStatusChangedPayload {
@@ -16,7 +16,7 @@ export interface MintStatusChangedPayload {
   eventId: string;
 
   /** Event type discriminator */
-  eventType: "mint_status_changed";
+  eventType: 'mint_status_changed';
 
   /** ISO 8601 timestamp when the event occurred */
   timestamp: string;
@@ -48,7 +48,7 @@ export interface MintStatusChangedPayload {
 
 export interface ArtistSetupCompletedPayload {
   eventId: string;
-  eventType: "artist_setup_completed";
+  eventType: 'artist_setup_completed';
   timestamp: string;
   userId: string;
   txHash: string;
@@ -58,10 +58,10 @@ export interface ArtistSetupCompletedPayload {
 
 export interface SongProcessingCompletedPayload {
   eventId: string;
-  eventType: "song_processing_completed";
+  eventType: 'song_processing_completed';
   timestamp: string;
   songId: string;
-  status: "ready" | "failed";
+  status: 'ready' | 'failed';
   hlsMasterUrl?: string;
   metadataCid?: string;
   errorMessage?: string;
@@ -71,9 +71,7 @@ export interface SongProcessingCompletedPayload {
  * Union type of all possible webhook payloads for type discrimination.
  */
 export type WebhookPayload =
-  | MintStatusChangedPayload
-  | ArtistSetupCompletedPayload
-  | SongProcessingCompletedPayload;
+  MintStatusChangedPayload | ArtistSetupCompletedPayload | SongProcessingCompletedPayload;
 
 /**
  * Delivery method configuration for webhook payloads.
@@ -82,7 +80,7 @@ export type WebhookPayload =
  */
 export interface WebhookDeliveryConfig {
   /** Delivery method: websocket, sse, or http */
-  method: "websocket" | "sse" | "http";
+  method: 'websocket' | 'sse' | 'http';
 
   /** Target endpoint for HTTP webhooks */
   endpoint?: string;

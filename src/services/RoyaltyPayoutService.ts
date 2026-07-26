@@ -1,12 +1,10 @@
-import { In, Repository } from "typeorm";
-import AppDataSource from "../config/db";
-import {
-  RoyaltyPayout,
-  RoyaltyPayoutStatus,
-  RoyaltySplit,
-} from "../entities/RoyaltyPayout";
-import { SorobanContracts } from "../config/soroban";
-import { SorobanService } from "./Soroban/SorobanService";
+import { In, Repository } from 'typeorm';
+import AppDataSource from '../config/db';
+import { RoyaltyPayout, RoyaltyPayoutStatus, RoyaltySplit } from '../entities/RoyaltyPayout';
+import { SorobanContracts } from '../config/soroban';
+import { SorobanService } from './Soroban/SorobanService';
+import { royaltiesPaidTotal } from './MetricsService';
+import { RoyaltyPayoutEvent } from '../types';
 
 export interface CreateRoyaltyPayoutInput {
   saleEventId: string;
@@ -21,18 +19,15 @@ export interface CreateRoyaltyPayoutInput {
   expectedSplits: RoyaltySplit[];
 }
 
-export interface RoyaltyPayoutEvent {
-  saleEventId: string;
-  onChainEventId: string;
-  recipientPublicKey: string;
-  amountStroops: string;
-}
-
 export interface RoyaltyReconciliationResult {
   reconciled: RoyaltyPayout[];
   discrepancies: RoyaltyPayout[];
 }
 
+/**
+ * Manages royalty payout records and reconciliation against on-chain events
+ * from the Soroban royalty contract.
+ */
 export class RoyaltyPayoutService {
   private royaltyPayoutRepo: Repository<RoyaltyPayout>;
   private soroban: SorobanService;
@@ -42,6 +37,13 @@ export class RoyaltyPayoutService {
     this.soroban = new SorobanService();
   }
 
+  /**
+   * Record an expected royalty payout from a marketplace sale. Creates a
+   * pending payout record with the expected split amounts.
+   *
+   * @param input - Payout details including sale event ID, split recipients, and amounts.
+   * @returns The persisted RoyaltyPayout entity with status PENDING.
+   */
   async recordExpectedPayout(input: CreateRoyaltyPayoutInput): Promise<RoyaltyPayout> {
     const payout = this.royaltyPayoutRepo.create({
       saleEventId: input.saleEventId,
@@ -51,15 +53,23 @@ export class RoyaltyPayoutService {
       buyerPublicKey: input.buyerPublicKey,
       sellerPublicKey: input.sellerPublicKey,
       artist_id: input.artistId,
-      currency: input.currency || "stroops",
+      currency: input.currency || 'stroops',
       grossAmountStroops: input.grossAmountStroops,
       expectedSplits: input.expectedSplits,
       status: RoyaltyPayoutStatus.PENDING,
     });
 
-    return this.royaltyPayoutRepo.save(payout);
+    await this.royaltyPayoutRepo.save(payout);
+    royaltiesPaidTotal.inc();
+    return payout;
   }
 
+  /**
+   * Fetch pending/discrepancy payouts and reconcile them against on-chain
+   * royalty contract events. Marks each as RECONCILED or DISCREPANCY.
+   *
+   * @returns Reconciled and discrepant payout records.
+   */
   async reconcilePendingPayouts(): Promise<RoyaltyReconciliationResult> {
     const pending = await this.royaltyPayoutRepo.findBy({
       status: In([RoyaltyPayoutStatus.PENDING, RoyaltyPayoutStatus.DISCREPANCY]),
@@ -76,6 +86,13 @@ export class RoyaltyPayoutService {
     return this.reconcileEvents(events);
   }
 
+  /**
+   * Reconcile a set of on-chain royalty payout events against stored payout
+   * records. Compares expected vs actual amounts per recipient.
+   *
+   * @param events - Array of RoyaltyPayoutEvent from the Soroban RPC.
+   * @returns Reconciled and discrepant payout records.
+   */
   async reconcileEvents(events: RoyaltyPayoutEvent[]): Promise<RoyaltyReconciliationResult> {
     const saleEventIds = [...new Set(events.map((event) => event.saleEventId))];
     if (saleEventIds.length === 0) {
@@ -110,10 +127,10 @@ export class RoyaltyPayoutService {
         payout.status = RoyaltyPayoutStatus.DISCREPANCY;
         payout.discrepancyReason = missingOrMismatched
           .map((split) => {
-            const actual = split.actualAmountStroops || "missing";
+            const actual = split.actualAmountStroops || 'missing';
             return `${split.recipientPublicKey} expected ${split.expectedAmountStroops}, actual ${actual}`;
           })
-          .join("; ");
+          .join('; ');
         discrepancies.push(await this.royaltyPayoutRepo.save(payout));
       } else {
         payout.status = RoyaltyPayoutStatus.RECONCILED;
@@ -125,6 +142,11 @@ export class RoyaltyPayoutService {
     return { reconciled, discrepancies };
   }
 
+  /**
+   * List all payout records with DISCREPANCY status for investigation.
+   *
+   * @returns Array of RoyaltyPayout entities with discrepancy status.
+   */
   async listDiscrepancies(): Promise<RoyaltyPayout[]> {
     return this.royaltyPayoutRepo.findBy({ status: RoyaltyPayoutStatus.DISCREPANCY });
   }

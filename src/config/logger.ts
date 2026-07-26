@@ -15,24 +15,24 @@
  *   warn  – non-fatal anomalies
  *   error – failures that need attention
  */
-import pino from "pino";
+import pino from 'pino';
 
 const logger = pino({
-  level: process.env.LOG_LEVEL || "info",
+  level: process.env.LOG_LEVEL || 'info',
   // Pretty-print in development, JSON in production/CI
-  ...(process.env.NODE_ENV !== "production" && {
+  ...(process.env.NODE_ENV !== 'production' && {
     transport: {
-      target: "pino-pretty",
+      target: 'pino-pretty',
       options: {
         colorize: true,
-        translateTime: "SYS:standard",
-        ignore: "pid,hostname",
+        translateTime: 'SYS:standard',
+        ignore: 'pid,hostname',
       },
     },
   }),
   base: {
-    service: "audioblock-backend",
-    env: process.env.NODE_ENV || "development",
+    service: 'audioblock-backend',
+    env: process.env.NODE_ENV || 'development',
   },
 });
 

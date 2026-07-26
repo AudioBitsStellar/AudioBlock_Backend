@@ -2,14 +2,14 @@
  * Unit tests for the background job queue (Issue #132).
  * Uses an in-memory Redis mock covering strings, lists and hashes.
  */
-import "reflect-metadata";
+import 'reflect-metadata';
 
-jest.mock("../config/redis", () => {
+jest.mock('../config/redis', () => {
   const strings = new Map<string, string>();
   const lists = new Map<string, string[]>();
   const hashes = new Map<string, Map<string, string>>();
 
-  const _set = (k: string, v: string) => (strings.set(k, v), "OK");
+  const _set = (k: string, v: string) => (strings.set(k, v), 'OK');
   const _get = (k: string) => (strings.has(k) ? strings.get(k)! : null);
   const _lpush = (k: string, v: string) => {
     if (!lists.has(k)) lists.set(k, []);
@@ -65,13 +65,13 @@ jest.mock("../config/redis", () => {
   };
 });
 
-import redis from "../config/redis";
-import { JobQueueService, Job } from "../services/JobQueueService";
+import redis from '../config/redis';
+import { JobQueueService, Job } from '../services/JobQueueService';
 
 beforeEach(() => (redis as any).__reset());
 
-describe("JobQueueService.backoffDelay", () => {
-  it("grows exponentially and caps at the ceiling", () => {
+describe('JobQueueService.backoffDelay', () => {
+  it('grows exponentially and caps at the ceiling', () => {
     expect(JobQueueService.backoffDelay(1)).toBe(2000);
     expect(JobQueueService.backoffDelay(2)).toBe(4000);
     expect(JobQueueService.backoffDelay(3)).toBe(8000);
@@ -80,12 +80,16 @@ describe("JobQueueService.backoffDelay", () => {
   });
 });
 
-describe("JobQueueService.enqueue / getStats", () => {
-  it("enqueues a pending job at the requested priority", async () => {
-    const job = await JobQueueService.enqueue("transcode", { songId: "s1" }, { priority: "critical" });
+describe('JobQueueService.enqueue / getStats', () => {
+  it('enqueues a pending job at the requested priority', async () => {
+    const job = await JobQueueService.enqueue(
+      'transcode',
+      { songId: 's1' },
+      { priority: 'critical' },
+    );
 
-    expect(job.status).toBe("pending");
-    expect(job.priority).toBe("critical");
+    expect(job.status).toBe('pending');
+    expect(job.priority).toBe('critical');
     expect(job.attempts).toBe(0);
 
     const stats = await JobQueueService.getStats();
@@ -94,53 +98,53 @@ describe("JobQueueService.enqueue / getStats", () => {
     expect(stats.byStatus.pending).toBe(1);
   });
 
-  it("round-trips a job record via getJob", async () => {
-    const job = await JobQueueService.enqueue("pin", { cid: "Qm..." });
+  it('round-trips a job record via getJob', async () => {
+    const job = await JobQueueService.enqueue('pin', { cid: 'Qm...' });
     const fetched = await JobQueueService.getJob(job.id);
     expect(fetched?.id).toBe(job.id);
-    expect(fetched?.type).toBe("pin");
+    expect(fetched?.type).toBe('pin');
   });
 });
 
-describe("JobQueueService.fail", () => {
+describe('JobQueueService.fail', () => {
   const baseJob = (): Job => ({
-    id: "j1",
-    type: "transcode",
+    id: 'j1',
+    type: 'transcode',
     payload: {},
-    priority: "normal",
-    status: "processing",
+    priority: 'normal',
+    status: 'processing',
     attempts: 1,
     maxAttempts: 3,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   });
 
-  it("retries when attempts remain", async () => {
+  it('retries when attempts remain', async () => {
     jest.useFakeTimers();
     const job = baseJob();
 
-    const retried = await JobQueueService.fail(job, new Error("boom"));
+    const retried = await JobQueueService.fail(job, new Error('boom'));
     expect(retried).toBe(true);
-    expect(job.status).toBe("pending");
-    expect(job.lastError).toBe("boom");
+    expect(job.status).toBe('pending');
+    expect(job.lastError).toBe('boom');
 
     jest.runOnlyPendingTimers();
     jest.useRealTimers();
   });
 
-  it("dead-letters when attempts are exhausted", async () => {
+  it('dead-letters when attempts are exhausted', async () => {
     const job = baseJob();
     job.attempts = 3; // == maxAttempts
 
-    const retried = await JobQueueService.fail(job, new Error("fatal"));
+    const retried = await JobQueueService.fail(job, new Error('fatal'));
     expect(retried).toBe(false);
-    expect(job.status).toBe("failed");
+    expect(job.status).toBe('failed');
 
     const stats = await JobQueueService.getStats();
     expect(stats.dlq).toBe(1);
     expect(stats.byStatus.failed).toBe(1);
 
     const dlqJobs = await JobQueueService.getDeadLetterJobs();
-    expect(dlqJobs.map((j) => j.id)).toContain("j1");
+    expect(dlqJobs.map((j) => j.id)).toContain('j1');
   });
 });

@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, Matches } from "class-validator";
+import { IsString, IsNotEmpty, Matches } from 'class-validator';
 
 /**
  * Data Transfer Object for connecting a Stellar wallet to an artist account.
@@ -16,9 +16,9 @@ import { IsString, IsNotEmpty, Matches } from "class-validator";
  */
 export class ConnectStellarWalletDTO {
   @IsString()
-  @IsNotEmpty({ message: "stellarPublicKey is required." })
+  @IsNotEmpty({ message: 'stellarPublicKey is required.' })
   @Matches(/^G[A-Z2-7]{55}$/, {
-    message: "stellarPublicKey must be a valid Stellar G... address.",
+    message: 'stellarPublicKey must be a valid Stellar G... address.',
   })
   stellarPublicKey!: string;
 }

@@ -6,23 +6,23 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
-} from "typeorm";
-import { User } from "./User";
+} from 'typeorm';
+import { User } from './User';
 
-@Entity("transactions_logs") // pluralize for convention
+@Entity('transactions_logs') // pluralize for convention
 export class TransactionLog {
-  @PrimaryGeneratedColumn("uuid")
+  @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @ManyToOne(() => User, (user) => user.songs, { onDelete: "CASCADE" })
-  @JoinColumn({ name: "user_id" }) // foreign key column
+  @ManyToOne(() => User, (user) => user.songs, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'user_id' }) // foreign key column
   user!: User;
 
   @Column()
-  user_id!: string; 
+  user_id!: string;
 
   @Column()
-  txHash!: string; 
+  txHash!: string;
 
   @Column()
   action!: string;

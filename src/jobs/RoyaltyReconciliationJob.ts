@@ -1,5 +1,5 @@
-import AppDataSource from "../config/db";
-import { RoyaltyPayoutService } from "../services/RoyaltyPayoutService";
+import AppDataSource from '../config/db';
+import { RoyaltyPayoutService } from '../services/RoyaltyPayoutService';
 
 export async function runRoyaltyReconciliationJob(): Promise<void> {
   const service = new RoyaltyPayoutService();
@@ -23,7 +23,7 @@ if (require.main === module) {
       }
     })
     .catch((error) => {
-      console.error("Royalty reconciliation failed:", error);
+      console.error('Royalty reconciliation failed:', error);
       process.exit(1);
     });
 }

@@ -3,9 +3,9 @@
  * Backed by a small in-memory Redis mock so the inverted-index logic is
  * exercised end-to-end without a live Redis.
  */
-import "reflect-metadata";
+import 'reflect-metadata';
 
-jest.mock("../config/redis", () => {
+jest.mock('../config/redis', () => {
   const sets = new Map<string, Set<string>>();
   const strings = new Map<string, string>();
 
@@ -21,7 +21,7 @@ jest.mock("../config/redis", () => {
   const _smembers = (k: string) => Array.from(sets.get(k) ?? []);
   const _set = (k: string, v: string) => {
     strings.set(k, v);
-    return "OK";
+    return 'OK';
   };
   const _get = (k: string) => (strings.has(k) ? strings.get(k)! : null);
   const _del = (k: string) => {
@@ -60,67 +60,67 @@ jest.mock("../config/redis", () => {
   };
 });
 
-import redis from "../config/redis";
-import { SearchIndexService, tokenize } from "../services/SearchIndexService";
+import redis from '../config/redis';
+import { SearchIndexService, tokenize } from '../services/SearchIndexService';
 
 beforeEach(() => (redis as any).__reset());
 
-describe("tokenize", () => {
-  it("lowercases, splits on non-alphanumerics and dedupes", () => {
-    expect(tokenize("Hello, WORLD! hello")).toEqual(["hello", "world"]);
+describe('tokenize', () => {
+  it('lowercases, splits on non-alphanumerics and dedupes', () => {
+    expect(tokenize('Hello, WORLD! hello')).toEqual(['hello', 'world']);
   });
 
-  it("drops single-character tokens and empties", () => {
-    expect(tokenize("a big I O song")).toEqual(["big", "song"]);
+  it('drops single-character tokens and empties', () => {
+    expect(tokenize('a big I O song')).toEqual(['big', 'song']);
   });
 });
 
-describe("SearchIndexService", () => {
+describe('SearchIndexService', () => {
   const songA = {
-    id: "a",
-    title: "Midnight Dreams",
-    genre: "lofi",
-    user: { name: "Luna" },
+    id: 'a',
+    title: 'Midnight Dreams',
+    genre: 'lofi',
+    user: { name: 'Luna' },
   };
   const songB = {
-    id: "b",
-    title: "Midnight City",
-    genre: "synthwave",
-    user: { name: "Neon" },
+    id: 'b',
+    title: 'Midnight City',
+    genre: 'synthwave',
+    user: { name: 'Neon' },
   };
 
-  it("indexes a song and finds it by a title token", async () => {
+  it('indexes a song and finds it by a title token', async () => {
     await SearchIndexService.indexSong(songA);
-    const ids = await SearchIndexService.search("dreams");
-    expect(ids).toEqual(["a"]);
+    const ids = await SearchIndexService.search('dreams');
+    expect(ids).toEqual(['a']);
   });
 
-  it("ranks songs matching more query tokens higher", async () => {
+  it('ranks songs matching more query tokens higher', async () => {
     await SearchIndexService.indexSong(songA); // "midnight dreams"
     await SearchIndexService.indexSong(songB); // "midnight city"
 
     // Both match "midnight"; only A matches "dreams" → A ranks first.
-    const ids = await SearchIndexService.search("midnight dreams");
-    expect(ids[0]).toBe("a");
-    expect(ids).toContain("b");
+    const ids = await SearchIndexService.search('midnight dreams');
+    expect(ids[0]).toBe('a');
+    expect(ids).toContain('b');
   });
 
-  it("returns an empty array on an index miss (caller falls back to DB)", async () => {
+  it('returns an empty array on an index miss (caller falls back to DB)', async () => {
     await SearchIndexService.indexSong(songA);
-    expect(await SearchIndexService.search("nonexistentterm")).toEqual([]);
+    expect(await SearchIndexService.search('nonexistentterm')).toEqual([]);
   });
 
-  it("removes a song from the index", async () => {
+  it('removes a song from the index', async () => {
     await SearchIndexService.indexSong(songA);
-    await SearchIndexService.removeSong("a");
-    expect(await SearchIndexService.search("dreams")).toEqual([]);
+    await SearchIndexService.removeSong('a');
+    expect(await SearchIndexService.search('dreams')).toEqual([]);
   });
 
-  it("re-indexing drops stale tokens from a previous version", async () => {
+  it('re-indexing drops stale tokens from a previous version', async () => {
     await SearchIndexService.indexSong(songA); // "midnight dreams"
-    await SearchIndexService.indexSong({ ...songA, title: "Sunrise" }); // retitled
+    await SearchIndexService.indexSong({ ...songA, title: 'Sunrise' }); // retitled
 
-    expect(await SearchIndexService.search("dreams")).toEqual([]);
-    expect(await SearchIndexService.search("sunrise")).toEqual(["a"]);
+    expect(await SearchIndexService.search('dreams')).toEqual([]);
+    expect(await SearchIndexService.search('sunrise')).toEqual(['a']);
   });
 });

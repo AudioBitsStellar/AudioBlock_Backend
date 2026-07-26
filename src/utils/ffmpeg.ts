@@ -21,10 +21,9 @@
 //   });
 // }
 
-
-import ffmpeg from "fluent-ffmpeg";
-import fs from "fs";
-import path from "path";
+import ffmpeg from 'fluent-ffmpeg';
+import fs from 'fs';
+import path from 'path';
 
 /**
  * Transcodes an MP3 (or any audio) file into HLS format:
@@ -38,19 +37,19 @@ export async function transcodeToHLS(inputPath: string, outputDir: string): Prom
     ffmpeg(inputPath)
       // copy codec (no re-encoding — much faster)
       .outputOptions([
-        "-codec: copy",
-        "-start_number 0",
-        "-hls_time 10",      // 10s per segment
-        "-hls_list_size 0",  // include all segments
-        "-f hls",            // output format
+        '-codec: copy',
+        '-start_number 0',
+        '-hls_time 10', // 10s per segment
+        '-hls_list_size 0', // include all segments
+        '-f hls', // output format
       ])
-      .output(path.join(outputDir, "master.m3u8"))
-      .on("end", () => {
-        console.log("✅ HLS transcoding complete:", outputDir);
+      .output(path.join(outputDir, 'master.m3u8'))
+      .on('end', () => {
+        console.log('✅ HLS transcoding complete:', outputDir);
         resolve();
       })
-      .on("error", (err) => {
-        console.error("❌ FFmpeg error:", err);
+      .on('error', (err) => {
+        console.error('❌ FFmpeg error:', err);
         reject(err);
       })
       .run();

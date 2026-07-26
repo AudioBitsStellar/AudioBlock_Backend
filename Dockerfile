@@ -20,5 +20,11 @@ RUN npm run build
 # Expose port
 EXPOSE 4000
 
+# Liveness probe (Issue #146): container is marked unhealthy if the process
+# stops responding on /health/live. Uses Node's http module so no extra
+# packages (curl/wget) are needed in the image.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:4000/health/live', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
+
 # Start the app
 CMD ["node", "dist/index.js"]

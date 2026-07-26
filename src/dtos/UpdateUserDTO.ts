@@ -1,8 +1,7 @@
-import { IsEmail, IsEnum, IsOptional, IsString, IsNumber } from "class-validator";
-import { UserRole } from "../entities/User";
+import { IsEmail, IsEnum, IsOptional, IsString, IsNumber } from 'class-validator';
+import { UserRole } from '../entities/User';
 
 export class UpdateUserDTO {
-
   @IsOptional()
   @IsString()
   profileImage?: string;
@@ -10,7 +9,6 @@ export class UpdateUserDTO {
   @IsOptional()
   @IsEnum(UserRole)
   role?: UserRole;
-
 
   @IsString()
   walletAddress?: string;

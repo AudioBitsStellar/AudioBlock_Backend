@@ -1,5 +1,13 @@
 # AudioBlocks Backend
 
+[![CI](https://github.com/AudioBitsStellar/AudioBlock_Backend/actions/workflows/ci.yml/badge.svg)](https://github.com/AudioBitsStellar/AudioBlock_Backend/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-ISC-blue.svg)](./LICENSE)
+[![Version](https://img.shields.io/github/package-json/v/AudioBitsStellar/AudioBlock_Backend)](https://github.com/AudioBitsStellar/AudioBlock_Backend)
+[![Coverage](https://img.shields.io/badge/coverage-report-blue)](https://github.com/AudioBitsStellar/AudioBlock_Backend/actions/workflows/ci.yml)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
+[![TypeScript](https://img.shields.io/badge/typescript-5.8-blue)](https://www.typescriptlang.org)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](./CONTRIBUTING.md)
+
 The shared API and processing pipeline behind **AudioBlocks**, a music NFT
 platform on Stellar/Soroban. It handles user authentication, song/album
 upload and transcoding, IPFS metadata pinning, and acts as a **non-custodial
@@ -8,6 +16,7 @@ an artist's behalf without ever holding their private key.
 
 ## Table of Contents
 
+- [Prerequisites](#prerequisites)
 - [Architecture](#architecture)
 - [Tech Stack](#tech-stack)
 - [Project Structure](#project-structure)
@@ -18,8 +27,41 @@ an artist's behalf without ever holding their private key.
 - [Authentication](#authentication)
 - [Environment Variables](#environment-variables)
 - [Getting Started](#getting-started)
+- [Testing](#testing)
+- [Troubleshooting](#troubleshooting)
 - [Scripts](#scripts)
 - [Known Issues / Cleanup Backlog](#known-issues--cleanup-backlog)
+- [Contributing](#contributing)
+
+## Prerequisites
+
+### Required Software
+
+| Software | Version | Purpose |
+|----------|---------|---------|
+| Node.js | >= 20.x | Runtime |
+| npm | >= 9.x | Package manager |
+| PostgreSQL | 15+ | Primary database |
+| Redis | 7+ | Caching, nonces, session state |
+| RabbitMQ | 3+ | Background job queue |
+| ffmpeg | Any recent | Audio transcoding (required for song processing) |
+
+### Optional Software
+
+| Software | Purpose |
+|----------|---------|
+| Docker & Docker Compose | Run all services without local installs |
+| pgAdmin | Database GUI (provided via Docker) |
+
+### Verify Prerequisites
+
+```bash
+node --version    # Should be v20.x or higher
+npm --version     # Should be 9.x or higher
+ffmpeg -version   # Required for HLS transcoding
+psql --version    # PostgreSQL client
+redis-cli ping    # Redis connectivity
+```
 
 ## Architecture
 
@@ -304,6 +346,9 @@ SIGNED_URL_EXPIRES=300
 > or platform's Stellar secret key — on-chain writes are always relayed,
 > never signed server-side.
 
+> See [docs/environment-variables.md](docs/environment-variables.md) for the
+> complete reference with descriptions and defaults.
+
 ### Updating Soroban Contract Addresses
 
 `src/config/soroban.ts` treats the five AudioBlocks Soroban contract IDs as
@@ -481,16 +526,30 @@ tables and indexes.
 
 ### With Docker (recommended)
 
+Docker Compose brings up all services (PostgreSQL, Redis, RabbitMQ, pgAdmin,
+Prometheus, Grafana) plus the API with hot-reload.
+
 ```bash
-git clone <repo-url>
+git clone https://github.com/AudioBitsStellar/AudioBlock_Backend.git
 cd AudioBlock_Backend
-cp .env.example .env.docker   # fill in the values above
+
+# Copy and edit the environment file
+cp .env.example .env.docker
+# Edit .env.docker with your actual values (see Environment Variables above)
+
+# Start all services
 docker compose up --build
 ```
 
-This brings up Postgres, Redis, RabbitMQ, pgAdmin (`localhost:5050`), and the
-API itself (`localhost:4000`) with hot-reload enabled via
-`docker-compose.override.yml`.
+The API is available at `http://localhost:4000`. Additional services:
+
+| Service | URL |
+|---------|-----|
+| API | `http://localhost:4000` |
+| pgAdmin | `http://localhost:5050` |
+| RabbitMQ Management | `http://localhost:15672` |
+| Prometheus | `http://localhost:9090` |
+| Grafana | `http://localhost:3000` |
 
 ### Without Docker
 
@@ -498,10 +557,112 @@ Requires a running PostgreSQL, Redis, and RabbitMQ instance, plus the system
 `ffmpeg` binary installed.
 
 ```bash
+# 1. Clone and install
+git clone https://github.com/AudioBitsStellar/AudioBlock_Backend.git
+cd AudioBlock_Backend
 npm install
-cp .env.example .env   # fill in the values above
+
+# 2. Configure environment
+cp .env.example .env
+# Edit .env with your database, Redis, RabbitMQ, and other credentials
+
+# 3. Start the development server
 npm run dev
 ```
+
+The server starts at `http://localhost:4000` with hot-reload.
+
+### First-Time Setup
+
+1. **Database**: Ensure PostgreSQL is running and the database specified in
+   `POSTGRES_DATABASE` exists. On first boot with `NODE_ENV=development`,
+   TypeORM will auto-create/update tables from entities.
+
+2. **Seed genres**: The genre seeder runs automatically on every boot. To
+   re-run manually:
+   ```bash
+   npm run seed:genres
+   ```
+
+3. **Verify**: Check the health endpoint:
+   ```bash
+   curl http://localhost:4000/health
+   ```
+
+## Testing
+
+### Running Tests
+
+```bash
+# Run the full test suite
+npm test
+
+# Run tests in watch mode (re-runs on file changes)
+npm run test:watch
+
+# Run a specific test file
+npm test -- src/__tests__/health.test.ts
+```
+
+### Linting and Formatting
+
+```bash
+# Run ESLint
+npm run lint
+
+# Auto-fix lint issues
+npm run lint:fix
+
+# Check code formatting with Prettier
+npm run format:check
+
+# Auto-format code
+npm run format
+```
+
+## Troubleshooting
+
+### Common Issues
+
+**"Missing required environment variables" on startup**
+- Copy `.env.example` to `.env` and fill in all required values.
+- See [docs/environment-variables.md](docs/environment-variables.md) for the
+  complete reference.
+
+**"ECONNREFUSED" to PostgreSQL**
+- Ensure PostgreSQL is running on the host/port specified in `POSTGRES_HOST`
+  and `POSTGRES_PORT`.
+- If using Docker, check that the `db` container is healthy:
+  `docker compose ps`
+
+**"ECONNREFUSED" to Redis**
+- Ensure Redis is running on `REDIS_HOST:REDIS_PORT`.
+- Docker: `docker compose logs redis`
+
+**"ECONNREFUSED" to RabbitMQ**
+- RabbitMQ is optional for basic API operations. The API starts without it,
+  but background song processing won't work.
+- Docker: `docker compose logs rabbitmq`
+- Ensure `RABBITMQ_URL` is set correctly.
+
+**ffmpeg not found**
+- Install ffmpeg: `apt install ffmpeg` (Ubuntu) or `brew install ffmpeg` (macOS)
+- The song processor worker requires ffmpeg for HLS transcoding.
+
+**Songs stuck in "processing" status**
+- Check that the song processor worker is running:
+  `npm run worker` (standalone) or check Docker logs.
+- Check RabbitMQ is connected and the `song_processing` queue has consumers.
+
+**Port 4000 already in use**
+- Change the `PORT` environment variable or stop the other process:
+  `lsof -i :4000`
+
+### Getting Help
+
+- Check the [GitHub Issues](https://github.com/AudioBitsStellar/AudioBlock_Backend/issues)
+- Read the [CONTRIBUTING.md](CONTRIBUTING.md) guide
+- Review the [Architecture Decision Records](docs/adrs/) for design context
 
 ## Scripts
 
@@ -521,8 +682,7 @@ npm run dev
 
 ## Known Issues / Cleanup Backlog
 
-- `src/routes/twitterRoutesOld.ts` and `src/workers/transcode.worker.ts` are
-  unused/superseded code paths still present in the repo.
+- `src/workers/transcode.worker.ts` is an unused/superseded code path still present in the repo.
 - `GET /redis-test` in `src/app.ts` is a debug-only endpoint with no auth —
   should be removed before production use.
 - `UserController.ts` exists with several methods (`getAllUsers`,
@@ -530,3 +690,7 @@ npm run dev
 - A handful of variables in `.env.example` (`REDIS_URL`, `JWT_EXPIRER_AT`,
   `PRIVATE_KEY`, `PRIVATE_KEY_2`, several OAuth1-style Twitter vars) are not
   currently read by any code.
+
+## Contributing
+
+Please read our [Contributing Guide](CONTRIBUTING.md) for details on our code of conduct, and the process for submitting pull requests to us.
