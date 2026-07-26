@@ -20,6 +20,7 @@ import userRoutes from './routes/userRoutes';
 import marketplaceRoutes from './routes/marketplaceRoutes';
 import adminRoutes from './routes/adminRoutes';
 import healthRoutes from './routes/healthRoutes';
+import albumRoutes from './routes/AlbumRoutes';
 import { getPoolStats, checkDbHealth } from './services/DbPoolMonitor';
 import { dbConnectionState } from './services/DatabaseConnectionManager';
 
@@ -122,6 +123,9 @@ app.use('/api/wallet', walletRoutes);
 
 // Song wallet
 app.use('/api/song', SongRoutes);
+
+// Album listing (paginated)
+app.use('/api/album', albumRoutes);
 
 // Marketplace Soroban relay (list + buy)
 app.use('/api/marketplace', marketplaceRoutes);
