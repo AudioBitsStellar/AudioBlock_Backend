@@ -29,12 +29,13 @@ export function formatValidationErrors(errors: ValidationError[]): IValidationFo
 export function handleError(res: Response, error: unknown): void {
   // Handle AppError with structured response
   if (error instanceof AppError) {
-    return res.status(error.statusCode).json({
+    res.status(error.statusCode).json({
       success: false,
       message: error.message,
       type: error.type,
       ...(error.details && { details: error.details }),
     });
+    return;
   }
 
   if (error instanceof Error) {
