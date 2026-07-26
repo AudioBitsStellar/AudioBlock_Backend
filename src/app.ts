@@ -18,7 +18,7 @@ import marketplaceRoutes from "./routes/marketplaceRoutes";
 import adminRoutes from "./routes/adminRoutes";
 import AppDataSource from "./config/db";
 import { getPoolStats, checkDbHealth } from "./services/DbPoolMonitor";
-
+import { createBatchRoutes } from "./routes/BatchRoutes";
 
 // Route imports
 
@@ -103,6 +103,9 @@ app.use("/api/marketplace", marketplaceRoutes);
 
 // Admin moderation routes
 app.use("/api/admin", adminRoutes);
+
+// Batch endpoint — combine multiple API calls into one request
+app.use("/api/batch", createBatchRoutes(app));
 
 
 //TWITTER CALLBACK ROUTE
