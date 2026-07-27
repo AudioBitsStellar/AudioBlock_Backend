@@ -1,0 +1,9 @@
+{
+  "type": "object",
+  "required": ["status", "timestamp", "uptime"],
+  "properties": {
+    "status": { "type": "string" },
+    "timestamp": { "type": "string" },
+    "uptime": { "type": "number" }
+  }
+}

@@ -205,6 +205,27 @@ export const BLOCKCHAIN_REGEX = {
 } as const;
 
 // ============================================================================
+// REQUEST BODY SIZE LIMITS (Issue #109)
+// ============================================================================
+
+/**
+ * Max size for parsed JSON request bodies (application/json), configurable
+ * via JSON_BODY_LIMIT (e.g. "1mb", "500kb" — any string express.json()'s
+ * `limit` option accepts). Small because JSON bodies here are metadata
+ * (song details, profile fields, etc.), never raw file content — those go
+ * through multer with their own per-route limits below.
+ */
+export const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT ?? '1mb';
+
+/**
+ * Max size for parsed application/x-www-form-urlencoded bodies, configurable
+ * via URLENCODED_BODY_LIMIT. Generous (50MB) to stay consistent with the
+ * largest multipart file upload limit (MAX_SONG_FILE_SIZE_BYTES) in case a
+ * client submits a large form field this way instead of multipart.
+ */
+export const URLENCODED_BODY_LIMIT = process.env.URLENCODED_BODY_LIMIT ?? '50mb';
+
+// ============================================================================
 // FILE UPLOAD LIMITS
 // ============================================================================
 

@@ -3,7 +3,7 @@ module.exports = {
   preset: "ts-jest",
   testEnvironment: "node",
   roots: ["<rootDir>/src", "<rootDir>/tests"],
-  testMatch: ["**/__tests__/**/*.test.ts", "**/tests/**/*.test.ts"],
+  testMatch: ["**/__tests__/**/*.test.ts", "**/*.test.ts"],
   moduleNameMapper: {
     "^reflect-metadata$": "<rootDir>/node_modules/reflect-metadata",
   },
