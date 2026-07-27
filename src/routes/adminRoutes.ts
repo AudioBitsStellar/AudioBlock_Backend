@@ -11,6 +11,10 @@ router.use(requireRoles(UserRole.ADMIN));
 router.patch('/song/:id/flag', SongController.flagSong);
 router.patch('/song/:id/unflag', SongController.unflagSong);
 
+// Manual retry for failed song processing (Issues #123, #125)
+router.post('/songs/:id/retry', SongController.retryFailedSong);
+router.post('/song/:id/retry', SongController.retryFailedSong);
+
 // Search index maintenance (Issue #135)
 router.post('/search/rebuild', SongController.rebuildSearchIndex);
 
