@@ -260,6 +260,79 @@ export class AuthController {
     }
   };
 
+  verifyTwoFactor = async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ success: false, message: 'Unauthorized' });
+      }
+
+      const { code } = req.body;
+      if (!code) {
+        return res.status(400).json({ success: false, message: 'Verification code is required' });
+      }
+
+      await this.authService.verifyTwoFactor(userId, code);
+      res.status(200).json({ success: true, message: 'Two-factor authentication verified' });
+    } catch (error) {
+      logger.error(
+        { reqId: (req as any).id, route: req.path, err: error },
+        'verifyTwoFactor error',
+      );
+      this.handleError(res, error);
+    }
+  };
+
+  disableTwoFactor = async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ success: false, message: 'Unauthorized' });
+      }
+
+      const { code } = req.body;
+      if (!code) {
+        return res
+          .status(400)
+          .json({ success: false, message: 'Two-factor code is required to disable' });
+      }
+
+      await this.authService.disableTwoFactor(userId, code);
+      res.status(200).json({ success: true, message: 'Two-factor authentication disabled' });
+    } catch (error) {
+      logger.error(
+        { reqId: (req as any).id, route: req.path, err: error },
+        'disableTwoFactor error',
+      );
+      this.handleError(res, error);
+    }
+  };
+
+  validateTwoFactor = async (req: Request, res: Response) => {
+    try {
+      const { partialToken, code } = req.body;
+      if (!partialToken) {
+        return res.status(400).json({ success: false, message: 'Partial token is required' });
+      }
+      if (!code) {
+        return res.status(400).json({ success: false, message: 'Verification code is required' });
+      }
+
+      const result = await this.authService.completeTwoFactorLogin(partialToken, code);
+      res.status(200).json({
+        success: true,
+        message: 'Two-factor authentication validated',
+        ...result,
+      });
+    } catch (error) {
+      logger.error(
+        { reqId: (req as any).id, route: req.path, err: error },
+        'validateTwoFactor error',
+      );
+      this.handleError(res, error);
+    }
+  };
+
   verifyEmail = async (req: Request, res: Response) => {
     try {
       const token = req.params.token as string;
