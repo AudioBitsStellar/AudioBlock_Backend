@@ -27,6 +27,9 @@ router.post('/login-email', authRateLimiter, authController.loginWithEmail);
 router.post('/refresh', authRateLimiter, authController.refreshToken);
 router.post('/logout', authRateLimiter, authController.logout);
 router.post('/2fa/enable', requireAuth, authController.enableTwoFactor);
+router.post('/2fa/verify', requireAuth, authController.verifyTwoFactor);
+router.post('/2fa/disable', requireAuth, authController.disableTwoFactor);
+router.post('/2fa/validate', authRateLimiter, authController.validateTwoFactor);
 
 // Email verification
 router.get('/verify-email/:token', authController.verifyEmail);

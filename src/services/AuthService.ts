@@ -15,13 +15,14 @@ import { EmailService } from './EmailService';
 import { AppError } from '../errors/AppError';
 
 const PASSWORD_SALT_ROUNDS = 12;
-const RECOVERY_CODE_COUNT = 10;
+const RECOVERY_CODE_COUNT = 8;
 const RECOVERY_CODE_BYTES = 5;
 const REFRESH_TOKEN_EXPIRY_SECONDS = 7 * 24 * 60 * 60;
+const PARTIAL_TOKEN_EXPIRY_SECONDS = 300; // 5 minutes for 2FA step
 
 type LoginWithEmailResult =
   | { user: User; token: string; refreshToken: string; twoFactorRequired?: false }
-  | { twoFactorRequired: true; user: Pick<User, 'id' | 'email' | 'role'> };
+  | { twoFactorRequired: true; partialToken: string; user: Pick<User, 'id' | 'email' | 'role'> };
 
 export class AuthService {
   private userRepo: Repository<User>;
@@ -127,6 +128,7 @@ export class AuthService {
       if (!dto.twoFactorCode && !dto.recoveryCode) {
         return {
           twoFactorRequired: true,
+          partialToken: this.generatePartialToken(user.id),
           user: { id: user.id, email: user.email, role: user.role },
         };
       }
@@ -136,7 +138,7 @@ export class AuthService {
         : await this.verifyAndConsumeRecoveryCode(user, dto.recoveryCode as string);
 
       if (!verified) {
-        throw new Error('Invalid two-factor code');
+        throw AppError.authentication('Invalid two-factor code');
       }
     }
 
@@ -293,6 +295,110 @@ export class AuthService {
     const refreshToken = this.signRefreshToken(user);
     await this.storeRefreshToken(user.id, refreshToken);
     return { user, token, refreshToken };
+  }
+
+  private generatePartialToken(userId: string): string {
+    const JWT_SECRET = process.env.JWT_SECRET as string;
+    if (!JWT_SECRET) {
+      throw AppError.businessLogic('JWT_SECRET not set in environment variables');
+    }
+
+    return jwt.sign({ id: userId, type: '2fa_partial' }, JWT_SECRET, {
+      expiresIn: PARTIAL_TOKEN_EXPIRY_SECONDS,
+    });
+  }
+
+  /**
+   * Verify a TOTP code during 2FA enrollment. Confirms the user scanned
+   * the QR code and can generate valid codes from their authenticator app.
+   */
+  async verifyTwoFactor(userId: string, code: string): Promise<void> {
+    const user = await this.userRepo.findOneBy({ id: userId });
+    if (!user) {
+      throw AppError.notFound('User not found');
+    }
+
+    if (!user.twoFactorSecret) {
+      throw AppError.businessLogic('Two-factor authentication not enrolled');
+    }
+
+    if (!this.verifyTotpCode(user, code)) {
+      throw AppError.authentication('Invalid two-factor code');
+    }
+  }
+
+  /**
+   * Disable 2FA for a user. Requires a valid TOTP code or recovery code
+   * to confirm the request is legitimate.
+   */
+  async disableTwoFactor(
+    userId: string,
+    code: string,
+  ): Promise<void> {
+    const user = await this.userRepo.findOneBy({ id: userId });
+    if (!user) {
+      throw AppError.notFound('User not found');
+    }
+
+    if (!user.twoFactorEnabled) {
+      throw AppError.businessLogic('Two-factor authentication is not enabled');
+    }
+
+    const verified = this.verifyTotpCode(user, code);
+
+    if (!verified) {
+      throw AppError.authentication('Invalid two-factor code');
+    }
+
+    user.twoFactorEnabled = false;
+    user.twoFactorSecret = undefined;
+    user.twoFactorRecoveryCodeHashes = undefined;
+    await this.userRepo.save(user);
+  }
+
+  /**
+   * Complete a 2FA-protected login by validating the partial token and
+   * TOTP code. Returns a full JWT and refresh token on success.
+   */
+  async completeTwoFactorLogin(
+    partialToken: string,
+    code: string,
+  ): Promise<{ token: string; refreshToken: string }> {
+    const JWT_SECRET = process.env.JWT_SECRET as string;
+    if (!JWT_SECRET) {
+      throw AppError.businessLogic('JWT_SECRET not set in environment variables');
+    }
+
+    let payload: JwtPayload;
+    try {
+      payload = jwt.verify(partialToken, JWT_SECRET) as JwtPayload;
+    } catch {
+      throw AppError.authentication('Invalid or expired partial token');
+    }
+
+    if (payload.type !== '2fa_partial') {
+      throw AppError.authentication('Invalid token type');
+    }
+
+    const userId = payload.id as string;
+    const user = await this.userRepo.findOneBy({ id: userId });
+    if (!user) {
+      throw AppError.notFound('User not found');
+    }
+
+    if (!user.twoFactorEnabled) {
+      throw AppError.businessLogic('Two-factor authentication is not enabled for this user');
+    }
+
+    const verified = this.verifyTotpCode(user, code);
+    if (!verified) {
+      throw AppError.authentication('Invalid two-factor code');
+    }
+
+    const token = this.signToken(user);
+    const refreshToken = this.signRefreshToken(user);
+    await this.storeRefreshToken(user.id, refreshToken);
+    return { token, refreshToken };
   }
 
   private signRefreshToken(user: User): string {
