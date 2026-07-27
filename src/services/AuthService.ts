@@ -5,20 +5,22 @@ import { LoginWithEmailDTO } from '../dtos/LoginWithEmailDTO';
 import { Repository } from 'typeorm';
 import { User } from '../entities/User';
 import AppDataSource from '../config/db';
-import jwt from 'jsonwebtoken';
+import jwt, { JwtPayload } from 'jsonwebtoken';
 import redis from '../config/redis';
 import { randomBytes } from 'crypto';
 import bcrypt from 'bcrypt';
 import { generateSecret, generateURI, verifySync } from 'otplib';
 import QRCode from 'qrcode';
 import { EmailService } from './EmailService';
+import { AppError } from '../errors/AppError';
 
 const PASSWORD_SALT_ROUNDS = 12;
 const RECOVERY_CODE_COUNT = 10;
 const RECOVERY_CODE_BYTES = 5;
+const REFRESH_TOKEN_EXPIRY_SECONDS = 7 * 24 * 60 * 60;
 
 type LoginWithEmailResult =
-  | { user: User; token: string; twoFactorRequired?: false }
+  | { user: User; token: string; refreshToken: string; twoFactorRequired?: false }
   | { twoFactorRequired: true; user: Pick<User, 'id' | 'email' | 'role'> };
 
 export class AuthService {
@@ -57,7 +59,9 @@ export class AuthService {
   }
 
   /** Registers a user with email + password instead of a wallet signature. */
-  async registerWithEmail(data: RegisterWithEmailDTO): Promise<{ user: User; token: string }> {
+  async registerWithEmail(
+    data: RegisterWithEmailDTO,
+  ): Promise<{ user: User; token: string; refreshToken: string }> {
     const dto = Object.assign(new RegisterWithEmailDTO(), data);
     const errors = await validate(dto);
     if (errors.length > 0) {
@@ -67,7 +71,7 @@ export class AuthService {
     }
 
     if (await this.userRepo.findOneBy({ email: dto.email })) {
-      throw new Error('User already exists');
+      throw AppError.conflict('User already exists');
     }
 
     const passwordHash = await bcrypt.hash(dto.password, PASSWORD_SALT_ROUNDS);
@@ -94,7 +98,9 @@ export class AuthService {
     );
 
     const token = this.signToken(savedUser);
-    return { user: savedUser, token };
+    const refreshToken = this.signRefreshToken(savedUser);
+    await this.storeRefreshToken(savedUser.id, refreshToken);
+    return { user: savedUser, token, refreshToken };
   }
 
   /** Logs in a user with email + password instead of a wallet signature. */
@@ -109,12 +115,12 @@ export class AuthService {
 
     const user = await this.userRepo.findOneBy({ email: dto.email });
     if (!user || !user.passwordHash) {
-      throw new Error('Invalid email or password');
+      throw AppError.authentication('Invalid email or password');
     }
 
     const matches = await bcrypt.compare(dto.password, user.passwordHash);
     if (!matches) {
-      throw new Error('Invalid email or password');
+      throw AppError.authentication('Invalid email or password');
     }
 
     if (user.twoFactorEnabled) {
@@ -255,7 +261,7 @@ export class AuthService {
    * @returns User entity and JWT token.
    * @throws {Error} If nonce invalid/expired, user not found, or validation fails.
    */
-  async login(data: JWTDTO): Promise<{ user: User; token: string }> {
+  async login(data: JWTDTO): Promise<{ user: User; token: string; refreshToken: string }> {
     const dto = Object.assign(new JWTDTO(), data);
     const errors = await validate(dto);
 
@@ -284,12 +290,90 @@ export class AuthService {
     }
 
     const token = this.signToken(user);
-    return { user, token };
+    const refreshToken = this.signRefreshToken(user);
+    await this.storeRefreshToken(user.id, refreshToken);
+    return { user, token, refreshToken };
+  }
+
+  private signRefreshToken(user: User): string {
+    const JWT_SECRET = process.env.JWT_SECRET as string;
+    if (!JWT_SECRET) {
+      throw AppError.businessLogic('JWT_SECRET not set in environment variables');
+    }
+
+    const payload = {
+      id: user.id,
+      type: 'refresh',
+    };
+
+    return jwt.sign(payload, JWT_SECRET, { expiresIn: `${REFRESH_TOKEN_EXPIRY_SECONDS}s` });
+  }
+
+  private getRefreshTokenKey(userId: string): string {
+    return `refresh:${userId}`;
+  }
+
+  private async storeRefreshToken(userId: string, refreshToken: string): Promise<void> {
+    await redis.set(
+      this.getRefreshTokenKey(userId),
+      refreshToken,
+      'EX',
+      REFRESH_TOKEN_EXPIRY_SECONDS,
+    );
+  }
+
+  private async verifyRefreshToken(token: string): Promise<JwtPayload> {
+    const JWT_SECRET = process.env.JWT_SECRET as string;
+    if (!JWT_SECRET) {
+      throw AppError.businessLogic('JWT_SECRET not set in environment variables');
+    }
+
+    try {
+      return jwt.verify(token, JWT_SECRET) as JwtPayload;
+    } catch (error) {
+      throw AppError.authentication('Invalid refresh token');
+    }
+  }
+
+  async refreshToken(token: string): Promise<{ token: string; refreshToken: string }> {
+    const payload = await this.verifyRefreshToken(token);
+    const userId = payload?.id as string;
+    if (!userId) {
+      throw AppError.authentication('Invalid refresh token');
+    }
+
+    const currentRefreshToken = await redis.get(this.getRefreshTokenKey(userId));
+    if (!currentRefreshToken || currentRefreshToken !== token) {
+      throw AppError.authentication('Invalid refresh token');
+    }
+
+    const user = await this.userRepo.findOneBy({ id: userId });
+    if (!user) {
+      throw AppError.authentication('Invalid refresh token');
+    }
+
+    const newToken = this.signToken(user);
+    const newRefreshToken = this.signRefreshToken(user);
+    await this.storeRefreshToken(user.id, newRefreshToken);
+    return { token: newToken, refreshToken: newRefreshToken };
+  }
+
+  async logout(refreshToken: string): Promise<void> {
+    const payload = await this.verifyRefreshToken(refreshToken);
+    const userId = payload?.id as string;
+    if (!userId) {
+      throw AppError.authentication('Invalid refresh token');
+    }
+
+    const currentRefreshToken = await redis.get(this.getRefreshTokenKey(userId));
+    if (!currentRefreshToken || currentRefreshToken !== refreshToken) {
+      throw AppError.authentication('Invalid refresh token');
+    }
+
+    await redis.del(this.getRefreshTokenKey(userId));
   }
 
   /**
-   * Verify a user's email address using the token sent during registration.
-   *
    * @param token - The email verification token.
    * @returns Updated User entity with emailVerified set to true.
    * @throws {Error} If token invalid or expired.
