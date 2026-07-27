@@ -45,6 +45,11 @@ export const requestLoggerMiddleware: RequestHandler = (
         status: res.statusCode,
         durationMs: duration,
         ip: req.ip,
+        // #109 — surfaces large payloads for monitoring even when they're
+        // within the configured limit (and thus never hit the 413 path).
+        requestBodyBytes: req.headers['content-length']
+          ? Number(req.headers['content-length'])
+          : undefined,
       },
       `${req.method} ${req.originalUrl} ${res.statusCode} (${duration}ms)`,
     );
