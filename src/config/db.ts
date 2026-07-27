@@ -7,6 +7,7 @@ import { TransactionLog } from '../entities/TransactionLog';
 import { Genre } from '../entities/Genre';
 import { Album } from '../entities/Album';
 import { RoyaltyPayout } from '../entities/RoyaltyPayout';
+import { RoyaltyTemplate } from '../entities/RoyaltyTemplate';
 
 dotenv.config();
 
@@ -61,7 +62,7 @@ const AppDataSource = new DataSource({
           idleTimeoutMillis: dbPoolConfig.idleTimeoutMillis,
         }
       : undefined,
-  entities: [User, Song, TransactionLog, Genre, Album, RoyaltyPayout],
+  entities: [User, Song, TransactionLog, Genre, Album, RoyaltyPayout, RoyaltyTemplate],
   migrations: ['src/migrations/*.ts', 'dist/migrations/*.js'],
   migrationsTableName: 'migrations',
 });
