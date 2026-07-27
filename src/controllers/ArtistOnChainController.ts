@@ -19,7 +19,7 @@ export class ArtistOnChainController {
         data: { stellarPublicKey: user.stellarPublicKey },
       });
     } catch (error) {
-      handleError(res, error);
+      handleError(req, res, error);
     }
   };
 
@@ -30,7 +30,7 @@ export class ArtistOnChainController {
       const prepared = await this.artistService.prepareArtistOnChainSetup(userId, cid);
       return res.status(200).json({ success: true, data: prepared });
     } catch (error) {
-      handleError(res, error);
+      handleError(req, res, error);
     }
   };
 
@@ -41,7 +41,7 @@ export class ArtistOnChainController {
       const result = await this.artistService.submitArtistOnChainSetup(userId, signedXdr);
       return res.status(200).json({ success: true, data: result });
     } catch (error) {
-      handleOnChainError(res, error);
+      handleOnChainError(req, res, error);
     }
   };
 }
