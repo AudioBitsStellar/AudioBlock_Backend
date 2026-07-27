@@ -9,8 +9,8 @@ import { AuthService } from '../services/AuthService';
 import { UserService } from './../services/UserService';
 import { Request, Response } from 'express';
 import { validate } from 'class-validator';
-import { formatValidationErrors, handleError } from '../utils/helpers';
-import redis from '../config/redis';
+import { formatValidationErrors } from '../utils/helpers';
+import { AppError } from '../errors/AppError';
 import logger from '../config/logger';
 
 export class AuthController {
@@ -32,7 +32,7 @@ export class AuthController {
       });
     } catch (error) {
       logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'getUserNonce error');
-      handleError(res, error);
+      this.handleError(res, error);
     }
   };
 
@@ -208,6 +208,36 @@ export class AuthController {
     }
   };
 
+  refreshToken = async (req: Request, res: Response) => {
+    try {
+      const { refreshToken } = req.body;
+      if (!refreshToken) {
+        return res.status(400).json({ success: false, message: 'Refresh token is required' });
+      }
+
+      const result = await this.authService.refreshToken(refreshToken);
+      res.status(200).json({ success: true, message: 'Token refreshed successfully', ...result });
+    } catch (error) {
+      logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'refreshToken error');
+      this.handleError(res, error);
+    }
+  };
+
+  logout = async (req: Request, res: Response) => {
+    try {
+      const { refreshToken } = req.body;
+      if (!refreshToken) {
+        return res.status(400).json({ success: false, message: 'Refresh token is required' });
+      }
+
+      await this.authService.logout(refreshToken);
+      res.status(200).json({ success: true, message: 'Logged out successfully' });
+    } catch (error) {
+      logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'logout error');
+      this.handleError(res, error);
+    }
+  };
+
   enableTwoFactor = async (req: Request, res: Response) => {
     try {
       const userId = (req as any).user?.id;
@@ -273,15 +303,22 @@ export class AuthController {
   };
 
   private handleError(res: Response, error: unknown): void {
+    if (error instanceof AppError) {
+      logger.error({ err: error }, error.message);
+      return res.status(error.statusCode).json({ message: error.message, details: error.details });
+    }
+
     if (error instanceof Error) {
       logger.error({ err: error }, error.message);
-      res.status(400).json({ message: error.message });
-    } else if (typeof error === 'string') {
-      logger.error({ err: error }, error);
-      res.status(400).json({ message: error });
-    } else {
-      logger.error({ err: error }, 'Unknown error');
-      res.status(500).json({ message: 'Internal server error' });
+      return res.status(400).json({ message: error.message });
     }
+
+    if (typeof error === 'string') {
+      logger.error({ err: error }, error);
+      return res.status(400).json({ message: error });
+    }
+
+    logger.error({ err: error }, 'Unknown error');
+    res.status(500).json({ message: 'Internal server error' });
   }
 }

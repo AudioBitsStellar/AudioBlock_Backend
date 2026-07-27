@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "jest",
+    "test:integration": "jest --runInBand tests/integration/**/*.test.ts",
     "test:watch": "jest --watch",
     "test:dynamic": "ts-node-esm src/scripts/dynamic.ts",
     "seed:genres": "ts-node src/seeders/genre.seeder.ts",
@@ -100,6 +101,8 @@
     "typescript": "^5.8.3",
     "@types/js-yaml": "^4.0.9",
     "@types/swagger-ui-express": "^4.1.8",
-    "typescript-eslint": "^8.65.0"
+    "typescript-eslint": "^8.65.0",
+    "supertest": "^6.3.3",
+    "@types/supertest": "^2.0.12"
   }
 }
