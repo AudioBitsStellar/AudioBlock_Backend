@@ -8,6 +8,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { User } from './User';
+import { TemplateSplit } from './RoyaltyTemplate';
 
 @Entity('songs') // pluralize for convention
 export class Song {
@@ -89,6 +90,9 @@ export class Song {
 
   @Column({ type: 'text', nullable: true })
   flagReason!: string | null;
+
+  @Column('simple-json', { nullable: true })
+  royaltySplits?: TemplateSplit[];
 
   @CreateDateColumn()
   createdAt!: Date;

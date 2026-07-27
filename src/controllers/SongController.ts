@@ -106,6 +106,23 @@ export class SongController {
     }
   };
 
+  static applyTemplate = async (req: Request, res: Response) => {
+    try {
+      const songId = req.params.id as string;
+      const userId = (req as any).user?.id as string;
+      const { templateId } = req.body;
+
+      if (!templateId) {
+        return res.status(400).json({ success: false, message: 'templateId is required' });
+      }
+
+      const song = await songService.applyTemplate(songId, templateId, userId);
+      res.status(200).json({ success: true, data: song });
+    } catch (error) {
+      handleError(res, error);
+    }
+  };
+
   static rebuildSearchIndex = async (req: Request, res: Response) => {
     try {
       const indexed = await songService.rebuildSearchIndex();

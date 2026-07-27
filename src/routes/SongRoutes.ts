@@ -145,4 +145,7 @@ router.post(
   SongController.submitMint,
 );
 
+// Apply royalty split template to a song (Issue #98)
+router.post('/:id/apply-template', authArtistMiddleware, SongController.applyTemplate);
+
 export default router;

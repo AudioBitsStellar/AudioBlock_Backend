@@ -21,6 +21,7 @@ import marketplaceRoutes from './routes/marketplaceRoutes';
 import adminRoutes from './routes/adminRoutes';
 import healthRoutes from './routes/healthRoutes';
 import albumRoutes from './routes/AlbumRoutes';
+import royaltyTemplateRoutes from './routes/royaltyTemplateRoutes';
 import { getPoolStats, checkDbHealth } from './services/DbPoolMonitor';
 import { dbConnectionState } from './services/DatabaseConnectionManager';
 import { JSON_BODY_LIMIT, URLENCODED_BODY_LIMIT } from './config/constants';
@@ -132,6 +133,9 @@ app.use('/api/song', SongRoutes);
 
 // Album listing (paginated)
 app.use('/api/album', albumRoutes);
+
+// Royalty split templates (Issue #98)
+app.use('/api/royalty-templates', royaltyTemplateRoutes);
 
 // Marketplace Soroban relay (list + buy)
 app.use('/api/marketplace', marketplaceRoutes);
