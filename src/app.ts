@@ -22,6 +22,8 @@ import adminRoutes from './routes/adminRoutes';
 import healthRoutes from './routes/healthRoutes';
 import { getPoolStats, checkDbHealth } from './services/DbPoolMonitor';
 import { dbConnectionState } from './services/DatabaseConnectionManager';
+import { JSON_BODY_LIMIT, URLENCODED_BODY_LIMIT } from './config/constants';
+import { isPayloadTooLargeError } from './middlewares/bodySizeLimit';
 
 // Route imports
 
@@ -63,7 +65,11 @@ app.use(
   }),
 );
 
-app.use(express.json());
+// #109 — explicit size limits so an oversized body is rejected with a clear
+// 413 before it's ever fully buffered/parsed into memory, rather than
+// relying on body-parser's un-configured (100kb) default.
+app.use(express.json({ limit: JSON_BODY_LIMIT }));
+app.use(express.urlencoded({ extended: true, limit: URLENCODED_BODY_LIMIT }));
 
 // Add timeout configurations
 app.use((req, res, next) => {
@@ -130,7 +136,7 @@ app.use('/api/marketplace', marketplaceRoutes);
 app.use('/api/admin', adminRoutes);
 
 // User profile routes
-app.use("/api/user", userRoutes);
+app.use('/api/user', userRoutes);
 
 //TWITTER CALLBACK ROUTE
 app.use('/api/auth/twitter', twitterRoutes);
@@ -142,7 +148,7 @@ if (fs.existsSync(openapiPath)) {
   app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openapiDoc));
 }
 
-if (process.env.NODE_ENV !== "production") {
+if (process.env.NODE_ENV !== 'production') {
   app.get('/redis-test', async (req, res) => {
     await redis.set('greeting', 'hello world');
     const value = await redis.get('greeting');
@@ -160,7 +166,8 @@ const circuitBreakerMiddleware: RequestHandler = (req, res, next) => {
       res.setHeader('Retry-After', '30');
       return res.status(503).json({
         error: 'Service Unavailable',
-        message: 'Database connection unavailable — write operations suspended. Please try again later.',
+        message:
+          'Database connection unavailable — write operations suspended. Please try again later.',
       });
     }
   }
@@ -174,6 +181,17 @@ const customErrorHandler: ErrorRequestHandler = (err, req, res, _next) => {
     { reqId: (req as any).id, err, route: req.originalUrl, method: req.method },
     'Unhandled error',
   );
+
+  // #109 — express.json()/express.urlencoded() reject a body over their
+  // configured `limit` with a body-parser error (type "entity.too.large"),
+  // which without this branch falls through to the generic 500 handler
+  // below and hides the real, client-fixable cause.
+  if (isPayloadTooLargeError(err)) {
+    return res.status(413).json({
+      error: 'Payload Too Large',
+      message: 'Request body exceeds the maximum allowed size.',
+    });
+  }
 
   // Multer file-size limit exceeded
   if (err.name === 'MulterError' && err.code === 'LIMIT_FILE_SIZE') {
