@@ -18,6 +18,7 @@ export interface ValidatedEnv {
   SOROBAN_NETWORK: string;
   PINATA_JWT: string;
   PINATA_GATEWAY: string;
+  ALLOWED_ORIGINS?: string;
 }
 
 const requiredVars: (keyof ValidatedEnv)[] = [

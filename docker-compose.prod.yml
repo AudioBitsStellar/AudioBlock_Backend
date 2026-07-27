@@ -4,6 +4,9 @@ services:
     command: sh -c "npm start"
     environment:
       NODE_ENV: production
+      # ALLOWED_ORIGINS must be set explicitly in production (no wildcards).
+      # Example:
+      #   ALLOWED_ORIGINS=https://listener.audioblockz.com,https://artist.audioblockz.com
     deploy:
       resources:
         limits:
