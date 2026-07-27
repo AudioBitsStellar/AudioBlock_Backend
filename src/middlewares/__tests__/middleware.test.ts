@@ -3,32 +3,22 @@ import { IsString, IsNotEmpty } from 'class-validator';
 import { requireAuth } from '../authMiddleware';
 import { requestLoggerMiddleware } from '../requestLogger';
 import { validateDTO } from '../validate';
+import {
+  createMockRequest,
+  createMockResponse,
+  generateAuthToken,
+  getTestJwtSecret,
+} from '../../../tests/helpers';
 
 function mockReq(overrides: any = {}): any {
-  return { headers: {}, ...overrides };
+  return createMockRequest(overrides);
 }
 
 function mockRes(): any {
-  const res: any = {};
-  res.status = jest.fn().mockReturnValue(res);
-  res.json = jest.fn().mockReturnValue(res);
-  res.setHeader = jest.fn();
-  res.on = jest.fn();
-  res.statusCode = 200;
-  return res;
+  return createMockResponse();
 }
 
 describe('requireAuth', () => {
-  const OLD_ENV = process.env.JWT_SECRET;
-
-  beforeAll(() => {
-    process.env.JWT_SECRET = 'test-secret';
-  });
-
-  afterAll(() => {
-    process.env.JWT_SECRET = OLD_ENV;
-  });
-
   it('rejects a request with no Authorization header', () => {
     const req = mockReq();
     const res = mockRes();
@@ -41,7 +31,7 @@ describe('requireAuth', () => {
   });
 
   it('rejects an expired token', () => {
-    const expired = jwt.sign({ id: 'user-1' }, 'test-secret', { expiresIn: -10 });
+    const expired = jwt.sign({ id: 'user-1' }, getTestJwtSecret(), { expiresIn: -10 });
     const req = mockReq({ headers: { authorization: `Bearer ${expired}` } });
     const res = mockRes();
     const next = jest.fn();
@@ -53,9 +43,7 @@ describe('requireAuth', () => {
   });
 
   it('calls next() and attaches the decoded user for a valid token', () => {
-    const token = jwt.sign({ id: 'user-1', role: 'artist' }, 'test-secret', {
-      expiresIn: '1h',
-    });
+    const token = generateAuthToken('user-1', { role: 'artist' });
     const req = mockReq({ headers: { authorization: `Bearer ${token}` } });
     const res = mockRes();
     const next = jest.fn();

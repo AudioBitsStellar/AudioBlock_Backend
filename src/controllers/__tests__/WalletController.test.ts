@@ -1,4 +1,10 @@
 import { WalletController } from '../WalletController';
+import {
+  createMockRequest,
+  createMockResponse,
+  assertSuccessResponse,
+  assertErrorResponse,
+} from '../../../tests/helpers';
 
 // Factory mock (not a bare auto-mock): WalletService transitively imports
 // @dynamic-labs-wallet/core, which ships ESM-only deps ts-jest can't parse.
@@ -17,13 +23,6 @@ jest.mock('../../services/Dynamic/WalletService', () => ({
   })),
 }));
 
-function mockRes() {
-  const res: any = {};
-  res.status = jest.fn().mockReturnValue(res);
-  res.json = jest.fn().mockReturnValue(res);
-  return res;
-}
-
 describe('WalletController', () => {
   let controller: WalletController;
 
@@ -36,48 +35,46 @@ describe('WalletController', () => {
     it('returns 201 with the created wallet', async () => {
       const wallet = { accountAddress: '0xabc' };
       mockCreateWallet.mockResolvedValue(wallet);
-      const req: any = {};
-      const res = mockRes();
+      const req = createMockRequest();
+      const res = createMockResponse();
 
-      await controller.createEvmWallet(req, res);
+      await controller.createEvmWallet(req, res as any);
 
-      expect(res.status).toHaveBeenCalledWith(201);
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true, wallet }));
+      assertSuccessResponse(res, { status: 201, data: { wallet } });
     });
 
     it('surfaces a service failure as an error response', async () => {
       mockCreateWallet.mockRejectedValue(new Error('Dynamic: Wallet creation failed'));
-      const req: any = {};
-      const res = mockRes();
+      const req = createMockRequest();
+      const res = createMockResponse();
 
-      await controller.createEvmWallet(req, res);
+      await controller.createEvmWallet(req, res as any);
 
-      expect(res.status).not.toHaveBeenCalledWith(201);
+      assertErrorResponse(res, { status: 400, message: 'Dynamic: Wallet creation failed' });
     });
   });
 
   describe('signMessage', () => {
     it('returns 200 with the signature', async () => {
       mockSignMessage.mockResolvedValue('0xsig');
-      const req: any = { body: { email: 'a@b.com', walletAddress: '0xabc', message: 'Nonce: 1' } };
-      const res = mockRes();
+      const req = createMockRequest({
+        body: { email: 'a@b.com', walletAddress: '0xabc', message: 'Nonce: 1' },
+      });
+      const res = createMockResponse();
 
-      await controller.signMessage(req, res);
+      await controller.signMessage(req, res as any);
 
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ success: true, signature: '0xsig' }),
-      );
+      assertSuccessResponse(res, { status: 200, data: { signature: '0xsig' } });
     });
 
     it('surfaces a service failure as an error response', async () => {
       mockSignMessage.mockRejectedValue(new Error('Dynamic: Error signing message'));
-      const req: any = { body: {} };
-      const res = mockRes();
+      const req = createMockRequest({ body: {} });
+      const res = createMockResponse();
 
-      await controller.signMessage(req, res);
+      await controller.signMessage(req, res as any);
 
-      expect(res.status).not.toHaveBeenCalledWith(200);
+      assertErrorResponse(res, { status: 400, message: 'Dynamic: Error signing message' });
     });
   });
 });
