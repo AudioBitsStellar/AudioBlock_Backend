@@ -9,9 +9,17 @@ import { AuthService } from '../services/AuthService';
 import { UserService } from './../services/UserService';
 import { Request, Response } from 'express';
 import { validate } from 'class-validator';
-import { formatValidationErrors, handleError } from '../utils/helpers';
+import { handleError } from '../utils/helpers';
+import { AppError } from '../errors/AppError';
 import redis from '../config/redis';
 import logger from '../config/logger';
+
+function toValidationDetails(errors: { property: string; constraints?: Record<string, string> }[]) {
+  return errors.map((err) => ({
+    field: err.property,
+    message: Object.values(err.constraints || {})[0] ?? 'Invalid value',
+  }));
+}
 
 export class AuthController {
   private userService: UserService;
@@ -39,10 +47,7 @@ export class AuthController {
   register = async (req: Request, res: Response) => {
     try {
       if (!req.body || Object.keys(req.body).length === 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'Request body is required',
-        });
+        throw AppError.validation('Request body is required');
       }
 
       // Check for required fields before transformation
@@ -50,10 +55,7 @@ export class AuthController {
       const missingFields = requiredFields.filter((field) => !req.body[field]);
 
       if (missingFields.length > 0) {
-        return res.status(400).json({
-          success: false,
-          message: `Missing required fields: ${missingFields.join(', ')}`,
-        });
+        throw AppError.validation(`Missing required fields: ${missingFields.join(', ')}`);
       }
 
       // Transform with explicit options
@@ -67,8 +69,7 @@ export class AuthController {
       const errors = await validate(userData);
       if (errors.length > 0) {
         console.log('Validation errors:', errors);
-        const formatted = formatValidationErrors(errors);
-        return res.status(422).json(formatted);
+        throw AppError.validation('Validation failed', toValidationDetails(errors));
       }
 
       // Create user
@@ -76,17 +77,14 @@ export class AuthController {
       res.status(201).json({ success: true, message: 'User created successfully', user });
     } catch (error) {
       logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'register error');
-      this.handleError(res, error);
+      handleError(res, error);
     }
   };
 
   registerListener = async (req: Request, res: Response) => {
     try {
       if (!req.body || Object.keys(req.body).length === 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'Request body is required',
-        });
+        throw AppError.validation('Request body is required');
       }
 
       // Check for required fields before transformation
@@ -94,10 +92,7 @@ export class AuthController {
       const missingFields = requiredFields.filter((field) => !req.body[field]);
 
       if (missingFields.length > 0) {
-        return res.status(400).json({
-          success: false,
-          message: `Missing required fields: ${missingFields.join(', ')}`,
-        });
+        throw AppError.validation(`Missing required fields: ${missingFields.join(', ')}`);
       }
 
       // Transform with explicit options
@@ -111,8 +106,7 @@ export class AuthController {
       const errors = await validate(userData);
       if (errors.length > 0) {
         console.log('Validation errors:', errors);
-        const formatted = formatValidationErrors(errors);
-        return res.status(422).json(formatted);
+        throw AppError.validation('Validation failed', toValidationDetails(errors));
       }
 
       // Create user
@@ -123,17 +117,14 @@ export class AuthController {
         { reqId: (req as any).id, route: req.path, err: error },
         'registerListener error',
       );
-      this.handleError(res, error);
+      handleError(res, error);
     }
   };
 
   login = async (req: Request, res: Response) => {
     try {
       if (!req.body || Object.keys(req.body).length === 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'Request body is required',
-        });
+        throw AppError.validation('Request body is required');
       }
 
       // Check for required fields before transformation
@@ -141,10 +132,7 @@ export class AuthController {
       const missingFields = requiredFields.filter((field) => !req.body[field]);
 
       if (missingFields.length > 0) {
-        return res.status(400).json({
-          success: false,
-          message: `Missing required fields: ${missingFields.join(', ')}`,
-        });
+        throw AppError.validation(`Missing required fields: ${missingFields.join(', ')}`);
       }
 
       const loginData = plainToInstance(JWTDTO, req.body, {
@@ -154,14 +142,13 @@ export class AuthController {
       const errors = await validate(loginData);
       if (errors.length > 0) {
         console.log('Validation errors:', errors);
-        const formatted = formatValidationErrors(errors);
-        return res.status(422).json(formatted);
+        throw AppError.validation('Validation failed', toValidationDetails(errors));
       }
       const user = await this.authService.login(loginData);
       res.status(200).json({ success: true, message: 'User logged in successfully', user });
     } catch (error) {
       logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'login error');
-      this.handleError(res, error);
+      handleError(res, error);
     }
   };
 
@@ -173,8 +160,7 @@ export class AuthController {
 
       const errors = await validate(dto);
       if (errors.length > 0) {
-        const formatted = formatValidationErrors(errors);
-        return res.status(422).json(formatted);
+        throw AppError.validation('Validation failed', toValidationDetails(errors));
       }
 
       const result = await this.authService.registerWithEmail(dto);
@@ -184,7 +170,7 @@ export class AuthController {
         { reqId: (req as any).id, route: req.path, err: error },
         'registerWithEmail error',
       );
-      this.handleError(res, error);
+      handleError(res, error);
     }
   };
 
@@ -196,15 +182,14 @@ export class AuthController {
 
       const errors = await validate(dto);
       if (errors.length > 0) {
-        const formatted = formatValidationErrors(errors);
-        return res.status(422).json(formatted);
+        throw AppError.validation('Validation failed', toValidationDetails(errors));
       }
 
       const result = await this.authService.loginWithEmail(dto);
       res.status(200).json({ success: true, message: 'User logged in successfully', ...result });
     } catch (error) {
       logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'loginWithEmail error');
-      this.handleError(res, error);
+      handleError(res, error);
     }
   };
 
@@ -212,7 +197,7 @@ export class AuthController {
     try {
       const userId = (req as any).user?.id;
       if (!userId) {
-        return res.status(401).json({ success: false, message: 'Unauthorized' });
+        throw AppError.authentication('Unauthorized');
       }
 
       const enrollment = await this.authService.enableTwoFactor(userId);
@@ -226,7 +211,7 @@ export class AuthController {
         { reqId: (req as any).id, route: req.path, err: error },
         'enableTwoFactor error',
       );
-      this.handleError(res, error);
+      handleError(res, error);
     }
   };
 
@@ -237,7 +222,7 @@ export class AuthController {
       res.status(200).json({ success: true, message: 'Email verified successfully' });
     } catch (error) {
       logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'verifyEmail error');
-      this.handleError(res, error);
+      handleError(res, error);
     }
   };
 
@@ -245,7 +230,7 @@ export class AuthController {
     try {
       const { email } = req.body;
       if (!email) {
-        return res.status(400).json({ success: false, message: 'Email is required' });
+        throw AppError.validation('Email is required');
       }
       await this.authService.forgotPassword(email);
       res
@@ -253,7 +238,7 @@ export class AuthController {
         .json({ success: true, message: 'If the email exists, a reset link has been sent' });
     } catch (error) {
       logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'forgotPassword error');
-      this.handleError(res, error);
+      handleError(res, error);
     }
   };
 
@@ -262,26 +247,13 @@ export class AuthController {
       const token = req.params.token as string;
       const { password } = req.body;
       if (!password) {
-        return res.status(400).json({ success: false, message: 'Password is required' });
+        throw AppError.validation('Password is required');
       }
       await this.authService.resetPassword(token, password);
       res.status(200).json({ success: true, message: 'Password reset successfully' });
     } catch (error) {
       logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'resetPassword error');
-      this.handleError(res, error);
+      handleError(res, error);
     }
   };
-
-  private handleError(res: Response, error: unknown): void {
-    if (error instanceof Error) {
-      logger.error({ err: error }, error.message);
-      res.status(400).json({ message: error.message });
-    } else if (typeof error === 'string') {
-      logger.error({ err: error }, error);
-      res.status(400).json({ message: error });
-    } else {
-      logger.error({ err: error }, 'Unknown error');
-      res.status(500).json({ message: 'Internal server error' });
-    }
-  }
 }

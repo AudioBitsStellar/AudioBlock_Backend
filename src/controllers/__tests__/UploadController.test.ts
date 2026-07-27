@@ -119,7 +119,9 @@ describe('UploadController', () => {
 
       expect(res.status).toHaveBeenCalledWith(422);
       expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ success: false, error: 'MALWARE_DETECTED' }),
+        expect.objectContaining({
+          error: expect.objectContaining({ code: 'MALWARE_DETECTED' }),
+        }),
       );
     });
 

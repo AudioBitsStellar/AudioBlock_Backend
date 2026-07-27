@@ -1,66 +1,60 @@
-import { ValidationError } from 'class-validator';
-import { IValidationFormatResult } from '../interfaces/IValidateErrorFormat';
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import crypto from 'crypto';
-import { mapToOnChainError, OnChainErrorCode } from '../types/OnChainErrorCodes';
+import { mapToOnChainError } from '../types/OnChainErrorCodes';
 import { AppError } from '../errors/AppError';
-
-export function formatValidationErrors(errors: ValidationError[]): IValidationFormatResult {
-  const fields: Record<string, string> = {};
-  const message: string[] = [];
-
-  for (const err of errors) {
-    const constraints = err.constraints || {};
-    const messages = Object.values(constraints);
-
-    if (messages.length > 0) {
-      fields[err.property] = messages[0]; // First message per field
-      message.push(...messages); // All messages for `message` array
-    }
-  }
-
-  return {
-    success: false,
-    fields,
-    message,
-  };
-}
+import { CircuitBreakerOpenError } from './circuitBreaker';
 
 export function handleError(res: Response, error: unknown): void {
-  // Handle AppError with structured response
   if (error instanceof AppError) {
-    res.status(error.statusCode).json({
-      success: false,
-      message: error.message,
-      type: error.type,
-      ...(error.details && { details: error.details }),
-    });
+    res.status(error.statusCode).json(error.toResponseBody());
     return;
   }
 
-  if (error instanceof Error) {
-    console.error('Handled Error:', error.message, error.stack);
-    res.status(400).json({ message: error.message });
-  } else if (typeof error === 'string') {
-    console.error('String Error:', error);
-    res.status(400).json({ message: error });
-  } else {
-    console.error('Unknown Error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+  if (error instanceof CircuitBreakerOpenError) {
+    res.status(503).json({ error: { code: 'SERVICE_UNAVAILABLE', message: error.message } });
+    return;
   }
+
+  const isDev = process.env.NODE_ENV === 'development';
+  const rawMessage =
+    error instanceof Error ? error.message : typeof error === 'string' ? error : 'Unknown error';
+  console.error(
+    'Unhandled error in handleError:',
+    rawMessage,
+    error instanceof Error ? error.stack : '',
+  );
+
+  res.status(500).json({
+    error: {
+      code: 'INTERNAL_ERROR',
+      message: isDev ? rawMessage : 'Something went wrong',
+    },
+  });
 }
 
 /**
  * Specialized error handler for on-chain transaction relay endpoints.
- * Returns standardized error codes and retryable flags for frontend consumption.
+ * Keeps OnChainErrorCode as the wire `code` and folds the retryable flag
+ * into `details`, so on-chain responses conform to the same envelope as
+ * every other error response.
  */
 export function handleOnChainError(res: Response, error: unknown): void {
-  const errorResponse = mapToOnChainError(error);
-  console.error('On-chain Error:', errorResponse);
+  const mapped = mapToOnChainError(error);
+  console.error('On-chain Error:', mapped);
 
-  // Return 400 for retryable errors, 500 for non-retryable
-  const statusCode = errorResponse.retryable ? 400 : 500;
-  res.status(statusCode).json(errorResponse);
+  const statusCode = mapped.retryable ? 400 : 500;
+  const details: Record<string, unknown> = { retryable: mapped.retryable };
+  if (mapped.details !== undefined) {
+    details.cause = mapped.details;
+  }
+
+  res.status(statusCode).json({
+    error: {
+      code: mapped.errorCode,
+      message: mapped.message,
+      details,
+    },
+  });
 }
 
 export function base64URLEncode(str: Buffer) {

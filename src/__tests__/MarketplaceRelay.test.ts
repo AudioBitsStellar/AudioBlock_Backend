@@ -113,8 +113,10 @@ describe('Relay flow: prepare-listing → submit-listing', () => {
 
     await MarketplaceController.prepareListing(req, res);
 
-    // handleError() maps Error instances to 400; only unknown non-Error values map to 500
-    expect(status).toHaveBeenCalledWith(400);
+    // An unclassified thrown Error (prepareListing doesn't go through
+    // handleOnChainError) is a server-side failure, not a client error —
+    // handleError() now correctly maps it to 500 INTERNAL_ERROR.
+    expect(status).toHaveBeenCalledWith(500);
   });
 
   // Step 2: client signs, backend receives signed XDR ─────────────────────────
@@ -145,7 +147,9 @@ describe('Relay flow: prepare-listing → submit-listing', () => {
 
     await MarketplaceController.submitListing(req, res);
 
-    expect(status).toHaveBeenCalledWith(400); // handleError maps Error → 400
+    // handleOnChainError classifies via mapToOnChainError; "soroban" in the
+    // message matches SOROBAN_NETWORK_ERROR, which is retryable -> 400.
+    expect(status).toHaveBeenCalledWith(400);
   });
 
   it('submitListing returns error for expired transaction (TRANSACTION_EXPIRED)', async () => {
@@ -160,7 +164,8 @@ describe('Relay flow: prepare-listing → submit-listing', () => {
 
     await MarketplaceController.submitListing(req, res);
 
-    expect(status).toHaveBeenCalledWith(400); // handleError maps Error → 400
+    // "expired" matches TRANSACTION_EXPIRED, which is retryable -> 400.
+    expect(status).toHaveBeenCalledWith(400);
   });
 });
 
@@ -231,7 +236,8 @@ describe('Relay flow: prepare-buy → submit-buy', () => {
 
     await MarketplaceController.submitBuy(req, res);
 
-    expect(status).toHaveBeenCalledWith(400); // handleError maps Error → 400
+    // "soroban" matches SOROBAN_NETWORK_ERROR, which is retryable -> 400.
+    expect(status).toHaveBeenCalledWith(400);
   });
 });
 

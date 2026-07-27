@@ -19,6 +19,8 @@ import rateLimit from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
 import redis from '../config/redis';
 import { Request, Response } from 'express';
+import { AppError } from '../errors/AppError';
+import { handleError } from '../utils/helpers';
 
 const windowMs = parseInt(process.env.AUTH_RATE_LIMIT_WINDOW_MS || String(15 * 60 * 1000), 10);
 const max = parseInt(process.env.AUTH_RATE_LIMIT_MAX || '20', 10);
@@ -53,11 +55,12 @@ export const authRateLimiter = rateLimit({
   handler: (req: Request, res: Response) => {
     const retryAfterSec = Math.ceil(windowMs / 1000);
     res.setHeader('Retry-After', String(retryAfterSec));
-    res.status(429).json({
-      success: false,
-      message: 'Too many requests. Please try again later.',
-      retryAfter: retryAfterSec,
-    });
+    handleError(
+      res,
+      AppError.rateLimited('Too many requests. Please try again later.', {
+        retryAfter: retryAfterSec,
+      }),
+    );
   },
 });
 
@@ -88,10 +91,11 @@ export const nonceRateLimiter = rateLimit({
   handler: (req: Request, res: Response) => {
     const retryAfterSec = Math.ceil(nonceWindowMs / 1000);
     res.setHeader('Retry-After', String(retryAfterSec));
-    res.status(429).json({
-      success: false,
-      message: 'Too many requests. Please try again later.',
-      retryAfter: retryAfterSec,
-    });
+    handleError(
+      res,
+      AppError.rateLimited('Too many requests. Please try again later.', {
+        retryAfter: retryAfterSec,
+      }),
+    );
   },
 });
