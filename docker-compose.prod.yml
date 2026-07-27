@@ -1,0 +1,33 @@
+version: '3.9'
+services:
+  backend:
+    command: sh -c "npm start"
+    environment:
+      NODE_ENV: production
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+    depends_on:
+      - db
+      - redis
+      - rabbitmq
+  db:
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+  redis:
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+  rabbitmq:
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
