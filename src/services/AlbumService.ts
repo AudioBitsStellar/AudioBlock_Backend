@@ -9,6 +9,27 @@ export class AlbumService {
     this.albumRepo = AppDataSource.getRepository(Album);
   }
 
+  async findPaginated(page = 1, limit = 20, artistId?: string) {
+    const skip = (page - 1) * limit;
+
+    const [items, total] = await this.albumRepo.findAndCount({
+      where: artistId ? { artistId } : {},
+      order: { createdAt: 'DESC' },
+      skip,
+      take: limit,
+    });
+
+    return {
+      data: items,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
   // Add Songs to Ablum
   // So the idea is songs should already be uploaded and exist in the DB
   // This function will just link IDs of songs to Album entity
