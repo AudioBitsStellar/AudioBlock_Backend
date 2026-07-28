@@ -1,6 +1,7 @@
 import type { Server } from 'http';
 import AppDataSource from '../config/db';
 import logger from '../config/logger';
+import redis from '../config/redis';
 
 interface ShutdownHook {
   name: string;
@@ -79,9 +80,25 @@ async function performShutdown(signal: string): Promise<void> {
   }
 }
 
+function isFatalRejection(reason: unknown): boolean {
+  const fatalNames = [
+    'EvalError',
+    'RangeError',
+    'ReferenceError',
+    'SyntaxError',
+    'TypeError',
+    'URIError',
+  ];
+  return reason instanceof Error && fatalNames.includes(reason.name);
+}
+
 export function attachProcessHandlers(): void {
   process.on('unhandledRejection', (reason: unknown, promise: Promise<unknown>) => {
     logger.error({ reason, promise: String(promise) }, 'Unhandled promise rejection');
+    if (isFatalRejection(reason)) {
+      logger.error({ reason }, 'Fatal unhandled rejection detected — initiating graceful shutdown');
+      performShutdown('unhandledRejection');
+    }
   });
 
   process.on('uncaughtException', (error: Error) => {
@@ -102,6 +119,15 @@ export async function closeDatabase(): Promise<void> {
   if (AppDataSource.isInitialized) {
     await AppDataSource.destroy();
     logger.info('Database connection pool closed');
+  }
+}
+
+export async function closeRedis(): Promise<void> {
+  try {
+    await redis.quit();
+    logger.info('Redis connection closed');
+  } catch (err) {
+    logger.error({ err }, 'Error closing Redis connection');
   }
 }
 
