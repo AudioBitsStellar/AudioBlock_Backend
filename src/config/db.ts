@@ -8,6 +8,12 @@ import { Genre } from '../entities/Genre';
 import { Album } from '../entities/Album';
 import { RoyaltyPayout } from '../entities/RoyaltyPayout';
 import { RoyaltyTemplate } from '../entities/RoyaltyTemplate';
+import { SongPlayEvent } from '../entities/SongPlayEvent';
+import { SongCollaborator } from '../entities/SongCollaborator';
+import { Tag } from '../entities/Tag';
+import { SongTag } from '../entities/SongTag';
+import { Release } from '../entities/Release';
+import { ReleaseTrack } from '../entities/ReleaseTrack';
 
 dotenv.config();
 
@@ -62,7 +68,21 @@ const AppDataSource = new DataSource({
           idleTimeoutMillis: dbPoolConfig.idleTimeoutMillis,
         }
       : undefined,
-  entities: [User, Song, TransactionLog, Genre, Album, RoyaltyPayout, RoyaltyTemplate],
+  entities: [
+    User,
+    Song,
+    TransactionLog,
+    Genre,
+    Album,
+    RoyaltyPayout,
+    RoyaltyTemplate,
+    SongPlayEvent,
+    SongCollaborator,
+    Tag,
+    SongTag,
+    Release,
+    ReleaseTrack,
+  ],
   migrations: ['src/migrations/*.ts', 'dist/migrations/*.js'],
   migrationsTableName: 'migrations',
 });

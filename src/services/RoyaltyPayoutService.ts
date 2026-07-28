@@ -1,6 +1,8 @@
 import { In, Repository } from 'typeorm';
 import AppDataSource from '../config/db';
 import { RoyaltyPayout, RoyaltyPayoutStatus, RoyaltySplit } from '../entities/RoyaltyPayout';
+import { SongCollaborator, CollaboratorStatus } from '../entities/SongCollaborator';
+import { User } from '../entities/User';
 import { SorobanContracts } from '../config/soroban';
 import { SorobanService } from './Soroban/SorobanService';
 import { royaltiesPaidTotal } from './MetricsService';
@@ -35,6 +37,44 @@ export class RoyaltyPayoutService {
   constructor() {
     this.royaltyPayoutRepo = AppDataSource.getRepository(RoyaltyPayout);
     this.soroban = new SorobanService();
+  }
+
+  /**
+   * Build expected royalty splits for a sale from a song's active
+   * SongCollaborator records (Issue #96), converting each collaborator's
+   * royaltyShare percentage into stroop amounts and basis points.
+   *
+   * @param songId - Song whose active collaborators define the splits.
+   * @param grossAmountStroops - Total sale amount to split among collaborators.
+   * @returns RoyaltySplit entries, or [] if the song has no collaborators.
+   */
+  async buildSplitsFromCollaborators(
+    songId: string,
+    grossAmountStroops: string,
+  ): Promise<RoyaltySplit[]> {
+    const collaboratorRepo = AppDataSource.getRepository(SongCollaborator);
+    const userRepo = AppDataSource.getRepository(User);
+
+    const collaborators = await collaboratorRepo.find({
+      where: { songId, status: CollaboratorStatus.ACTIVE },
+    });
+    if (collaborators.length === 0) return [];
+
+    const users = await userRepo.findBy({ id: In(collaborators.map((c) => c.userId)) });
+    const userById = new Map(users.map((u) => [u.id, u]));
+    const gross = BigInt(grossAmountStroops);
+
+    return collaborators
+      .filter((c) => userById.get(c.userId)?.stellarPublicKey)
+      .map((c) => {
+        const shareBps = Math.round(c.royaltyShare * 100);
+        const expectedAmountStroops = (gross * BigInt(shareBps)) / BigInt(10000);
+        return {
+          recipientPublicKey: userById.get(c.userId)!.stellarPublicKey!,
+          shareBps,
+          expectedAmountStroops: expectedAmountStroops.toString(),
+        };
+      });
   }
 
   /**

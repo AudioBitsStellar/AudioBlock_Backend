@@ -1,14 +1,19 @@
 import { Request, Response } from 'express';
 import AppDataSource from '../config/db';
 import { Song } from '../entities/Song';
+import { SongPlayEvent } from '../entities/SongPlayEvent';
 import redis from '../config/redis';
 import { precomputeSignedManifest } from '../workers/precomputeManifest';
 import { handleError, handleOnChainError } from '../utils/helpers';
 import { AppError } from '../errors/AppError';
 import { SongService } from '../services/SongService';
+import { CollaborationService } from '../services/CollaborationService';
+import { TagService } from '../services/TagService';
 import logger from '../config/logger';
 
 const songService = new SongService();
+const collaborationService = new CollaborationService();
+const tagService = new TagService();
 
 export class SongController {
   static flagSong = async (req: Request, res: Response) => {
@@ -69,6 +74,7 @@ export class SongController {
       const recentlyPlayed = await redis.get(sessionKey);
       if (!recentlyPlayed) {
         await songRepo.increment({ id: songId }, 'playCount', 1);
+        await AppDataSource.getRepository(SongPlayEvent).insert({ songId });
         await redis.set(sessionKey, '1', 'EX', 30);
       }
 
@@ -161,6 +167,64 @@ export class SongController {
           totalPages: Math.ceil(total / limit),
         },
       });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  static listCollaborators = async (req: Request, res: Response) => {
+    try {
+      const songId = req.params.id as string;
+      const collaborators = await collaborationService.listCollaborators(songId);
+      return res.status(200).json({ success: true, data: collaborators });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  static addCollaborator = async (req: Request, res: Response) => {
+    try {
+      const songId = req.params.id as string;
+      const requesterId = (req as any).user.id as string;
+      const { userId, role, royaltyShare } = req.body;
+      const collaborator = await collaborationService.addCollaborator(songId, requesterId, {
+        userId,
+        role,
+        royaltyShare,
+      });
+      return res.status(201).json({ success: true, data: collaborator });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  static updateCollaborator = async (req: Request, res: Response) => {
+    try {
+      const songId = req.params.id as string;
+      const targetUserId = req.params.userId as string;
+      const requesterId = (req as any).user.id as string;
+      const { role, royaltyShare } = req.body;
+      const collaborator = await collaborationService.updateCollaborator(
+        songId,
+        targetUserId,
+        requesterId,
+        { role, royaltyShare },
+      );
+      return res.status(200).json({ success: true, data: collaborator });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  static addTags = async (req: Request, res: Response) => {
+    try {
+      const songId = req.params.id as string;
+      const { tags } = req.body;
+      if (!Array.isArray(tags) || tags.length === 0) {
+        throw AppError.validation('tags must be a non-empty array of tag names');
+      }
+      const result = await tagService.addTagsToSong(songId, tags);
+      return res.status(201).json({ success: true, data: result });
     } catch (error) {
       handleError(req, res, error);
     }
