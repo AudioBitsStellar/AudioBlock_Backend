@@ -55,6 +55,9 @@ export class Song {
   @Column({ default: 'processing' })
   status!: 'processing' | 'ready' | 'failed';
 
+  @Column({ nullable: true })
+  errorReason!: string | null;
+
   @Column({ default: 0 })
   playCount!: number;
 

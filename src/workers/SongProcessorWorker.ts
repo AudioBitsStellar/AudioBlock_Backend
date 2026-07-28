@@ -20,7 +20,6 @@
  *   WORKER_BACKOFF_BASE_MS    – base delay in ms          (default: 2000)
  *   WORKER_BACKOFF_MAX_MS     – ceiling delay in ms       (default: 30000)
  */
-import { SongService } from './../services/SongService';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -55,7 +54,6 @@ export async function startSongWorker() {
   try {
     const channel = getChannel();
 
-    const SongServiceInstance = new SongService();
     const logService = new TransactionLogService();
 
     // Assert main queue and dead-letter queue before consuming.
@@ -84,8 +82,6 @@ export async function startSongWorker() {
       logger.info(logCtx, `Processing song (attempt ${attempt}/${MAX_ATTEMPTS})`);
 
       try {
-        const data = JSON.parse(msg.content.toString());
-
         const song = await songRepo.findOne({
           where: { id: songId },
           relations: ['user'],
@@ -209,11 +205,32 @@ export async function startSongWorker() {
           // Ack the original so it doesn't block the queue while we wait
           channel.ack(msg);
         } else {
-          // All attempts exhausted — send to DLQ and log for visibility
+          // All attempts exhausted — send to DLQ, update song status, and log for visibility
           logger.error(
             logCtx,
             `Song ${songId} failed after ${MAX_ATTEMPTS} attempts, moving to DLQ`,
           );
+
+          try {
+            const song = await songRepo.findOne({ where: { id: songId }, relations: ['user'] });
+            if (song) {
+              song.status = 'failed';
+              song.errorReason = (err as Error)?.message || String(err);
+              await songRepo.save(song);
+
+              if (song.user?.id) {
+                const logService = new TransactionLogService();
+                await logService.createLogEntry(
+                  song.user.id,
+                  '',
+                  'SONG_FAILED',
+                  `Song ${songId} failed processing after ${MAX_ATTEMPTS} attempts: ${song.errorReason}`,
+                );
+              }
+            }
+          } catch (updateErr) {
+            logger.error({ songId, err: updateErr }, 'Failed to update song status to FAILED');
+          }
 
           channel.publish(
             '',
@@ -221,22 +238,6 @@ export async function startSongWorker() {
             Buffer.from(JSON.stringify({ songId, fileId, attempt, error: String(err) })),
             { persistent: true },
           );
-
-          // Log failure to TransactionLog so operators can investigate
-          try {
-            const song = await songRepo.findOne({ where: { id: songId }, relations: ['user'] });
-            if (song?.user?.id) {
-              const logService = new TransactionLogService();
-              await logService.createLogEntry(
-                song.user.id,
-                '',
-                'SONG_FAILED',
-                `Song ${songId} failed processing after ${MAX_ATTEMPTS} attempts. Moved to DLQ. Error: ${String(err)}`,
-              );
-            }
-          } catch (logErr) {
-            logger.error({ songId, err: logErr }, 'Failed to write SONG_FAILED log entry');
-          }
 
           channel.ack(msg);
         }

@@ -169,3 +169,30 @@ describe('SongService.submitSongMintTx', () => {
     expect(result).toEqual({ txHash: 'txhash123', songId: '42', tokenId: '7' });
   });
 });
+
+describe('SongService.retryFailedSong', () => {
+  it('throws when song is not found', async () => {
+    mockSongRepo.findOneBy.mockResolvedValue(null);
+    const svc = makeSvc();
+    await expect(svc.retryFailedSong('missing-id')).rejects.toThrow('Song not found');
+  });
+
+  it('throws when song status is not failed', async () => {
+    mockSongRepo.findOneBy.mockResolvedValue({ id: 's1', status: 'ready' });
+    const svc = makeSvc();
+    await expect(svc.retryFailedSong('s1')).rejects.toThrow('Only failed songs can be retried');
+  });
+
+  it('resets status to processing, clears errorReason, and saves on success', async () => {
+    const song = { id: 's1', status: 'failed', errorReason: 'Pinata upload timeout' };
+    mockSongRepo.findOneBy.mockResolvedValue(song);
+    mockSongRepo.save.mockImplementation(async (s: any) => s);
+
+    const svc = makeSvc();
+    const result = await svc.retryFailedSong('s1');
+
+    expect(result.status).toBe('processing');
+    expect(result.errorReason).toBeNull();
+    expect(mockSongRepo.save).toHaveBeenCalledWith(song);
+  });
+});

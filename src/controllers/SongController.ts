@@ -165,4 +165,18 @@ export class SongController {
       handleError(req, res, error);
     }
   };
+
+  static retryFailedSong = async (req: Request, res: Response) => {
+    try {
+      const songId = req.params.id as string;
+      const song = await songService.retryFailedSong(songId);
+      return res.status(200).json({
+        success: true,
+        message: 'Song re-queued for processing',
+        data: song,
+      });
+    } catch (error) {
+      handleError(res, error);
+    }
+  };
 }

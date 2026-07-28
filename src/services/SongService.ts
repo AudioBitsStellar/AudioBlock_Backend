@@ -459,4 +459,34 @@ export class SongService {
 
     return song;
   }
+
+  /**
+   * Manually retry a failed song processing job (Issue #125).
+   * Resets status to 'processing', clears errorReason, and re-queues job to RabbitMQ.
+   */
+  async retryFailedSong(songId: string): Promise<Song> {
+    const song = await this.songRepo.findOneBy({ id: songId });
+    if (!song) throw new Error('Song not found');
+    if (song.status !== 'failed') {
+      throw new Error('Only failed songs can be retried');
+    }
+
+    song.status = 'processing';
+    song.errorReason = null;
+    await this.songRepo.save(song);
+
+    try {
+      const channel = getChannel();
+      channel.publish(
+        '',
+        'song_processing',
+        Buffer.from(JSON.stringify({ songId: song.id, fileId: song.id, attempt: 1 })),
+        { persistent: true },
+      );
+    } catch (err) {
+      logger.error({ songId, err }, 'Failed to publish retry message to RabbitMQ');
+    }
+
+    return song;
+  }
 }
