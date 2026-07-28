@@ -11,6 +11,14 @@ import { startDbPoolMonitor } from './services/DbPoolMonitor';
 import { startJobQueueWorker, startJobQueueMonitor } from './workers/JobQueueWorker';
 import logger from './config/logger';
 import { startConnectionStateLogger } from './services/DatabaseConnectionManager';
+import {
+  attachProcessHandlers,
+  closeRedis,
+  closeDatabase,
+  drainWorkerQueues,
+  registerServer,
+  registerShutdownHook,
+} from './utils/gracefulShutdown';
 
 const uploadDirs = [
   'uploads/temp',
@@ -74,6 +82,7 @@ async function main() {
       });
 
     registerShutdownHook('database', closeDatabase);
+    registerShutdownHook('redis', closeRedis);
     registerShutdownHook('worker-queues', drainWorkerQueues);
 
     attachProcessHandlers();
@@ -82,16 +91,5 @@ async function main() {
     process.exit(1);
   }
 }
-
-process.on('uncaughtException', (error) => {
-  logger.error({ err: error }, 'Uncaught Exception');
-  process.exit(1);
-});
-
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (reason, promise) => {
-  logger.error({ reason, promise: String(promise) }, 'Unhandled Rejection');
-  process.exit(1);
-});
 
 main();
