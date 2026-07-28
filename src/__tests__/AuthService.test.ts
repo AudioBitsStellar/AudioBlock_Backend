@@ -30,6 +30,7 @@ import { UserRole } from '../entities/User';
 
 const mockUserRepo = {
   findOneBy: jest.fn(),
+  findOne: jest.fn(),
   create: jest.fn(),
   save: jest.fn(),
 };
@@ -131,15 +132,17 @@ describe('AuthService.loginWithEmail', () => {
     };
     mockUserRepo.findOneBy.mockResolvedValue(user);
     (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+    (jwt.sign as jest.Mock).mockReturnValue('partial.token');
+    process.env.JWT_SECRET = 'test_secret';
 
     const svc = new AuthService();
     const result = await svc.loginWithEmail({ email: 'a@b.com', password: 'password123' });
 
     expect(result).toEqual({
       twoFactorRequired: true,
+      partialToken: 'partial.token',
       user: { id: 'u1', email: 'a@b.com', role: UserRole.ARTIST },
     });
-    expect(jwt.sign).not.toHaveBeenCalled();
   });
 
   it('accepts and consumes a valid recovery code', async () => {
@@ -187,6 +190,84 @@ describe('AuthService.getNonce', () => {
     expect(typeof nonce).toBe('string');
     expect(nonce.length).toBeGreaterThan(0);
     expect(redis.set).toHaveBeenCalledWith('nonce:a@b.com', expect.any(String), 'EX', 300);
+  });
+});
+
+describe('AuthService.forgotPassword', () => {
+  it('silently returns without issuing a token when the email is unknown', async () => {
+    mockUserRepo.findOneBy.mockResolvedValue(null);
+    const svc = new AuthService();
+    await expect(svc.forgotPassword('nobody@b.com')).resolves.toBeUndefined();
+    expect(mockUserRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('issues a URL-safe token with a 1-hour expiry and invalidates any prior token', async () => {
+    const user: Record<string, unknown> = {
+      id: 'u1',
+      email: 'a@b.com',
+      passwordResetToken: 'stale-token',
+      passwordResetTokenExpiry: new Date(0),
+    };
+    mockUserRepo.findOneBy.mockResolvedValue(user);
+    mockUserRepo.save.mockResolvedValue(user);
+
+    const before = Date.now();
+    const svc = new AuthService();
+    await svc.forgotPassword('a@b.com');
+    const after = Date.now();
+
+    const token = user.passwordResetToken as string;
+    expect(token).not.toBe('stale-token');
+    // base64url alphabet only — safe to embed in a link without encoding.
+    expect(token).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(token.length).toBeGreaterThanOrEqual(43);
+
+    const expiry = (user.passwordResetTokenExpiry as Date).getTime();
+    expect(expiry).toBeGreaterThanOrEqual(before + 60 * 60 * 1000);
+    expect(expiry).toBeLessThanOrEqual(after + 60 * 60 * 1000);
+    expect(mockUserRepo.save).toHaveBeenCalledWith(user);
+  });
+});
+
+describe('AuthService.resetPassword', () => {
+  it('throws when the token does not match any user', async () => {
+    mockUserRepo.findOne.mockResolvedValue(null);
+    const svc = new AuthService();
+    await expect(svc.resetPassword('bad-token', 'newpassword123')).rejects.toThrow(
+      'Invalid reset token',
+    );
+  });
+
+  it('throws when the token has expired', async () => {
+    mockUserRepo.findOne.mockResolvedValue({
+      id: 'u1',
+      passwordResetToken: 'tok',
+      passwordResetTokenExpiry: new Date(Date.now() - 1000),
+    });
+    const svc = new AuthService();
+    await expect(svc.resetPassword('tok', 'newpassword123')).rejects.toThrow(
+      'Reset token has expired',
+    );
+  });
+
+  it('hashes the new password and clears the reset token on success', async () => {
+    const user: Record<string, unknown> = {
+      id: 'u1',
+      passwordResetToken: 'tok',
+      passwordResetTokenExpiry: new Date(Date.now() + 60 * 60 * 1000),
+    };
+    mockUserRepo.findOne.mockResolvedValue(user);
+    (bcrypt.hash as jest.Mock).mockResolvedValue('new_hash');
+    mockUserRepo.save.mockResolvedValue(user);
+
+    const svc = new AuthService();
+    await svc.resetPassword('tok', 'newpassword123');
+
+    expect(bcrypt.hash).toHaveBeenCalledWith('newpassword123', 12);
+    expect(user.passwordHash).toBe('new_hash');
+    expect(user.passwordResetToken).toBeUndefined();
+    expect(user.passwordResetTokenExpiry).toBeUndefined();
+    expect(mockUserRepo.save).toHaveBeenCalledWith(user);
   });
 });
 

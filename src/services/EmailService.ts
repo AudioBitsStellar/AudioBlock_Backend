@@ -77,11 +77,13 @@ export class EmailService {
   }
 
   /**
-   * Generate a cryptographically secure hex token for password reset.
+   * Generate a cryptographically secure, URL-safe token for password reset.
+   * Uses 32 bytes of entropy encoded as base64url so the token can be embedded
+   * directly in a reset link without percent-encoding (#102).
    *
-   * @returns 64-character hex string.
+   * @returns 43-character URL-safe (base64url) string.
    */
   generateResetToken(): string {
-    return randomBytes(32).toString('hex');
+    return randomBytes(32).toString('base64url');
   }
 }
