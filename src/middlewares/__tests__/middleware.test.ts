@@ -126,7 +126,7 @@ describe('validateDTO', () => {
     expect(res.status).toHaveBeenCalledWith(400);
     expect(next).not.toHaveBeenCalled();
     const payload = res.json.mock.calls[0][0];
-    expect(payload.success).toBe(false);
-    expect(payload.errors[0]).toMatchObject({ field: 'name' });
+    expect(payload.error.code).toBe('VALIDATION_FAILED');
+    expect(payload.error.details[0]).toMatchObject({ field: 'name' });
   });
 });

@@ -1,8 +1,6 @@
-import { ValidationError } from 'class-validator';
-import { IValidationFormatResult } from '../interfaces/IValidateErrorFormat';
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import crypto from 'crypto';
-import { mapToOnChainError, OnChainErrorCode } from '../types/OnChainErrorCodes';
+import { mapToOnChainError } from '../types/OnChainErrorCodes';
 import { AppError } from '../errors/AppError';
 import { logRequestError } from './errorLogger';
 
@@ -50,11 +48,29 @@ export function handleError(req: Request, res: Response, error: unknown): void {
     logRequestError(req, error, 500);
     res.status(500).json({ message: 'Internal server error' });
   }
+
+  const isDev = process.env.NODE_ENV === 'development';
+  const rawMessage =
+    error instanceof Error ? error.message : typeof error === 'string' ? error : 'Unknown error';
+  console.error(
+    'Unhandled error in handleError:',
+    rawMessage,
+    error instanceof Error ? error.stack : '',
+  );
+
+  res.status(500).json({
+    error: {
+      code: 'INTERNAL_ERROR',
+      message: isDev ? rawMessage : 'Something went wrong',
+    },
+  });
 }
 
 /**
  * Specialized error handler for on-chain transaction relay endpoints.
- * Returns standardized error codes and retryable flags for frontend consumption.
+ * Keeps OnChainErrorCode as the wire `code` and folds the retryable flag
+ * into `details`, so on-chain responses conform to the same envelope as
+ * every other error response.
  */
 export function handleOnChainError(req: Request, res: Response, error: unknown): void {
   const errorResponse = mapToOnChainError(error);

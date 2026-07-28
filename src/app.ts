@@ -237,8 +237,7 @@ app.use(customErrorHandler);
 app.use(((req: Request, res: Response) => {
   logRequestError(req, new Error(`Route ${req.originalUrl} not found`), 404);
   res.status(404).json({
-    error: 'error',
-    message: `Route ${req.originalUrl} not found`,
+    error: { code: 'NOT_FOUND', message: `Route ${req.originalUrl} not found` },
   });
 }) as RequestHandler);
 

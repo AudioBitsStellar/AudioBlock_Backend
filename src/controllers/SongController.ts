@@ -4,6 +4,7 @@ import { Song } from '../entities/Song';
 import redis from '../config/redis';
 import { precomputeSignedManifest } from '../workers/precomputeManifest';
 import { handleError, handleOnChainError } from '../utils/helpers';
+import { AppError } from '../errors/AppError';
 import { SongService } from '../services/SongService';
 import logger from '../config/logger';
 
@@ -61,7 +62,7 @@ export class SongController {
       const songRepo = AppDataSource.getRepository(Song);
       const song = await songRepo.findOne({ where: { id: songId } });
       if (!song || song.status !== 'ready' || !song.hlsMasterUrl || song.flagged) {
-        return res.status(404).json({ error: 'Song not available' });
+        throw AppError.notFound('Song not available', undefined, 'SONG_NOT_AVAILABLE');
       }
 
       const sessionKey = `play:throttle:${req.ip}:${songId}`;

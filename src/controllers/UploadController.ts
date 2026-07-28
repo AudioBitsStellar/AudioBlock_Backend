@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { handleError } from '../utils/helpers';
+import { AppError, ErrorType } from '../errors/AppError';
 import { SongService } from '../services/SongService';
 import logger from '../config/logger';
 
@@ -11,7 +12,7 @@ export class UploadController {
       const { fileId, chunkIndex } = req.body;
 
       if (!req.file) {
-        return res.status(400).json({ error: 'No chunk file uploaded' });
+        throw AppError.validation('No chunk file uploaded');
       }
 
       await songService.saveChunk(fileId, Number(chunkIndex), req.file.path);
@@ -26,7 +27,7 @@ export class UploadController {
     try {
       const { fileId } = req.body;
       if (!req.file) {
-        return res.status(400).json({ success: false, error: 'No cover file uploaded' });
+        throw AppError.validation('No cover file uploaded');
       }
       const coverPath = req.file.path;
       const cover = await songService.saveCover(fileId, coverPath);
@@ -71,11 +72,17 @@ export class UploadController {
           { reqId: (req as any).id, route: req.path, threat: err.threat },
           'Upload rejected due to malware detection',
         );
-        return res.status(422).json({
-          success: false,
-          error: 'MALWARE_DETECTED',
-          message: err.message,
-        });
+        return handleError(
+          res,
+          new AppError(
+            err.message,
+            ErrorType.VALIDATION_FAILED,
+            422,
+            true,
+            undefined,
+            'MALWARE_DETECTED',
+          ),
+        );
       }
       logger.error({ reqId: (req as any).id, route: req.path, err }, 'finalizeUpload error');
       handleError(req, res, err);

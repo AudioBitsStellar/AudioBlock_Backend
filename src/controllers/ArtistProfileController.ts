@@ -2,6 +2,7 @@ import { validateOrReject } from 'class-validator';
 import { UpdateArtistProfileDTO } from '../dtos/UpdateArtistProfileDTO';
 import { ArtistProfileService } from '../services/ArtistProfileService';
 import { handleError } from '../utils/helpers';
+import { AppError } from '../errors/AppError';
 import { Request, Response } from 'express';
 import fs from 'fs';
 
@@ -17,10 +18,7 @@ export class ArtistProfileController {
       const userId = (req as any).user?.id;
 
       if (!userId) {
-        return res.status(401).json({
-          success: false,
-          message: 'Unauthorized: user not found in token',
-        });
+        throw AppError.authentication('Unauthorized: user not found in token');
       }
 
       // combine body + uploaded files into DTO

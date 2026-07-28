@@ -4,15 +4,16 @@
  */
 
 export enum ErrorType {
-  VALIDATION_ERROR = 'VALIDATION_ERROR',
-  AUTHENTICATION_ERROR = 'AUTHENTICATION_ERROR',
-  AUTHORIZATION_ERROR = 'AUTHORIZATION_ERROR',
-  NOT_FOUND_ERROR = 'NOT_FOUND_ERROR',
-  CONFLICT_ERROR = 'CONFLICT_ERROR',
+  VALIDATION_FAILED = 'VALIDATION_FAILED',
+  UNAUTHORIZED = 'UNAUTHORIZED',
+  FORBIDDEN = 'FORBIDDEN',
+  NOT_FOUND = 'NOT_FOUND',
+  CONFLICT = 'CONFLICT',
   BUSINESS_LOGIC_ERROR = 'BUSINESS_LOGIC_ERROR',
   EXTERNAL_SERVICE_ERROR = 'EXTERNAL_SERVICE_ERROR',
   DATABASE_ERROR = 'DATABASE_ERROR',
   INTERNAL_ERROR = 'INTERNAL_ERROR',
+  RATE_LIMITED = 'RATE_LIMITED',
 }
 
 export interface ErrorDetails {
@@ -24,20 +25,23 @@ export interface ErrorDetails {
 
 export class AppError extends Error {
   public readonly type: ErrorType;
+  public readonly code: string;
   public readonly statusCode: number;
   public readonly isOperational: boolean;
-  public readonly details?: ErrorDetails;
+  public readonly details?: ErrorDetails | ErrorDetails[];
 
   constructor(
     message: string,
     type: ErrorType = ErrorType.INTERNAL_ERROR,
     statusCode: number = 500,
     isOperational: boolean = true,
-    details?: ErrorDetails,
+    details?: ErrorDetails | ErrorDetails[],
+    code?: string,
   ) {
     super(message);
 
     this.type = type;
+    this.code = code ?? type;
     this.statusCode = statusCode;
     this.isOperational = isOperational;
     this.details = details;
@@ -49,72 +53,87 @@ export class AppError extends Error {
     Object.setPrototypeOf(this, AppError.prototype);
   }
 
-  /**
-   * Create a validation error
-   */
-  static validation(message: string, details?: ErrorDetails): AppError {
-    return new AppError(message, ErrorType.VALIDATION_ERROR, 400, true, details);
+  static validation(
+    message: string,
+    details?: ErrorDetails | ErrorDetails[],
+    code?: string,
+  ): AppError {
+    return new AppError(message, ErrorType.VALIDATION_FAILED, 400, true, details, code);
   }
 
-  /**
-   * Create an authentication error
-   */
-  static authentication(message: string, details?: ErrorDetails): AppError {
-    return new AppError(message, ErrorType.AUTHENTICATION_ERROR, 401, true, details);
+  static authentication(
+    message: string,
+    details?: ErrorDetails | ErrorDetails[],
+    code?: string,
+  ): AppError {
+    return new AppError(message, ErrorType.UNAUTHORIZED, 401, true, details, code);
   }
 
-  /**
-   * Create an authorization error
-   */
-  static authorization(message: string, details?: ErrorDetails): AppError {
-    return new AppError(message, ErrorType.AUTHORIZATION_ERROR, 403, true, details);
+  static authorization(
+    message: string,
+    details?: ErrorDetails | ErrorDetails[],
+    code?: string,
+  ): AppError {
+    return new AppError(message, ErrorType.FORBIDDEN, 403, true, details, code);
   }
 
-  /**
-   * Create a not found error
-   */
-  static notFound(message: string, details?: ErrorDetails): AppError {
-    return new AppError(message, ErrorType.NOT_FOUND_ERROR, 404, true, details);
+  static notFound(
+    message: string,
+    details?: ErrorDetails | ErrorDetails[],
+    code?: string,
+  ): AppError {
+    return new AppError(message, ErrorType.NOT_FOUND, 404, true, details, code);
   }
 
-  /**
-   * Create a conflict error
-   */
-  static conflict(message: string, details?: ErrorDetails): AppError {
-    return new AppError(message, ErrorType.CONFLICT_ERROR, 409, true, details);
+  static conflict(
+    message: string,
+    details?: ErrorDetails | ErrorDetails[],
+    code?: string,
+  ): AppError {
+    return new AppError(message, ErrorType.CONFLICT, 409, true, details, code);
   }
 
-  /**
-   * Create a business logic error
-   */
-  static businessLogic(message: string, details?: ErrorDetails): AppError {
-    return new AppError(message, ErrorType.BUSINESS_LOGIC_ERROR, 400, true, details);
+  static businessLogic(
+    message: string,
+    details?: ErrorDetails | ErrorDetails[],
+    code?: string,
+  ): AppError {
+    return new AppError(message, ErrorType.BUSINESS_LOGIC_ERROR, 400, true, details, code);
   }
 
-  /**
-   * Create an external service error
-   */
-  static externalService(message: string, details?: ErrorDetails): AppError {
-    return new AppError(message, ErrorType.EXTERNAL_SERVICE_ERROR, 502, true, details);
+  static externalService(
+    message: string,
+    details?: ErrorDetails | ErrorDetails[],
+    code?: string,
+  ): AppError {
+    return new AppError(message, ErrorType.EXTERNAL_SERVICE_ERROR, 502, true, details, code);
   }
 
-  /**
-   * Create a database error
-   */
-  static database(message: string, details?: ErrorDetails): AppError {
-    return new AppError(message, ErrorType.DATABASE_ERROR, 500, true, details);
+  static database(
+    message: string,
+    details?: ErrorDetails | ErrorDetails[],
+    code?: string,
+  ): AppError {
+    return new AppError(message, ErrorType.DATABASE_ERROR, 500, true, details, code);
   }
 
-  /**
-   * Convert to JSON representation
-   */
-  toJSON() {
+  static rateLimited(
+    message: string,
+    details?: ErrorDetails | ErrorDetails[],
+    code?: string,
+  ): AppError {
+    return new AppError(message, ErrorType.RATE_LIMITED, 429, true, details, code);
+  }
+
+  /** Standard wire format for every API error response: { error: { code, message, details? } } */
+  toResponseBody(): {
+    error: { code: string; message: string; details?: ErrorDetails | ErrorDetails[] };
+  } {
     return {
       error: {
-        type: this.type,
+        code: this.code,
         message: this.message,
-        statusCode: this.statusCode,
-        details: this.details,
+        ...(this.details !== undefined && { details: this.details }),
       },
     };
   }

@@ -31,8 +31,10 @@ describe('authArtistMiddleware', () => {
 
     expect(res.status).toHaveBeenCalledWith(403);
     expect(res.json).toHaveBeenCalledWith({
-      success: false,
-      message: 'Forbidden: one of these roles is required: artist, admin',
+      error: {
+        code: 'FORBIDDEN',
+        message: 'Forbidden: one of these roles is required: artist, admin',
+      },
     });
     expect(next).not.toHaveBeenCalled();
   });
