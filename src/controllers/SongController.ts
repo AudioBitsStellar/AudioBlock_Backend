@@ -18,7 +18,7 @@ export class SongController {
       const song = await songService.flagSong(songId, adminId, reason);
       return res.status(200).json({ success: true, data: song });
     } catch (error) {
-      handleError(res, error);
+      handleError(req, res, error);
     }
   };
 
@@ -29,7 +29,7 @@ export class SongController {
       const song = await songService.unflagSong(songId, adminId);
       return res.status(200).json({ success: true, data: song });
     } catch (error) {
-      handleError(res, error);
+      handleError(req, res, error);
     }
   };
 
@@ -40,7 +40,7 @@ export class SongController {
       const prepared = await songService.prepareSongMintTx(songId, albumId);
       return res.status(200).json({ success: true, data: prepared });
     } catch (error) {
-      handleError(res, error);
+      handleError(req, res, error);
     }
   };
 
@@ -51,7 +51,7 @@ export class SongController {
       const result = await songService.submitSongMintTx(songId, signedXdr);
       return res.status(200).json({ success: true, data: result });
     } catch (error) {
-      handleOnChainError(res, error);
+      handleOnChainError(req, res, error);
     }
   };
 
@@ -84,7 +84,7 @@ export class SongController {
       return res.send(generated);
     } catch (err) {
       logger.error({ reqId: (req as any).id, route: req.path, err }, 'Stream error');
-      handleError(res, err);
+      handleError(req, res, err);
     }
   };
 
@@ -102,7 +102,7 @@ export class SongController {
         data: songs,
       });
     } catch (error) {
-      handleError(res, error);
+      handleError(req, res, error);
     }
   };
 
@@ -132,7 +132,7 @@ export class SongController {
         indexed,
       });
     } catch (error) {
-      handleError(res, error);
+      handleError(req, res, error);
     }
   };
 
@@ -161,7 +161,7 @@ export class SongController {
         },
       });
     } catch (error) {
-      handleError(res, error);
+      handleError(req, res, error);
     }
   };
 }

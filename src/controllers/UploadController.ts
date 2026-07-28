@@ -18,7 +18,7 @@ export class UploadController {
 
       return res.status(200).json({ success: true });
     } catch (error) {
-      handleError(res, error);
+      handleError(req, res, error);
     }
   };
 
@@ -32,7 +32,7 @@ export class UploadController {
       const cover = await songService.saveCover(fileId, coverPath);
       res.status(200).json({ success: true, message: 'Cover uploaded', data: { fileId, cover } });
     } catch (error) {
-      handleError(res, error);
+      handleError(req, res, error);
     }
   };
 
@@ -78,7 +78,7 @@ export class UploadController {
         });
       }
       logger.error({ reqId: (req as any).id, route: req.path, err }, 'finalizeUpload error');
-      handleError(res, err);
+      handleError(req, res, err);
     }
   };
 }

@@ -26,7 +26,7 @@ export class UserController {
       const user = await this.userService.getUserByWalletAddress(walletAddress);
       res.status(HTTP_STATUS.OK).json(user);
     } catch (error) {
-      handleError(res, error);
+      handleError(req, res, error);
     }
   };
 
@@ -36,7 +36,7 @@ export class UserController {
       const user = await this.userService.getUserById(id);
       res.status(HTTP_STATUS.OK).json(user);
     } catch (error) {
-      handleError(res, error);
+      handleError(req, res, error);
     }
   };
 
@@ -45,7 +45,7 @@ export class UserController {
       const users = await this.userService.getAllUsers();
       res.status(HTTP_STATUS.OK).json(users);
     } catch (error) {
-      handleError(res, error);
+      handleError(req, res, error);
     }
   };
 
@@ -55,7 +55,7 @@ export class UserController {
       const user = await this.userService.updateUser(id, req.body);
       res.status(HTTP_STATUS.OK).json(user);
     } catch (error) {
-      handleError(res, error);
+      handleError(req, res, error);
     }
   };
 
@@ -65,7 +65,7 @@ export class UserController {
       const user = await this.userService.deleteUser(id);
       res.status(HTTP_STATUS.OK).json(user);
     } catch (error) {
-      handleError(res, error);
+      handleError(req, res, error);
     }
   };
 }

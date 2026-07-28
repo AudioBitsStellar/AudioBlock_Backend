@@ -4,7 +4,6 @@ import swaggerUi from 'swagger-ui-express';
 import yaml from 'js-yaml';
 import fs from 'fs';
 import path from 'path';
-import logger from './config/logger';
 import { requestLoggerMiddleware } from './middlewares/requestLogger';
 import { metricsMiddleware } from './middlewares/metricsMiddleware';
 import { getMetrics, getMetricsContentType, updateDbPoolMetrics } from './services/MetricsService';
@@ -27,6 +26,7 @@ import { getPoolStats, checkDbHealth } from './services/DbPoolMonitor';
 import { dbConnectionState } from './services/DatabaseConnectionManager';
 import { JSON_BODY_LIMIT, URLENCODED_BODY_LIMIT } from './config/constants';
 import { isPayloadTooLargeError } from './middlewares/bodySizeLimit';
+import { logRequestError } from './utils/errorLogger';
 
 // Route imports
 
@@ -150,11 +150,13 @@ if (process.env.NODE_ENV !== 'production') {
 const circuitBreakerMiddleware: RequestHandler = (req, res, next) => {
   if (!dbConnectionState.connected && !dbConnectionState.reconnecting) {
     if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+      const message =
+        'Database connection unavailable — write operations suspended. Please try again later.';
+      logRequestError(req, new Error(message), 503);
       res.setHeader('Retry-After', '30');
       return res.status(503).json({
         error: 'Service Unavailable',
-        message:
-          'Database connection unavailable — write operations suspended. Please try again later.',
+        message,
       });
     }
   }
@@ -184,47 +186,56 @@ const customErrorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   // which without this branch falls through to the generic 500 handler
   // below and hides the real, client-fixable cause.
   if (isPayloadTooLargeError(err)) {
-    return res.status(413).json({
-      error: 'Payload Too Large',
-      message: 'Request body exceeds the maximum allowed size.',
-    });
+    return {
+      statusCode: 413,
+      body: {
+        error: 'Payload Too Large',
+        message: 'Request body exceeds the maximum allowed size.',
+      },
+    };
   }
 
   // Multer file-size limit exceeded
   if (err.name === 'MulterError' && err.code === 'LIMIT_FILE_SIZE') {
-    return res.status(413).json({
-      error: 'Payload Too Large',
-      message: 'Uploaded file exceeds the maximum allowed size.',
-    });
+    return {
+      statusCode: 413,
+      body: {
+        error: 'Payload Too Large',
+        message: 'Uploaded file exceeds the maximum allowed size.',
+      },
+    };
   }
 
   // Other multer errors (file filter rejections, unexpected fields, etc.)
   if (err.name === 'MulterError') {
-    return res.status(400).json({
-      error: 'Bad Request',
-      message: err.message,
-    });
+    return { statusCode: 400, body: { error: 'Bad Request', message: err.message } };
   }
 
   // File filter rejection errors are passed as plain Error through Express
   if (err instanceof Error && /Invalid file type|allowed/i.test(err.message)) {
-    return res.status(400).json({
-      error: 'Bad Request',
-      message: err.message,
-    });
+    return { statusCode: 400, body: { error: 'Bad Request', message: err.message } };
   }
 
-  res.status(500).json({
-    error: 'Internal Server Error',
-    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong',
-  });
+  return {
+    statusCode: 500,
+    body: {
+      error: 'Internal Server Error',
+      message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong',
+    },
+  };
+}
+
+const customErrorHandler: ErrorRequestHandler = (err, req, res, _next) => {
+  const { statusCode, body } = classifyError(err);
+  logRequestError(req, err, statusCode);
+  res.status(statusCode).json(body);
 };
 
 app.use(customErrorHandler);
 
 // Handle 404 errors
 app.use(((req: Request, res: Response) => {
-  logger.warn({ reqId: (req as any).id, route: req.originalUrl }, '404 - Route not found');
+  logRequestError(req, new Error(`Route ${req.originalUrl} not found`), 404);
   res.status(404).json({
     error: 'error',
     message: `Route ${req.originalUrl} not found`,

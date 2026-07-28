@@ -15,7 +15,7 @@ export class WalletController {
       const wallet = await this.walletService.createWallet();
       res.status(201).json({ success: true, message: 'Wallet created successfully', wallet });
     } catch (error) {
-      handleError(res, error);
+      handleError(req, res, error);
     }
   };
 
@@ -25,7 +25,7 @@ export class WalletController {
       const signature = await this.walletService.signMessage(payload);
       res.status(200).json({ success: true, message: 'Message signed successfully', signature });
     } catch (error) {
-      handleError(res, error);
+      handleError(req, res, error);
     }
   };
 }

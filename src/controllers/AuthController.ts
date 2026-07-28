@@ -75,8 +75,7 @@ export class AuthController {
       const user = await this.userService.createUser(userData);
       res.status(201).json({ success: true, message: 'User created successfully', user });
     } catch (error) {
-      logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'register error');
-      this.handleError(res, error);
+      handleError(req, res, error);
     }
   };
 
@@ -119,11 +118,7 @@ export class AuthController {
       const user = await this.userService.createUser(userData);
       res.status(201).json({ success: true, message: 'User created successfully', user });
     } catch (error) {
-      logger.error(
-        { reqId: (req as any).id, route: req.path, err: error },
-        'registerListener error',
-      );
-      this.handleError(res, error);
+      handleError(req, res, error);
     }
   };
 
@@ -160,8 +155,7 @@ export class AuthController {
       const user = await this.authService.login(loginData);
       res.status(200).json({ success: true, message: 'User logged in successfully', user });
     } catch (error) {
-      logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'login error');
-      this.handleError(res, error);
+      handleError(req, res, error);
     }
   };
 
@@ -180,11 +174,7 @@ export class AuthController {
       const result = await this.authService.registerWithEmail(dto);
       res.status(201).json({ success: true, message: 'User registered successfully', ...result });
     } catch (error) {
-      logger.error(
-        { reqId: (req as any).id, route: req.path, err: error },
-        'registerWithEmail error',
-      );
-      this.handleError(res, error);
+      handleError(req, res, error);
     }
   };
 
@@ -203,8 +193,7 @@ export class AuthController {
       const result = await this.authService.loginWithEmail(dto);
       res.status(200).json({ success: true, message: 'User logged in successfully', ...result });
     } catch (error) {
-      logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'loginWithEmail error');
-      this.handleError(res, error);
+      handleError(req, res, error);
     }
   };
 
@@ -252,11 +241,7 @@ export class AuthController {
         ...enrollment,
       });
     } catch (error) {
-      logger.error(
-        { reqId: (req as any).id, route: req.path, err: error },
-        'enableTwoFactor error',
-      );
-      this.handleError(res, error);
+      handleError(req, res, error);
     }
   };
 
@@ -339,8 +324,7 @@ export class AuthController {
       await this.authService.verifyEmail(token);
       res.status(200).json({ success: true, message: 'Email verified successfully' });
     } catch (error) {
-      logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'verifyEmail error');
-      this.handleError(res, error);
+      handleError(req, res, error);
     }
   };
 
@@ -355,8 +339,7 @@ export class AuthController {
         .status(200)
         .json({ success: true, message: 'If the email exists, a reset link has been sent' });
     } catch (error) {
-      logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'forgotPassword error');
-      this.handleError(res, error);
+      handleError(req, res, error);
     }
   };
 
@@ -370,8 +353,7 @@ export class AuthController {
       await this.authService.resetPassword(token, password);
       res.status(200).json({ success: true, message: 'Password reset successfully' });
     } catch (error) {
-      logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'resetPassword error');
-      this.handleError(res, error);
+      handleError(req, res, error);
     }
   };
 

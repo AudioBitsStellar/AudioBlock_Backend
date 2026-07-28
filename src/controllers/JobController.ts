@@ -21,7 +21,7 @@ export class JobController {
         },
       });
     } catch (error) {
-      handleError(res, error);
+      handleError(req, res, error);
     }
   };
 
@@ -34,7 +34,7 @@ export class JobController {
       }
       return res.status(200).json({ success: true, data: job });
     } catch (error) {
-      handleError(res, error);
+      handleError(req, res, error);
     }
   };
 }
