@@ -37,21 +37,21 @@ an artist's behalf without ever holding their private key.
 
 ### Required Software
 
-| Software | Version | Purpose |
-|----------|---------|---------|
-| Node.js | >= 20.x | Runtime |
-| npm | >= 9.x | Package manager |
-| PostgreSQL | 15+ | Primary database |
-| Redis | 7+ | Caching, nonces, session state |
-| RabbitMQ | 3+ | Background job queue |
-| ffmpeg | Any recent | Audio transcoding (required for song processing) |
+| Software   | Version    | Purpose                                          |
+| ---------- | ---------- | ------------------------------------------------ |
+| Node.js    | >= 20.x    | Runtime                                          |
+| npm        | >= 9.x     | Package manager                                  |
+| PostgreSQL | 15+        | Primary database                                 |
+| Redis      | 7+         | Caching, nonces, session state                   |
+| RabbitMQ   | 3+         | Background job queue                             |
+| ffmpeg     | Any recent | Audio transcoding (required for song processing) |
 
 ### Optional Software
 
-| Software | Purpose |
-|----------|---------|
+| Software                | Purpose                                 |
+| ----------------------- | --------------------------------------- |
 | Docker & Docker Compose | Run all services without local installs |
-| pgAdmin | Database GUI (provided via Docker) |
+| pgAdmin                 | Database GUI (provided via Docker)      |
 
 ### Verify Prerequisites
 
@@ -91,21 +91,21 @@ the API still serves requests, just without background song processing.
 
 ## Tech Stack
 
-| Concern | Library |
-|---|---|
-| Runtime / language | Node.js 20, TypeScript 5 |
-| Web framework | Express 5 |
-| ORM / database | TypeORM 0.3 + PostgreSQL (`pg`) |
-| Validation | `class-validator` + `class-transformer` (DTO pattern) |
-| Auth | `jsonwebtoken`, `bcrypt` (email/password), `ethers` (EVM wallet-signature verification) |
-| File upload | `multer` (chunked audio upload, profile images, cover art) |
-| Media processing | `fluent-ffmpeg` (HLS transcoding; requires the system `ffmpeg` binary) |
-| Object storage | AWS S3 (`@aws-sdk/client-s3`) |
-| Decentralized storage | Pinata (IPFS pinning for NFT metadata) |
-| Queueing | RabbitMQ (`amqplib`) — async song-processing jobs |
-| Caching | Redis (`ioredis`) — login nonces, signed-manifest cache, OAuth state |
-| On-chain (Stellar/Soroban) | `@stellar/stellar-sdk` — transaction building, simulation, and relay |
-| On-chain (EVM, legacy) | `ethers`, Dynamic Labs MPC wallet service |
+| Concern                    | Library                                                                                 |
+| -------------------------- | --------------------------------------------------------------------------------------- |
+| Runtime / language         | Node.js 20, TypeScript 5                                                                |
+| Web framework              | Express 5                                                                               |
+| ORM / database             | TypeORM 0.3 + PostgreSQL (`pg`)                                                         |
+| Validation                 | `class-validator` + `class-transformer` (DTO pattern)                                   |
+| Auth                       | `jsonwebtoken`, `bcrypt` (email/password), `ethers` (EVM wallet-signature verification) |
+| File upload                | `multer` (chunked audio upload, profile images, cover art)                              |
+| Media processing           | `fluent-ffmpeg` (HLS transcoding; requires the system `ffmpeg` binary)                  |
+| Object storage             | AWS S3 (`@aws-sdk/client-s3`)                                                           |
+| Decentralized storage      | Pinata (IPFS pinning for NFT metadata)                                                  |
+| Queueing                   | RabbitMQ (`amqplib`) — async song-processing jobs                                       |
+| Caching                    | Redis (`ioredis`) — login nonces, signed-manifest cache, OAuth state                    |
+| On-chain (Stellar/Soroban) | `@stellar/stellar-sdk` — transaction building, simulation, and relay                    |
+| On-chain (EVM, legacy)     | `ethers`, Dynamic Labs MPC wallet service                                               |
 
 ## Project Structure
 
@@ -133,13 +133,13 @@ src/
 
 ## Data Model
 
-| Entity | Purpose | Notable fields |
-|---|---|---|
-| **User** | Account record, supports two auth methods | `walletAddress?` (wallet auth), `passwordHash?` (email/password auth), `stellarPublicKey?` / `stellarArtistId?` / `stellarArtistTokenId?` (Soroban identity once an artist connects a wallet and registers on-chain), `role` (`listener` \| `artist` \| `admin`) |
-| **Song** | One row per uploaded track | `status` (`processing` \| `ready` \| `failed`) gates streaming; **`mintStatus`** (`not_minted` \| `pending` \| `minted` \| `failed`) is tracked independently — minting is a separate, artist-initiated action, decoupled from whether the song is streamable; `metadataCid`, `onChainSongId`, `onChainTokenId` |
-| **Album** | One row per published album | `songs: string[]` (song UUIDs) |
-| **Genre** | Lookup table, seeded on boot | — |
-| **TransactionLog** | Audit trail of significant actions | `action` (e.g. `CREATE_USER`, `SONG_PROCESSED`), `txHash` |
+| Entity             | Purpose                                   | Notable fields                                                                                                                                                                                                                                                                                                  |
+| ------------------ | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **User**           | Account record, supports two auth methods | `walletAddress?` (wallet auth), `passwordHash?` (email/password auth), `stellarPublicKey?` / `stellarArtistId?` / `stellarArtistTokenId?` (Soroban identity once an artist connects a wallet and registers on-chain), `role` (`listener` \| `artist` \| `admin`)                                                |
+| **Song**           | One row per uploaded track                | `status` (`processing` \| `ready` \| `failed`) gates streaming; **`mintStatus`** (`not_minted` \| `pending` \| `minted` \| `failed`) is tracked independently — minting is a separate, artist-initiated action, decoupled from whether the song is streamable; `metadataCid`, `onChainSongId`, `onChainTokenId` |
+| **Album**          | One row per published album               | `songs: string[]` (song UUIDs)                                                                                                                                                                                                                                                                                  |
+| **Genre**          | Lookup table, seeded on boot              | —                                                                                                                                                                                                                                                                                                               |
+| **TransactionLog** | Audit trail of significant actions        | `action` (e.g. `CREATE_USER`, `SONG_PROCESSED`), `txHash`                                                                                                                                                                                                                                                       |
 
 ## API Reference
 
@@ -148,49 +148,49 @@ appropriate role (`authArtistMiddleware` for artist-only routes).
 
 ### Auth — `/api/auth`
 
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| GET | `/nonce/:email` | — | Generates a login nonce (5 min TTL in Redis) for wallet-signature auth |
-| POST | `/register` | — | Wallet-signature signup (`role`, `walletAddress`, `signature`, `message`, `email`, `username`) |
-| POST | `/register-listener` | — | Same as above, listener-oriented, no `username` required |
-| POST | `/login` | — | Wallet-signature login |
-| POST | `/register-email` | — | Email + password signup |
-| POST | `/login-email` | — | Email + password login |
-| POST | `/2fa/enable` | any authenticated email/password account | Enables TOTP 2FA and returns QR/secret plus backup codes |
+| Method | Path                 | Auth                                     | Description                                                                                    |
+| ------ | -------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| GET    | `/nonce/:email`      | —                                        | Generates a login nonce (5 min TTL in Redis) for wallet-signature auth                         |
+| POST   | `/register`          | —                                        | Wallet-signature signup (`role`, `walletAddress`, `signature`, `message`, `email`, `username`) |
+| POST   | `/register-listener` | —                                        | Same as above, listener-oriented, no `username` required                                       |
+| POST   | `/login`             | —                                        | Wallet-signature login                                                                         |
+| POST   | `/register-email`    | —                                        | Email + password signup                                                                        |
+| POST   | `/login-email`       | —                                        | Email + password login                                                                         |
+| POST   | `/2fa/enable`        | any authenticated email/password account | Enables TOTP 2FA and returns QR/secret plus backup codes                                       |
 
 ### Artist — `/api/artist`
 
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| PATCH | `/update-profile` | artist | Updates bio/website/etc., accepts `profileImage`/`pageCover` uploads |
-| POST | `/onchain/connect-wallet` | artist | Records the artist's Stellar public key |
-| POST | `/onchain/prepare-setup` | artist | Builds an unsigned `setup_artist_profile` Soroban transaction |
-| POST | `/onchain/submit-setup` | artist | Submits the wallet-signed transaction, persists the resulting artist/token IDs |
+| Method | Path                      | Auth   | Description                                                                    |
+| ------ | ------------------------- | ------ | ------------------------------------------------------------------------------ |
+| PATCH  | `/update-profile`         | artist | Updates bio/website/etc., accepts `profileImage`/`pageCover` uploads           |
+| POST   | `/onchain/connect-wallet` | artist | Records the artist's Stellar public key                                        |
+| POST   | `/onchain/prepare-setup`  | artist | Builds an unsigned `setup_artist_profile` Soroban transaction                  |
+| POST   | `/onchain/submit-setup`   | artist | Submits the wallet-signed transaction, persists the resulting artist/token IDs |
 
 ### Song — `/api/song`
 
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| POST | `/upload/chunk` | artist | Uploads one chunk of a large audio file |
-| POST | `/upload/cover` | artist | Uploads cover art, pushes to S3 |
-| POST | `/upload/finalize` | artist | Merges chunks, creates the `Song` row, queues background processing |
-| GET | `/stream/:id` | — | Returns the song's HLS manifest (presigned S3 URLs), cached in Redis |
-| POST | `/:id/onchain/prepare-mint` | artist | Builds an unsigned `upload_and_mint_song` Soroban transaction |
-| POST | `/:id/onchain/submit-mint` | artist | Submits the wallet-signed mint transaction |
+| Method | Path                        | Auth   | Description                                                          |
+| ------ | --------------------------- | ------ | -------------------------------------------------------------------- |
+| POST   | `/upload/chunk`             | artist | Uploads one chunk of a large audio file                              |
+| POST   | `/upload/cover`             | artist | Uploads cover art, pushes to S3                                      |
+| POST   | `/upload/finalize`          | artist | Merges chunks, creates the `Song` row, queues background processing  |
+| GET    | `/stream/:id`               | —      | Returns the song's HLS manifest (presigned S3 URLs), cached in Redis |
+| POST   | `/:id/onchain/prepare-mint` | artist | Builds an unsigned `upload_and_mint_song` Soroban transaction        |
+| POST   | `/:id/onchain/submit-mint`  | artist | Submits the wallet-signed mint transaction                           |
 
 ### Wallet — `/api/wallet` (EVM, Dynamic Labs)
 
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| POST | `/evm/create` | — | Creates an MPC-backed EVM wallet via Dynamic Labs |
-| POST | `/evm/signMessage` | — | Signs a message with a Dynamic-managed wallet |
+| Method | Path               | Auth | Description                                       |
+| ------ | ------------------ | ---- | ------------------------------------------------- |
+| POST   | `/evm/create`      | —    | Creates an MPC-backed EVM wallet via Dynamic Labs |
+| POST   | `/evm/signMessage` | —    | Signs a message with a Dynamic-managed wallet     |
 
 ### Twitter OAuth — `/api/auth/twitter`
 
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| GET | `/init` | artist | Starts the OAuth2 PKCE flow, redirects to Twitter |
-| GET | `/callback` | — | Twitter's redirect target; links the account to the authenticated user |
+| Method | Path        | Auth   | Description                                                            |
+| ------ | ----------- | ------ | ---------------------------------------------------------------------- |
+| GET    | `/init`     | artist | Starts the OAuth2 PKCE flow, redirects to Twitter                      |
+| GET    | `/callback` | —      | Twitter's redirect target; links the account to the authenticated user |
 
 ## The Song Processing Pipeline
 
@@ -226,7 +226,7 @@ The backend **never holds an artist's Stellar secret key**. Every on-chain
 write follows the same three-step relay pattern, implemented once in
 `SorobanService` and reused for both artist setup and song minting:
 
-1. **Prepare** (`prepareInvocation`) — given the artist's *public* key, the
+1. **Prepare** (`prepareInvocation`) — given the artist's _public_ key, the
    target contract, and the method/args, the backend fetches the artist's
    on-chain account, builds the contract-call operation, and asks Soroban
    to simulate/assemble the transaction. Returns the **unsigned transaction
@@ -429,10 +429,12 @@ Alternatively, delete the raw file explicitly in the background worker
 completes and is uploaded:
 
 ```typescript
-await s3.deleteObject({
-  Bucket: process.env.AWS_BUCKET_NAME,
-  Key: `uploads/raw/${song.id}.mp3`,
-}).promise();
+await s3
+  .deleteObject({
+    Bucket: process.env.AWS_BUCKET_NAME,
+    Key: `uploads/raw/${song.id}.mp3`,
+  })
+  .promise();
 ```
 
 This is more precise (no 7-day lag) and easier to test locally.
@@ -469,6 +471,7 @@ The validation is performed in `src/config/env.ts` and called at the top of
   flags. Never bake secrets into the image.
 
 In all cases, ensure that:
+
 - `.env` is in `.gitignore` (it is).
 - No real secrets exist in git history or public container registries.
 - The startup validation catches any missing secrets before the server listens.
@@ -490,6 +493,7 @@ In production, `NODE_ENV=production` disables auto-synchronize. Schema changes
 are applied explicitly via migrations:
 
 1. **Generate a new migration** after editing entities:
+
    ```bash
    npm run migration:generate -- -n DescribeYourChange
    # This creates a new file in src/migrations/ capturing the detected
@@ -500,6 +504,7 @@ are applied explicitly via migrations:
    needed (e.g., if the tool misses a constraint or index).
 
 3. **Test** in a staging database:
+
    ```bash
    NODE_ENV=production npm run build
    npm run migration:run
@@ -543,13 +548,13 @@ docker compose up --build
 
 The API is available at `http://localhost:4000`. Additional services:
 
-| Service | URL |
-|---------|-----|
-| API | `http://localhost:4000` |
-| pgAdmin | `http://localhost:5050` |
+| Service             | URL                      |
+| ------------------- | ------------------------ |
+| API                 | `http://localhost:4000`  |
+| pgAdmin             | `http://localhost:5050`  |
 | RabbitMQ Management | `http://localhost:15672` |
-| Prometheus | `http://localhost:9090` |
-| Grafana | `http://localhost:3000` |
+| Prometheus          | `http://localhost:9090`  |
+| Grafana             | `http://localhost:3000`  |
 
 ### Without Docker
 
@@ -580,6 +585,7 @@ The server starts at `http://localhost:4000` with hot-reload.
 
 2. **Seed genres**: The genre seeder runs automatically on every boot. To
    re-run manually:
+
    ```bash
    npm run seed:genres
    ```
@@ -625,36 +631,43 @@ npm run format
 ### Common Issues
 
 **"Missing required environment variables" on startup**
+
 - Copy `.env.example` to `.env` and fill in all required values.
 - See [docs/environment-variables.md](docs/environment-variables.md) for the
   complete reference.
 
 **"ECONNREFUSED" to PostgreSQL**
+
 - Ensure PostgreSQL is running on the host/port specified in `POSTGRES_HOST`
   and `POSTGRES_PORT`.
 - If using Docker, check that the `db` container is healthy:
   `docker compose ps`
 
 **"ECONNREFUSED" to Redis**
+
 - Ensure Redis is running on `REDIS_HOST:REDIS_PORT`.
 - Docker: `docker compose logs redis`
 
 **"ECONNREFUSED" to RabbitMQ**
+
 - RabbitMQ is optional for basic API operations. The API starts without it,
   but background song processing won't work.
 - Docker: `docker compose logs rabbitmq`
 - Ensure `RABBITMQ_URL` is set correctly.
 
 **ffmpeg not found**
+
 - Install ffmpeg: `apt install ffmpeg` (Ubuntu) or `brew install ffmpeg` (macOS)
 - The song processor worker requires ffmpeg for HLS transcoding.
 
 **Songs stuck in "processing" status**
+
 - Check that the song processor worker is running:
   `npm run worker` (standalone) or check Docker logs.
 - Check RabbitMQ is connected and the `song_processing` queue has consumers.
 
 **Port 4000 already in use**
+
 - Change the `PORT` environment variable or stop the other process:
   `lsof -i :4000`
 
@@ -666,19 +679,60 @@ npm run format
 
 ## Scripts
 
-| Command | Description |
-|---|---|
-| `npm run dev` | Hot-reload dev server (`ts-node-dev`) |
-| `npm run build` | Compiles TypeScript to `dist/` |
-| `npm start` | Runs the compiled build (`dist/index.js`) |
+### Development
+
+| Command          | Description                                                                                                                     |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run dev`    | Hot-reload dev server (`ts-node-dev`) — starts the API with auto-restart on file changes                                        |
 | `npm run worker` | Runs the song-processing worker as a standalone process, independent of the API process — useful for scaling workers separately |
-| `npm run seed:genres` | Manually re-runs the genre seeder (also runs automatically on every boot) |
-| `npm run migration:generate -- -n DescribeYourChange` | Generates a new migration file based on entity changes |
-| `npm run migration:run` | Applies pending migrations to the database |
-| `npm run migration:revert` | Reverts the last applied migration |
-| `npm test` | Runs the full Jest suite (`src/__tests__/**/*.test.ts`) |
+
+### Building
+
+| Command         | Description                                                               |
+| --------------- | ------------------------------------------------------------------------- |
+| `npm run build` | Compiles TypeScript to `dist/` — required before running in production    |
+| `npm start`     | Runs the compiled build (`dist/index.js`) — use in production after build |
+
+### Testing
+
+| Command                                    | Description                                                      |
+| ------------------------------------------ | ---------------------------------------------------------------- |
+| `npm test`                                 | Runs the full Jest suite (`src/__tests__/**/*.test.ts`)          |
 | `npm test -- src/__tests__/health.test.ts` | Runs a single test file (swap in any path under `src/__tests__`) |
-| `npm run test:watch` | Runs Jest in watch mode |
+| `npm run test:watch`                       | Runs Jest in watch mode — re-runs tests on file changes          |
+| `npm run test:dynamic`                     | Runs dynamic tests using `ts-node-esm`                           |
+
+### Code Quality
+
+| Command                       | Description                                                   |
+| ----------------------------- | ------------------------------------------------------------- |
+| `npm run lint`                | Runs ESLint on all TypeScript files in `src/`                 |
+| `npm run lint:fix`            | Auto-fixes ESLint issues where possible                       |
+| `npm run format`              | Formats all TypeScript files with Prettier                    |
+| `npm run format:check`        | Checks if all files are properly formatted (CI-friendly)      |
+| `npm run deadcode`            | Detects unused exports, variables, and dependencies with knip |
+| `npm run deadcode:production` | Runs dead code detection in production mode (stricter)        |
+
+### Database
+
+| Command                                               | Description                                            |
+| ----------------------------------------------------- | ------------------------------------------------------ |
+| `npm run migration:generate -- -n DescribeYourChange` | Generates a new migration file based on entity changes |
+| `npm run migration:run`                               | Applies pending migrations to the database             |
+| `npm run migration:revert`                            | Reverts the last applied migration                     |
+
+### Data & Jobs
+
+| Command                       | Description                                                               |
+| ----------------------------- | ------------------------------------------------------------------------- |
+| `npm run seed:genres`         | Manually re-runs the genre seeder (also runs automatically on every boot) |
+| `npm run reconcile:royalties` | Runs the royalty reconciliation job                                       |
+
+### Git Hooks
+
+| Command           | Description                                                    |
+| ----------------- | -------------------------------------------------------------- |
+| `npm run prepare` | Installs Husky git hooks — runs automatically on `npm install` |
 
 ## Known Issues / Cleanup Backlog
 
@@ -694,3 +748,7 @@ npm run format
 ## Contributing
 
 Please read our [Contributing Guide](CONTRIBUTING.md) for details on our code of conduct, and the process for submitting pull requests to us.
+
+## License
+
+This project is licensed under the ISC License - see the [LICENSE](LICENSE) file for details.

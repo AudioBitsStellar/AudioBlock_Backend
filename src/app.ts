@@ -8,6 +8,7 @@ import { requestLoggerMiddleware } from './middlewares/requestLogger';
 import { metricsMiddleware } from './middlewares/metricsMiddleware';
 import { getMetrics, getMetricsContentType, updateDbPoolMetrics } from './services/MetricsService';
 import cors from 'cors';
+import { corsOptions } from './config/cors';
 import redis from './config/redis';
 import AppDataSource from './config/db';
 import authRoutes from './routes/authRoutes';
@@ -19,6 +20,8 @@ import userRoutes from './routes/userRoutes';
 import marketplaceRoutes from './routes/marketplaceRoutes';
 import adminRoutes from './routes/adminRoutes';
 import healthRoutes from './routes/healthRoutes';
+import albumRoutes from './routes/AlbumRoutes';
+import royaltyTemplateRoutes from './routes/royaltyTemplateRoutes';
 import { getPoolStats, checkDbHealth } from './services/DbPoolMonitor';
 import { dbConnectionState } from './services/DatabaseConnectionManager';
 import { JSON_BODY_LIMIT, URLENCODED_BODY_LIMIT } from './config/constants';
@@ -38,32 +41,10 @@ app.use(requestLoggerMiddleware);
 // Prometheus metrics tracking (skips /metrics path internally)
 app.use(metricsMiddleware);
 
-// CORS configuration
-// In production set ALLOWED_ORIGINS to a comma-separated list of the deployed
-// listener-app and artist-dashboard domains, e.g.:
-//   ALLOWED_ORIGINS=https://listener.audioblockz.com,https://artist.audioblockz.com
-const allowedOrigins: string[] = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
-  : ['http://localhost:3000', 'http://localhost:3001', 'http://127.0.0.1:5500'];
-
-app.use(
-  cors({
-    origin: allowedOrigins,
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowedHeaders: [
-      'Content-Type',
-      'Authorization',
-      'X-Requested-With',
-      'Accept',
-      'Origin',
-      'Access-Control-Request-Method',
-      'Access-Control-Request-Headers',
-    ],
-    exposedHeaders: ['Authorization'],
-    maxAge: 86400, // 24 hours
-  }),
-);
+// CORS configuration (Issue #107)
+// ALLOWED_ORIGINS env var accepts a comma-separated list of origins.
+// In production, wildcards are rejected and an explicit list is required.
+app.use(cors(corsOptions));
 
 // #109 — explicit size limits so an oversized body is rejected with a clear
 // 413 before it's ever fully buffered/parsed into memory, rather than
@@ -129,6 +110,12 @@ app.use('/api/wallet', walletRoutes);
 // Song wallet
 app.use('/api/song', SongRoutes);
 
+// Album listing (paginated)
+app.use('/api/album', albumRoutes);
+
+// Royalty split templates (Issue #98)
+app.use('/api/royalty-templates', royaltyTemplateRoutes);
+
 // Marketplace Soroban relay (list + buy)
 app.use('/api/marketplace', marketplaceRoutes);
 
@@ -178,12 +165,22 @@ const circuitBreakerMiddleware: RequestHandler = (req, res, next) => {
 
 app.use(circuitBreakerMiddleware);
 
-/**
- * Classifies an error caught by Express's error pipeline into a response
- * status/body, without sending anything — kept pure so customErrorHandler
- * can log with the real status code before responding (Issue #122).
- */
-function classifyError(err: any): { statusCode: number; body: Record<string, unknown> } {
+const customErrorHandler: ErrorRequestHandler = (err, req, res, _next) => {
+  logger.error(
+    { reqId: (req as any).id, err, route: req.originalUrl, method: req.method },
+    'Unhandled error',
+  );
+
+  // #107 — CORS origin check failure returns 403 with a clear message
+  // instead of the default CORS header omission (which silently fails in
+  // the browser and provides no actionable feedback).
+  if (err.message === 'Origin not allowed by CORS') {
+    return res.status(403).json({
+      error: 'Forbidden',
+      message: 'Origin not allowed',
+    });
+  }
+
   // #109 — express.json()/express.urlencoded() reject a body over their
   // configured `limit` with a body-parser error (type "entity.too.large"),
   // which without this branch falls through to the generic 500 handler

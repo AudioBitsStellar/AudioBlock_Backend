@@ -25,7 +25,7 @@ export const PASSWORD_SALT_ROUNDS = 12;
 export const JWT_EXPIRATION = '1d';
 
 /** Number of recovery codes generated for 2FA */
-export const RECOVERY_CODE_COUNT = 10;
+export const RECOVERY_CODE_COUNT = 8;
 
 /** Number of random bytes for recovery code generation */
 export const RECOVERY_CODE_BYTES = 5;

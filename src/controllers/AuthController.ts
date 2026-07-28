@@ -9,8 +9,9 @@ import { AuthService } from '../services/AuthService';
 import { UserService } from './../services/UserService';
 import { Request, Response } from 'express';
 import { validate } from 'class-validator';
-import { formatValidationErrors, handleError } from '../utils/helpers';
-import redis from '../config/redis';
+import { formatValidationErrors } from '../utils/helpers';
+import { AppError } from '../errors/AppError';
+import logger from '../config/logger';
 
 export class AuthController {
   private userService: UserService;
@@ -30,7 +31,8 @@ export class AuthController {
         message: `Audioblocks Login\nNonce: ${nonce}\nEmail: ${email}`,
       });
     } catch (error) {
-      handleError(req, res, error);
+      logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'getUserNonce error');
+      this.handleError(res, error);
     }
   };
 
@@ -195,6 +197,36 @@ export class AuthController {
     }
   };
 
+  refreshToken = async (req: Request, res: Response) => {
+    try {
+      const { refreshToken } = req.body;
+      if (!refreshToken) {
+        return res.status(400).json({ success: false, message: 'Refresh token is required' });
+      }
+
+      const result = await this.authService.refreshToken(refreshToken);
+      res.status(200).json({ success: true, message: 'Token refreshed successfully', ...result });
+    } catch (error) {
+      logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'refreshToken error');
+      this.handleError(res, error);
+    }
+  };
+
+  logout = async (req: Request, res: Response) => {
+    try {
+      const { refreshToken } = req.body;
+      if (!refreshToken) {
+        return res.status(400).json({ success: false, message: 'Refresh token is required' });
+      }
+
+      await this.authService.logout(refreshToken);
+      res.status(200).json({ success: true, message: 'Logged out successfully' });
+    } catch (error) {
+      logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'logout error');
+      this.handleError(res, error);
+    }
+  };
+
   enableTwoFactor = async (req: Request, res: Response) => {
     try {
       const userId = (req as any).user?.id;
@@ -210,6 +242,79 @@ export class AuthController {
       });
     } catch (error) {
       handleError(req, res, error);
+    }
+  };
+
+  verifyTwoFactor = async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ success: false, message: 'Unauthorized' });
+      }
+
+      const { code } = req.body;
+      if (!code) {
+        return res.status(400).json({ success: false, message: 'Verification code is required' });
+      }
+
+      await this.authService.verifyTwoFactor(userId, code);
+      res.status(200).json({ success: true, message: 'Two-factor authentication verified' });
+    } catch (error) {
+      logger.error(
+        { reqId: (req as any).id, route: req.path, err: error },
+        'verifyTwoFactor error',
+      );
+      this.handleError(res, error);
+    }
+  };
+
+  disableTwoFactor = async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ success: false, message: 'Unauthorized' });
+      }
+
+      const { code } = req.body;
+      if (!code) {
+        return res
+          .status(400)
+          .json({ success: false, message: 'Two-factor code is required to disable' });
+      }
+
+      await this.authService.disableTwoFactor(userId, code);
+      res.status(200).json({ success: true, message: 'Two-factor authentication disabled' });
+    } catch (error) {
+      logger.error(
+        { reqId: (req as any).id, route: req.path, err: error },
+        'disableTwoFactor error',
+      );
+      this.handleError(res, error);
+    }
+  };
+
+  validateTwoFactor = async (req: Request, res: Response) => {
+    try {
+      const { partialToken, code } = req.body;
+      if (!partialToken) {
+        return res.status(400).json({ success: false, message: 'Partial token is required' });
+      }
+      if (!code) {
+        return res.status(400).json({ success: false, message: 'Verification code is required' });
+      }
+
+      const result = await this.authService.completeTwoFactorLogin(partialToken, code);
+      res.status(200).json({
+        success: true,
+        message: 'Two-factor authentication validated',
+        ...result,
+      });
+    } catch (error) {
+      logger.error(
+        { reqId: (req as any).id, route: req.path, err: error },
+        'validateTwoFactor error',
+      );
+      this.handleError(res, error);
     }
   };
 
@@ -251,4 +356,24 @@ export class AuthController {
       handleError(req, res, error);
     }
   };
+
+  private handleError(res: Response, error: unknown): void {
+    if (error instanceof AppError) {
+      logger.error({ err: error }, error.message);
+      return res.status(error.statusCode).json({ message: error.message, details: error.details });
+    }
+
+    if (error instanceof Error) {
+      logger.error({ err: error }, error.message);
+      return res.status(400).json({ message: error.message });
+    }
+
+    if (typeof error === 'string') {
+      logger.error({ err: error }, error);
+      return res.status(400).json({ message: error });
+    }
+
+    logger.error({ err: error }, 'Unknown error');
+    res.status(500).json({ message: 'Internal server error' });
+  }
 }
