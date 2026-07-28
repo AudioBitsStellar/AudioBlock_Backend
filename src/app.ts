@@ -26,6 +26,7 @@ import { getPoolStats, checkDbHealth } from './services/DbPoolMonitor';
 import { dbConnectionState } from './services/DatabaseConnectionManager';
 import { JSON_BODY_LIMIT, URLENCODED_BODY_LIMIT } from './config/constants';
 import { isPayloadTooLargeError } from './middlewares/bodySizeLimit';
+import { sanitizeInput } from './middlewares/sanitizeInput';
 import { logRequestError } from './utils/errorLogger';
 
 // Route imports
@@ -51,6 +52,10 @@ app.use(cors(corsOptions));
 // relying on body-parser's un-configured (100kb) default.
 app.use(express.json({ limit: JSON_BODY_LIMIT }));
 app.use(express.urlencoded({ extended: true, limit: URLENCODED_BODY_LIMIT }));
+
+// Sanitize request bodies against stored XSS before they reach routes (Issue #101).
+// Runs after body parsing so req.body is populated; skips binary/multipart uploads.
+app.use(sanitizeInput);
 
 // Add timeout configurations
 app.use((req, res, next) => {
