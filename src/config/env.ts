@@ -18,6 +18,7 @@ export interface ValidatedEnv {
   SOROBAN_NETWORK: string;
   PINATA_JWT: string;
   PINATA_GATEWAY: string;
+  ALLOWED_ORIGINS?: string;
 }
 
 const requiredVars: (keyof ValidatedEnv)[] = [
@@ -69,5 +70,7 @@ export function validateEnvironment(): ValidatedEnv {
     SOROBAN_NETWORK: process.env.SOROBAN_NETWORK || 'testnet',
     PINATA_JWT: process.env.PINATA_JWT!,
     PINATA_GATEWAY: process.env.PINATA_GATEWAY!,
+    LOG_LEVEL: process.env.LOG_LEVEL || 'info',
+    ERROR_DEDUP_WINDOW_MS: process.env.ERROR_DEDUP_WINDOW_MS || String(5 * 60 * 1000),
   };
 }

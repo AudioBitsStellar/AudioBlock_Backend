@@ -9,9 +9,8 @@ import { AuthService } from '../services/AuthService';
 import { UserService } from './../services/UserService';
 import { Request, Response } from 'express';
 import { validate } from 'class-validator';
-import { handleError } from '../utils/helpers';
+import { formatValidationErrors } from '../utils/helpers';
 import { AppError } from '../errors/AppError';
-import redis from '../config/redis';
 import logger from '../config/logger';
 
 function toValidationDetails(errors: { property: string; constraints?: Record<string, string> }[]) {
@@ -40,7 +39,7 @@ export class AuthController {
       });
     } catch (error) {
       logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'getUserNonce error');
-      handleError(res, error);
+      this.handleError(res, error);
     }
   };
 
@@ -76,8 +75,7 @@ export class AuthController {
       const user = await this.userService.createUser(userData);
       res.status(201).json({ success: true, message: 'User created successfully', user });
     } catch (error) {
-      logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'register error');
-      handleError(res, error);
+      handleError(req, res, error);
     }
   };
 
@@ -113,11 +111,7 @@ export class AuthController {
       const user = await this.userService.createUser(userData);
       res.status(201).json({ success: true, message: 'User created successfully', user });
     } catch (error) {
-      logger.error(
-        { reqId: (req as any).id, route: req.path, err: error },
-        'registerListener error',
-      );
-      handleError(res, error);
+      handleError(req, res, error);
     }
   };
 
@@ -147,8 +141,7 @@ export class AuthController {
       const user = await this.authService.login(loginData);
       res.status(200).json({ success: true, message: 'User logged in successfully', user });
     } catch (error) {
-      logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'login error');
-      handleError(res, error);
+      handleError(req, res, error);
     }
   };
 
@@ -166,11 +159,7 @@ export class AuthController {
       const result = await this.authService.registerWithEmail(dto);
       res.status(201).json({ success: true, message: 'User registered successfully', ...result });
     } catch (error) {
-      logger.error(
-        { reqId: (req as any).id, route: req.path, err: error },
-        'registerWithEmail error',
-      );
-      handleError(res, error);
+      handleError(req, res, error);
     }
   };
 
@@ -188,8 +177,37 @@ export class AuthController {
       const result = await this.authService.loginWithEmail(dto);
       res.status(200).json({ success: true, message: 'User logged in successfully', ...result });
     } catch (error) {
-      logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'loginWithEmail error');
-      handleError(res, error);
+      handleError(req, res, error);
+    }
+  };
+
+  refreshToken = async (req: Request, res: Response) => {
+    try {
+      const { refreshToken } = req.body;
+      if (!refreshToken) {
+        return res.status(400).json({ success: false, message: 'Refresh token is required' });
+      }
+
+      const result = await this.authService.refreshToken(refreshToken);
+      res.status(200).json({ success: true, message: 'Token refreshed successfully', ...result });
+    } catch (error) {
+      logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'refreshToken error');
+      this.handleError(res, error);
+    }
+  };
+
+  logout = async (req: Request, res: Response) => {
+    try {
+      const { refreshToken } = req.body;
+      if (!refreshToken) {
+        return res.status(400).json({ success: false, message: 'Refresh token is required' });
+      }
+
+      await this.authService.logout(refreshToken);
+      res.status(200).json({ success: true, message: 'Logged out successfully' });
+    } catch (error) {
+      logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'logout error');
+      this.handleError(res, error);
     }
   };
 
@@ -207,9 +225,78 @@ export class AuthController {
         ...enrollment,
       });
     } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  verifyTwoFactor = async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ success: false, message: 'Unauthorized' });
+      }
+
+      const { code } = req.body;
+      if (!code) {
+        return res.status(400).json({ success: false, message: 'Verification code is required' });
+      }
+
+      await this.authService.verifyTwoFactor(userId, code);
+      res.status(200).json({ success: true, message: 'Two-factor authentication verified' });
+    } catch (error) {
       logger.error(
         { reqId: (req as any).id, route: req.path, err: error },
-        'enableTwoFactor error',
+        'verifyTwoFactor error',
+      );
+      this.handleError(res, error);
+    }
+  };
+
+  disableTwoFactor = async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ success: false, message: 'Unauthorized' });
+      }
+
+      const { code } = req.body;
+      if (!code) {
+        return res
+          .status(400)
+          .json({ success: false, message: 'Two-factor code is required to disable' });
+      }
+
+      await this.authService.disableTwoFactor(userId, code);
+      res.status(200).json({ success: true, message: 'Two-factor authentication disabled' });
+    } catch (error) {
+      logger.error(
+        { reqId: (req as any).id, route: req.path, err: error },
+        'disableTwoFactor error',
+      );
+      this.handleError(res, error);
+    }
+  };
+
+  validateTwoFactor = async (req: Request, res: Response) => {
+    try {
+      const { partialToken, code } = req.body;
+      if (!partialToken) {
+        return res.status(400).json({ success: false, message: 'Partial token is required' });
+      }
+      if (!code) {
+        return res.status(400).json({ success: false, message: 'Verification code is required' });
+      }
+
+      const result = await this.authService.completeTwoFactorLogin(partialToken, code);
+      res.status(200).json({
+        success: true,
+        message: 'Two-factor authentication validated',
+        ...result,
+      });
+    } catch (error) {
+      logger.error(
+        { reqId: (req as any).id, route: req.path, err: error },
+        'validateTwoFactor error',
       );
       handleError(res, error);
     }
@@ -221,8 +308,7 @@ export class AuthController {
       await this.authService.verifyEmail(token);
       res.status(200).json({ success: true, message: 'Email verified successfully' });
     } catch (error) {
-      logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'verifyEmail error');
-      handleError(res, error);
+      handleError(req, res, error);
     }
   };
 
@@ -237,8 +323,7 @@ export class AuthController {
         .status(200)
         .json({ success: true, message: 'If the email exists, a reset link has been sent' });
     } catch (error) {
-      logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'forgotPassword error');
-      handleError(res, error);
+      handleError(req, res, error);
     }
   };
 
@@ -252,8 +337,27 @@ export class AuthController {
       await this.authService.resetPassword(token, password);
       res.status(200).json({ success: true, message: 'Password reset successfully' });
     } catch (error) {
-      logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'resetPassword error');
-      handleError(res, error);
+      handleError(req, res, error);
     }
   };
+
+  private handleError(res: Response, error: unknown): void {
+    if (error instanceof AppError) {
+      logger.error({ err: error }, error.message);
+      return res.status(error.statusCode).json({ message: error.message, details: error.details });
+    }
+
+    if (error instanceof Error) {
+      logger.error({ err: error }, error.message);
+      return res.status(400).json({ message: error.message });
+    }
+
+    if (typeof error === 'string') {
+      logger.error({ err: error }, error);
+      return res.status(400).json({ message: error });
+    }
+
+    logger.error({ err: error }, 'Unknown error');
+    res.status(500).json({ message: 'Internal server error' });
+  }
 }

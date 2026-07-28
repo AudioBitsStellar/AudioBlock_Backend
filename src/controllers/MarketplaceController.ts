@@ -24,7 +24,7 @@ export class MarketplaceController {
       );
       return res.status(200).json({ success: true, data: prepared });
     } catch (error) {
-      handleError(res, error);
+      handleError(req, res, error);
     }
   };
 
@@ -34,7 +34,7 @@ export class MarketplaceController {
       const result = await marketplaceService.submitListing(signedXdr);
       return res.status(200).json({ success: true, data: result });
     } catch (error) {
-      handleOnChainError(res, error);
+      handleError(req, res, error);
     }
   };
 
@@ -52,7 +52,7 @@ export class MarketplaceController {
       const prepared = await marketplaceService.prepareBuy(stellarPublicKey, Number(tokenId));
       return res.status(200).json({ success: true, data: prepared });
     } catch (error) {
-      handleError(res, error);
+      handleError(req, res, error);
     }
   };
 
@@ -62,7 +62,7 @@ export class MarketplaceController {
       const result = await marketplaceService.submitBuy(signedXdr);
       return res.status(200).json({ success: true, data: result });
     } catch (error) {
-      handleOnChainError(res, error);
+      handleError(req, res, error);
     }
   };
 }

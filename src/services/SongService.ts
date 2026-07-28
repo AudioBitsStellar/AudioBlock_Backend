@@ -2,6 +2,7 @@ import { In, Repository } from 'typeorm';
 import { Song } from '../entities/Song';
 import { User } from '../entities/User';
 import { TransactionLog } from '../entities/TransactionLog';
+import { RoyaltyTemplate } from '../entities/RoyaltyTemplate';
 import AppDataSource from '../config/db';
 import dotenv from 'dotenv';
 import path from 'path';
@@ -94,6 +95,38 @@ export class SongService {
     fs.unlinkSync(coverPath); // cleanup local temp
 
     return s3Res.Location; // the S3 URL for the cover
+  }
+
+  /**
+   * Apply a royalty template's splits to a song. Stores the split configuration
+   * on the song for use during royalty payout calculation.
+   *
+   * @param songId - ID of the song to apply splits to.
+   * @param templateId - ID of the royalty template to apply.
+   * @throws {Error} If song or template not found, or user is not the song owner.
+   */
+  async applyTemplate(songId: string, templateId: string, userId: string): Promise<Song> {
+    const song = await this.songRepo.findOneBy({ id: songId });
+    if (!song) {
+      throw Object.assign(new Error('Song not found'), { statusCode: 404 });
+    }
+
+    if (song.artistId !== userId) {
+      throw Object.assign(new Error('Not authorized to modify this song'), { statusCode: 403 });
+    }
+
+    const templateRepo = AppDataSource.getRepository(RoyaltyTemplate);
+    const template = await templateRepo.findOneBy({ id: templateId });
+    if (!template) {
+      throw Object.assign(new Error('Template not found'), { statusCode: 404 });
+    }
+
+    if (template.userId !== userId) {
+      throw Object.assign(new Error('Not authorized to use this template'), { statusCode: 403 });
+    }
+
+    song.royaltySplits = template.splits;
+    return this.songRepo.save(song);
   }
 
   /**

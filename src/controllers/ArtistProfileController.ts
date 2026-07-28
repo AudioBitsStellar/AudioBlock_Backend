@@ -33,7 +33,7 @@ export class ArtistProfileController {
       const updatedProfile = await this.artistProfileService.updateArtistProfile(userId, dto);
       return res.status(200).json({ success: true, data: updatedProfile });
     } catch (error) {
-      handleError(res, error);
+      handleError(req, res, error);
     } finally {
       // optional: clean up temp uploads if validation fails
       if (req.files) {

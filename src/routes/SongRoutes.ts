@@ -10,6 +10,7 @@ import fs from 'fs';
 import { SongController } from '../controllers/SongController';
 import { SubmitSignedXdrDTO } from '../dtos/SubmitSignedXdrDTO';
 import { etagCache } from '../middlewares/etag';
+import { uploadRateLimiter } from '../middlewares/uploadRateLimiter';
 
 const uploadController = new UploadController();
 const router = Router();
@@ -105,6 +106,7 @@ const coverUpload = multer({
 router.post(
   '/upload/chunk',
   authArtistMiddleware,
+  uploadRateLimiter,
   chunkUpload.single('chunk'),
   validateDTO(UploadChunkDTO),
   uploadController.uploadChunk,
@@ -112,6 +114,7 @@ router.post(
 router.post(
   '/upload/cover',
   authArtistMiddleware,
+  uploadRateLimiter,
   coverUpload.single('cover'),
   validateDTO(CreateCoverDTO),
   uploadController.uploadCover,
@@ -119,6 +122,7 @@ router.post(
 router.post(
   '/upload/finalize',
   authArtistMiddleware,
+  uploadRateLimiter,
   validateDTO(FinalizeUploadDTO),
   uploadController.finalizeUpload,
 );
@@ -144,5 +148,8 @@ router.post(
   validateDTO(SubmitSignedXdrDTO),
   SongController.submitMint,
 );
+
+// Apply royalty split template to a song (Issue #98)
+router.post('/:id/apply-template', authArtistMiddleware, SongController.applyTemplate);
 
 export default router;

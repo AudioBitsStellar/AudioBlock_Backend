@@ -7,6 +7,7 @@ import { TransactionLog } from '../entities/TransactionLog';
 import { Genre } from '../entities/Genre';
 import { Album } from '../entities/Album';
 import { RoyaltyPayout } from '../entities/RoyaltyPayout';
+import { RoyaltyTemplate } from '../entities/RoyaltyTemplate';
 
 dotenv.config();
 
@@ -32,27 +33,36 @@ export const dbPoolConfig = {
   idleTimeoutMillis: Number(process.env.DB_IDLE_TIMEOUT_MS || 300000),
 };
 
+const isTestEnvironment = process.env.NODE_ENV === 'test' || process.env.DB_TYPE === 'sqlite';
+const databaseType = process.env.DB_TYPE === 'sqlite' ? 'sqlite' : 'postgres';
+
 const AppDataSource = new DataSource({
-  type: 'postgres',
-  host: process.env.POSTGRES_HOST || 'localhost',
-  port: Number(process.env.POSTGRES_PORT || 5321),
-  username: process.env.POSTGRES_USER || 'postgres',
-  password: process.env.POSTGRES_PASSWORD || '1234',
-  database: process.env.POSTGRES_DATABASE || 'audioblocks',
-  synchronize: process.env.NODE_ENV !== 'production',
+  type: databaseType as 'postgres' | 'sqlite',
+  host: databaseType === 'postgres' ? process.env.POSTGRES_HOST || 'localhost' : undefined,
+  port: databaseType === 'postgres' ? Number(process.env.POSTGRES_PORT || 5321) : undefined,
+  username: databaseType === 'postgres' ? process.env.POSTGRES_USER || 'postgres' : undefined,
+  password: databaseType === 'postgres' ? process.env.POSTGRES_PASSWORD || '1234' : undefined,
+  database:
+    databaseType === 'sqlite'
+      ? process.env.SQLITE_DATABASE || ':memory:'
+      : process.env.POSTGRES_DATABASE || 'audioblocks',
+  synchronize: isTestEnvironment || process.env.NODE_ENV !== 'production',
   dropSchema: false,
-  ssl: false,
-  logging: true,
+  ssl: databaseType === 'postgres' ? false : undefined,
+  logging: !isTestEnvironment,
   // Cap the pool at the configured maximum. `extra` carries the full set of
   // node-postgres Pool options (min/max sizing + timeouts).
-  poolSize: dbPoolConfig.max,
-  extra: {
-    max: dbPoolConfig.max,
-    min: dbPoolConfig.min,
-    connectionTimeoutMillis: dbPoolConfig.connectionTimeoutMillis,
-    idleTimeoutMillis: dbPoolConfig.idleTimeoutMillis,
-  },
-  entities: [User, Song, TransactionLog, Genre, Album, RoyaltyPayout],
+  poolSize: databaseType === 'postgres' ? dbPoolConfig.max : undefined,
+  extra:
+    databaseType === 'postgres'
+      ? {
+          max: dbPoolConfig.max,
+          min: dbPoolConfig.min,
+          connectionTimeoutMillis: dbPoolConfig.connectionTimeoutMillis,
+          idleTimeoutMillis: dbPoolConfig.idleTimeoutMillis,
+        }
+      : undefined,
+  entities: [User, Song, TransactionLog, Genre, Album, RoyaltyPayout, RoyaltyTemplate],
   migrations: ['src/migrations/*.ts', 'dist/migrations/*.js'],
   migrationsTableName: 'migrations',
 });

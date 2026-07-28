@@ -4,11 +4,11 @@ import swaggerUi from 'swagger-ui-express';
 import yaml from 'js-yaml';
 import fs from 'fs';
 import path from 'path';
-import logger from './config/logger';
 import { requestLoggerMiddleware } from './middlewares/requestLogger';
 import { metricsMiddleware } from './middlewares/metricsMiddleware';
 import { getMetrics, getMetricsContentType, updateDbPoolMetrics } from './services/MetricsService';
 import cors from 'cors';
+import { corsOptions } from './config/cors';
 import redis from './config/redis';
 import AppDataSource from './config/db';
 import authRoutes from './routes/authRoutes';
@@ -20,12 +20,13 @@ import userRoutes from './routes/userRoutes';
 import marketplaceRoutes from './routes/marketplaceRoutes';
 import adminRoutes from './routes/adminRoutes';
 import healthRoutes from './routes/healthRoutes';
+import albumRoutes from './routes/AlbumRoutes';
+import royaltyTemplateRoutes from './routes/royaltyTemplateRoutes';
 import { getPoolStats, checkDbHealth } from './services/DbPoolMonitor';
 import { dbConnectionState } from './services/DatabaseConnectionManager';
 import { JSON_BODY_LIMIT, URLENCODED_BODY_LIMIT } from './config/constants';
 import { isPayloadTooLargeError } from './middlewares/bodySizeLimit';
-import { AppError } from './errors/AppError';
-import { CircuitBreakerOpenError } from './utils/circuitBreaker';
+import { logRequestError } from './utils/errorLogger';
 
 // Route imports
 
@@ -40,32 +41,10 @@ app.use(requestLoggerMiddleware);
 // Prometheus metrics tracking (skips /metrics path internally)
 app.use(metricsMiddleware);
 
-// CORS configuration
-// In production set ALLOWED_ORIGINS to a comma-separated list of the deployed
-// listener-app and artist-dashboard domains, e.g.:
-//   ALLOWED_ORIGINS=https://listener.audioblockz.com,https://artist.audioblockz.com
-const allowedOrigins: string[] = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
-  : ['http://localhost:3000', 'http://localhost:3001', 'http://127.0.0.1:5500'];
-
-app.use(
-  cors({
-    origin: allowedOrigins,
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowedHeaders: [
-      'Content-Type',
-      'Authorization',
-      'X-Requested-With',
-      'Accept',
-      'Origin',
-      'Access-Control-Request-Method',
-      'Access-Control-Request-Headers',
-    ],
-    exposedHeaders: ['Authorization'],
-    maxAge: 86400, // 24 hours
-  }),
-);
+// CORS configuration (Issue #107)
+// ALLOWED_ORIGINS env var accepts a comma-separated list of origins.
+// In production, wildcards are rejected and an explicit list is required.
+app.use(cors(corsOptions));
 
 // #109 — explicit size limits so an oversized body is rejected with a clear
 // 413 before it's ever fully buffered/parsed into memory, rather than
@@ -131,6 +110,12 @@ app.use('/api/wallet', walletRoutes);
 // Song wallet
 app.use('/api/song', SongRoutes);
 
+// Album listing (paginated)
+app.use('/api/album', albumRoutes);
+
+// Royalty split templates (Issue #98)
+app.use('/api/royalty-templates', royaltyTemplateRoutes);
+
 // Marketplace Soroban relay (list + buy)
 app.use('/api/marketplace', marketplaceRoutes);
 
@@ -165,13 +150,13 @@ if (process.env.NODE_ENV !== 'production') {
 const circuitBreakerMiddleware: RequestHandler = (req, res, next) => {
   if (!dbConnectionState.connected && !dbConnectionState.reconnecting) {
     if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+      const message =
+        'Database connection unavailable — write operations suspended. Please try again later.';
+      logRequestError(req, new Error(message), 503);
       res.setHeader('Retry-After', '30');
       return res.status(503).json({
-        error: {
-          code: 'SERVICE_UNAVAILABLE',
-          message:
-            'Database connection unavailable — write operations suspended. Please try again later.',
-        },
+        error: 'Service Unavailable',
+        message,
       });
     }
   }
@@ -186,12 +171,14 @@ const customErrorHandler: ErrorRequestHandler = (err, req, res, _next) => {
     'Unhandled error',
   );
 
-  if (err instanceof AppError) {
-    return res.status(err.statusCode).json(err.toResponseBody());
-  }
-
-  if (err instanceof CircuitBreakerOpenError) {
-    return res.status(503).json({ error: { code: 'SERVICE_UNAVAILABLE', message: err.message } });
+  // #107 — CORS origin check failure returns 403 with a clear message
+  // instead of the default CORS header omission (which silently fails in
+  // the browser and provides no actionable feedback).
+  if (err.message === 'Origin not allowed by CORS') {
+    return res.status(403).json({
+      error: 'Forbidden',
+      message: 'Origin not allowed',
+    });
   }
 
   // #109 — express.json()/express.urlencoded() reject a body over their
@@ -199,51 +186,56 @@ const customErrorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   // which without this branch falls through to the generic 500 handler
   // below and hides the real, client-fixable cause.
   if (isPayloadTooLargeError(err)) {
-    return res.status(413).json({
-      error: {
-        code: 'PAYLOAD_TOO_LARGE',
+    return {
+      statusCode: 413,
+      body: {
+        error: 'Payload Too Large',
         message: 'Request body exceeds the maximum allowed size.',
       },
-    });
+    };
   }
 
   // Multer file-size limit exceeded
   if (err.name === 'MulterError' && err.code === 'LIMIT_FILE_SIZE') {
-    return res.status(413).json({
-      error: {
-        code: 'PAYLOAD_TOO_LARGE',
+    return {
+      statusCode: 413,
+      body: {
+        error: 'Payload Too Large',
         message: 'Uploaded file exceeds the maximum allowed size.',
       },
-    });
+    };
   }
 
   // Other multer errors (file filter rejections, unexpected fields, etc.)
   if (err.name === 'MulterError') {
-    return res.status(400).json({
-      error: { code: 'BAD_REQUEST', message: err.message },
-    });
+    return { statusCode: 400, body: { error: 'Bad Request', message: err.message } };
   }
 
   // File filter rejection errors are passed as plain Error through Express
-  if (err instanceof Error && /only jpg and png images are allowed/i.test(err.message)) {
-    return res.status(400).json({
-      error: { code: 'BAD_REQUEST', message: err.message },
-    });
+  if (err instanceof Error && /Invalid file type|allowed/i.test(err.message)) {
+    return { statusCode: 400, body: { error: 'Bad Request', message: err.message } };
   }
 
-  res.status(500).json({
-    error: {
-      code: 'INTERNAL_ERROR',
+  return {
+    statusCode: 500,
+    body: {
+      error: 'Internal Server Error',
       message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong',
     },
-  });
+  };
+}
+
+const customErrorHandler: ErrorRequestHandler = (err, req, res, _next) => {
+  const { statusCode, body } = classifyError(err);
+  logRequestError(req, err, statusCode);
+  res.status(statusCode).json(body);
 };
 
 app.use(customErrorHandler);
 
 // Handle 404 errors
 app.use(((req: Request, res: Response) => {
-  logger.warn({ reqId: (req as any).id, route: req.originalUrl }, '404 - Route not found');
+  logRequestError(req, new Error(`Route ${req.originalUrl} not found`), 404);
   res.status(404).json({
     error: { code: 'NOT_FOUND', message: `Route ${req.originalUrl} not found` },
   });

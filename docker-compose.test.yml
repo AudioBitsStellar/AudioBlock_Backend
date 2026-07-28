@@ -1,0 +1,18 @@
+version: '3.9'
+services:
+  backend:
+    command: sh -c "npm test"
+    environment:
+      NODE_ENV: test
+      DATABASE_URL: postgres://postgres:1234@db:5432/audioblocks_test
+    depends_on:
+      - db
+      - redis
+      - rabbitmq
+  db:
+    environment:
+      POSTGRES_DB: audioblocks_test
+  redis:
+    restart: always
+  rabbitmq:
+    restart: always

@@ -2,17 +2,51 @@ import { Response } from 'express';
 import crypto from 'crypto';
 import { mapToOnChainError } from '../types/OnChainErrorCodes';
 import { AppError } from '../errors/AppError';
-import { CircuitBreakerOpenError } from './circuitBreaker';
+import { logRequestError } from './errorLogger';
 
-export function handleError(res: Response, error: unknown): void {
+export function formatValidationErrors(errors: ValidationError[]): IValidationFormatResult {
+  const fields: Record<string, string> = {};
+  const message: string[] = [];
+
+  for (const err of errors) {
+    const constraints = err.constraints || {};
+    const messages = Object.values(constraints);
+
+    if (messages.length > 0) {
+      fields[err.property] = messages[0]; // First message per field
+      message.push(...messages); // All messages for `message` array
+    }
+  }
+
+  return {
+    success: false,
+    fields,
+    message,
+  };
+}
+
+export function handleError(req: Request, res: Response, error: unknown): void {
+  // Handle AppError with structured response
   if (error instanceof AppError) {
-    res.status(error.statusCode).json(error.toResponseBody());
+    logRequestError(req, error, error.statusCode);
+    res.status(error.statusCode).json({
+      success: false,
+      message: error.message,
+      type: error.type,
+      ...(error.details && { details: error.details }),
+    });
     return;
   }
 
-  if (error instanceof CircuitBreakerOpenError) {
-    res.status(503).json({ error: { code: 'SERVICE_UNAVAILABLE', message: error.message } });
-    return;
+  if (error instanceof Error) {
+    logRequestError(req, error, 400);
+    res.status(400).json({ message: error.message });
+  } else if (typeof error === 'string') {
+    logRequestError(req, error, 400);
+    res.status(400).json({ message: error });
+  } else {
+    logRequestError(req, error, 500);
+    res.status(500).json({ message: 'Internal server error' });
   }
 
   const isDev = process.env.NODE_ENV === 'development';
@@ -38,23 +72,13 @@ export function handleError(res: Response, error: unknown): void {
  * into `details`, so on-chain responses conform to the same envelope as
  * every other error response.
  */
-export function handleOnChainError(res: Response, error: unknown): void {
-  const mapped = mapToOnChainError(error);
-  console.error('On-chain Error:', mapped);
+export function handleOnChainError(req: Request, res: Response, error: unknown): void {
+  const errorResponse = mapToOnChainError(error);
 
-  const statusCode = mapped.retryable ? 400 : 500;
-  const details: Record<string, unknown> = { retryable: mapped.retryable };
-  if (mapped.details !== undefined) {
-    details.cause = mapped.details;
-  }
-
-  res.status(statusCode).json({
-    error: {
-      code: mapped.errorCode,
-      message: mapped.message,
-      details,
-    },
-  });
+  // Return 400 for retryable errors, 500 for non-retryable
+  const statusCode = errorResponse.retryable ? 400 : 500;
+  logRequestError(req, error, statusCode);
+  res.status(statusCode).json(errorResponse);
 }
 
 export function base64URLEncode(str: Buffer) {

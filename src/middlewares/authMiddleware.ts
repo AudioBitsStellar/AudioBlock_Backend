@@ -15,6 +15,16 @@ export interface JwtPayload {
   emailVerified?: boolean;
 }
 
+/** Extend Express Request to carry the decoded JWT set by requireAuth. */
+declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
+  namespace Express {
+    interface Request {
+      user?: JwtPayload;
+    }
+  }
+}
+
 export const requireAuth = (req: Request, res: Response, next: NextFunction) => {
   try {
     const authHeader = req.headers.authorization;
