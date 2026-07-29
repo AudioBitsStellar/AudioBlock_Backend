@@ -33,7 +33,20 @@ export function formatValidationErrors(errors: ValidationError[]): IValidationFo
   };
 }
 
-export function handleError(req: Request, res: Response, error: unknown): void {
+export function handleError(arg1: any, arg2: any, arg3?: any): void {
+  let req: any = null;
+  let res: Response;
+  let error: unknown;
+
+  if (arg3 !== undefined) {
+    req = arg1;
+    res = arg2;
+    error = arg3;
+  } else {
+    res = arg1;
+    error = arg2;
+  }
+
   // Handle AppError with structured response
   if (error instanceof AppError) {
     logRequestError(req, error, error.statusCode);
