@@ -25,6 +25,7 @@ import royaltyTemplateRoutes from './routes/royaltyTemplateRoutes';
 import chartRoutes from './routes/ChartRoutes';
 import tagRoutes from './routes/TagRoutes';
 import releaseRoutes from './routes/ReleaseRoutes';
+import subscriptionRoutes from './routes/subscriptionRoutes';
 import { getPoolStats, checkDbHealth } from './services/DbPoolMonitor';
 import { dbConnectionState } from './services/DatabaseConnectionManager';
 import { JSON_BODY_LIMIT, URLENCODED_BODY_LIMIT } from './config/constants';
@@ -141,6 +142,10 @@ app.use('/api/admin', adminRoutes);
 
 // User profile routes
 app.use('/api/user', userRoutes);
+
+// Subscription management routes (Issue #99)
+app.use('/api/users', subscriptionRoutes);
+app.use('/api/subscriptions', subscriptionRoutes);
 
 //TWITTER CALLBACK ROUTE
 app.use('/api/auth/twitter', twitterRoutes);

@@ -1,8 +1,7 @@
 import { Repository } from 'typeorm';
 import AppDataSource from '../config/db';
-import { User } from '../entities/User';
+import { User, UserRole } from '../entities/User';
 import { CreateUserDTO } from '../dtos/CreateUserDTO';
-import { validate } from 'class-validator';
 import { verifyMessage } from 'ethers';
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
@@ -17,7 +16,6 @@ import {
 } from '../validators/ServiceValidator';
 import {
   ERROR_MESSAGES,
-  SUCCESS_MESSAGES,
   JWT_EXPIRATION,
   TRANSACTION_ACTIONS,
   REGEX_PATTERNS,
@@ -139,6 +137,28 @@ export class UserService {
     validateRequired(id, 'id');
 
     return await this.userRepo.findOneBy({ id });
+  }
+
+  /**
+   * Assign a role to a user (Issue #100). Used by the admin role-management
+   * endpoint to promote/demote users across the RBAC role set.
+   *
+   * @param id - The target user's UUID.
+   * @param role - The role to assign.
+   * @returns The updated User entity.
+   * @throws {AppError} If the user does not exist.
+   */
+  async assignRole(id: string, role: UserRole): Promise<User> {
+    validateRequired(id, 'id');
+    validateRequired(role, 'role');
+
+    const user = await this.userRepo.findOneBy({ id });
+    if (!user) {
+      throw AppError.notFound(ERROR_MESSAGES.USER_NOT_FOUND);
+    }
+
+    user.role = role;
+    return await this.userRepo.save(user);
   }
 
   /**

@@ -1,25 +1,59 @@
 import { Router } from 'express';
-import { requireRoles } from '../middlewares/authMiddleware';
-import { UserRole } from '../entities/User';
+import { requirePermission } from '../middlewares/authMiddleware';
+import { Permission } from '../types/Permissions';
+import { validateDTO } from '../middlewares/validate';
+import { AssignRoleDTO } from '../dtos/AssignRoleDTO';
 import { SongController } from '../controllers/SongController';
 import { JobController } from '../controllers/JobController';
+import { AdminController } from '../controllers/AdminController';
 
 const router = Router();
 
-router.use(requireRoles(UserRole.ADMIN));
+// RBAC (Issue #100): each route requires the specific permission it needs
+// rather than a blanket admin check. requirePermission returns 401 when the
+// caller is unauthenticated and 403 when the role lacks the permission.
 
-router.patch('/song/:id/flag', SongController.flagSong);
-router.patch('/song/:id/unflag', SongController.unflagSong);
+// Content moderation — moderators and above.
+router.patch(
+  '/song/:id/flag',
+  requirePermission(Permission.CONTENT_MODERATE),
+  SongController.flagSong,
+);
+router.patch(
+  '/song/:id/unflag',
+  requirePermission(Permission.CONTENT_MODERATE),
+  SongController.unflagSong,
+);
 
 // Manual retry for failed song processing (Issues #123, #125)
-router.post('/songs/:id/retry', SongController.retryFailedSong);
-router.post('/song/:id/retry', SongController.retryFailedSong);
+router.post(
+  '/songs/:id/retry',
+  requirePermission(Permission.CONTENT_MODERATE),
+  SongController.retryFailedSong,
+);
+router.post(
+  '/song/:id/retry',
+  requirePermission(Permission.CONTENT_MODERATE),
+  SongController.retryFailedSong,
+);
 
 // Search index maintenance (Issue #135)
-router.post('/search/rebuild', SongController.rebuildSearchIndex);
+router.post(
+  '/search/rebuild',
+  requirePermission(Permission.SEARCH_MANAGE),
+  SongController.rebuildSearchIndex,
+);
 
 // Background job queue visibility (Issue #132)
-router.get('/jobs', JobController.getJobs);
-router.get('/jobs/:id', JobController.getJob);
+router.get('/jobs', requirePermission(Permission.JOBS_VIEW), JobController.getJobs);
+router.get('/jobs/:id', requirePermission(Permission.JOBS_VIEW), JobController.getJob);
+
+// Role assignment (Issue #100) — admins and super_admins only.
+router.post(
+  '/users/:id/role',
+  requirePermission(Permission.ROLE_ASSIGN),
+  validateDTO(AssignRoleDTO),
+  AdminController.assignRole,
+);
 
 export default router;

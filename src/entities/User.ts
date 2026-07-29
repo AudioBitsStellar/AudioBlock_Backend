@@ -6,19 +6,22 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   Unique,
-  OneToOne,
   OneToMany,
 } from 'typeorm';
 import { Song } from './Song';
-import { Transaction } from 'ethers';
 import { TransactionLog } from './TransactionLog';
 import { Album } from './Album';
 import { RoyaltyPayout } from './RoyaltyPayout';
 
 export enum UserRole {
+  // `listener` is the default role for a regular platform user.
   LISTENER = 'listener',
   ARTIST = 'artist',
+  // `moderator` can act on content (flag/unflag) without full admin rights.
+  MODERATOR = 'moderator',
   ADMIN = 'admin',
+  // `super_admin` holds every permission, including managing other admins.
+  SUPER_ADMIN = 'super_admin',
 }
 
 @Entity('users')
