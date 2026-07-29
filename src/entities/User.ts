@@ -18,7 +18,9 @@ import { RoyaltyPayout } from './RoyaltyPayout';
 export enum UserRole {
   LISTENER = 'listener',
   ARTIST = 'artist',
+  MODERATOR = 'moderator',
   ADMIN = 'admin',
+  SUPER_ADMIN = 'super_admin',
 }
 
 @Entity('users')

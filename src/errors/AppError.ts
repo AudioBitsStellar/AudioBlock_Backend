@@ -77,6 +77,15 @@ export class AppError extends Error {
     return new AppError(message, ErrorType.FORBIDDEN, 403, true, details, code);
   }
 
+  /** Alias for authorization - semantically clearer for 403 errors */
+  static forbidden(
+    message: string,
+    details?: ErrorDetails | ErrorDetails[],
+    code?: string,
+  ): AppError {
+    return AppError.authorization(message, details, code);
+  }
+
   static notFound(
     message: string,
     details?: ErrorDetails | ErrorDetails[],
