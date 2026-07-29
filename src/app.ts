@@ -22,6 +22,9 @@ import adminRoutes from './routes/adminRoutes';
 import healthRoutes from './routes/healthRoutes';
 import albumRoutes from './routes/AlbumRoutes';
 import royaltyTemplateRoutes from './routes/royaltyTemplateRoutes';
+import chartRoutes from './routes/ChartRoutes';
+import tagRoutes from './routes/TagRoutes';
+import releaseRoutes from './routes/ReleaseRoutes';
 import { getPoolStats, checkDbHealth } from './services/DbPoolMonitor';
 import { dbConnectionState } from './services/DatabaseConnectionManager';
 import { JSON_BODY_LIMIT, URLENCODED_BODY_LIMIT } from './config/constants';
@@ -115,6 +118,15 @@ app.use('/api/album', albumRoutes);
 
 // Royalty split templates (Issue #98)
 app.use('/api/royalty-templates', royaltyTemplateRoutes);
+
+// Trending charts (Issue #94)
+app.use('/api/charts', chartRoutes);
+
+// Tags/labels (Issue #93)
+app.use('/api/tags', tagRoutes);
+
+// Music releases/EPs (Issue #95)
+app.use('/api/releases', releaseRoutes);
 
 // Marketplace Soroban relay (list + buy)
 app.use('/api/marketplace', marketplaceRoutes);
@@ -223,7 +235,7 @@ const customErrorHandler: ErrorRequestHandler = (err, req, res, _next) => {
       message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong',
     },
   };
-}
+};
 
 const customErrorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   const { statusCode, body } = classifyError(err);

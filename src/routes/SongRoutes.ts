@@ -152,4 +152,12 @@ router.post(
 // Apply royalty split template to a song (Issue #98)
 router.post('/:id/apply-template', authArtistMiddleware, SongController.applyTemplate);
 
+// Song collaborators + royalty splits (Issue #96)
+router.get('/:id/collaborators', SongController.listCollaborators);
+router.post('/:id/collaborators', authArtistMiddleware, SongController.addCollaborator);
+router.put('/:id/collaborators/:userId', authArtistMiddleware, SongController.updateCollaborator);
+
+// Tags (Issue #93)
+router.post('/:id/tags', authArtistMiddleware, SongController.addTags);
+
 export default router;
