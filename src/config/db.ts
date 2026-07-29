@@ -14,6 +14,7 @@ import { Tag } from '../entities/Tag';
 import { SongTag } from '../entities/SongTag';
 import { Release } from '../entities/Release';
 import { ReleaseTrack } from '../entities/ReleaseTrack';
+import { Subscription } from '../entities/Subscription';
 
 dotenv.config();
 
@@ -82,6 +83,7 @@ const AppDataSource = new DataSource({
     SongTag,
     Release,
     ReleaseTrack,
+    Subscription,
   ],
   migrations: ['src/migrations/*.ts', 'dist/migrations/*.js'],
   migrationsTableName: 'migrations',
