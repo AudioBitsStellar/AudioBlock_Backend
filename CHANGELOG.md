@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Request input sanitization middleware stripping stored-XSS payloads (script/iframe/HTML, invisible/control chars) from every string body field, with field-specific length caps (#101)
 - JSDoc comments to all public service methods for IDE hover documentation (#139)
+
+### Security
+
+- Hardened password reset: URL-safe 32-byte reset tokens (base64url), 1-hour token expiry, prior tokens invalidated on each new request, and a dedicated 3-requests/hour/email rate limiter on `POST /api/auth/forgot-password` (#102)
 - Complete environment variable reference documentation (#142)
 - API changelog tracking breaking changes, features, and deprecations (#141)
 - Comprehensive README setup guide with prerequisites, Docker, and troubleshooting (#140)

@@ -19,9 +19,10 @@ const RECOVERY_CODE_COUNT = 8;
 const RECOVERY_CODE_BYTES = 5;
 const REFRESH_TOKEN_EXPIRY_SECONDS = 7 * 24 * 60 * 60;
 const PARTIAL_TOKEN_EXPIRY_SECONDS = 300; // 5 minutes for 2FA step
+const PASSWORD_RESET_TOKEN_EXPIRY_MS = 60 * 60 * 1000; // 1 hour (#102)
 
 type LoginWithEmailResult =
-  | { user: User; token: string; refreshToken: string; twoFactorRequired?: false }
+  | { user: User; token: string; refreshToken?: string; twoFactorRequired?: false }
   | { twoFactorRequired: true; partialToken: string; user: Pick<User, 'id' | 'email' | 'role'> };
 
 export class AuthService {
@@ -331,10 +332,7 @@ export class AuthService {
    * Disable 2FA for a user. Requires a valid TOTP code or recovery code
    * to confirm the request is legitimate.
    */
-  async disableTwoFactor(
-    userId: string,
-    code: string,
-  ): Promise<void> {
+  async disableTwoFactor(userId: string, code: string): Promise<void> {
     const user = await this.userRepo.findOneBy({ id: userId });
     if (!user) {
       throw AppError.notFound('User not found');
@@ -436,7 +434,7 @@ export class AuthService {
 
     try {
       return jwt.verify(token, JWT_SECRET) as JwtPayload;
-    } catch (error) {
+    } catch {
       throw AppError.authentication('Invalid refresh token');
     }
   }
@@ -504,9 +502,11 @@ export class AuthService {
   }
 
   /**
-   * Initiate a password reset flow. Generates a reset token with a 30-minute
-   * expiry and sends a reset link via email. Silently succeeds if user not found
-   * (prevents email enumeration).
+   * Initiate a password reset flow. Generates a URL-safe reset token with a
+   * 1-hour expiry and sends a reset link via email. Issuing a fresh token
+   * overwrites (and thereby invalidates) any previously issued token, so only
+   * the most recent link is ever valid. Silently succeeds if the user is not
+   * found (prevents email enumeration).
    *
    * @param email - Email address of the account to reset.
    */
@@ -515,8 +515,9 @@ export class AuthService {
     if (!user) return;
 
     const resetToken = this.emailService.generateResetToken();
-    const tokenExpiry = new Date(Date.now() + 30 * 60 * 1000);
+    const tokenExpiry = new Date(Date.now() + PASSWORD_RESET_TOKEN_EXPIRY_MS);
 
+    // Overwriting these fields invalidates any token issued by a prior request.
     user.passwordResetToken = resetToken;
     user.passwordResetTokenExpiry = tokenExpiry;
     await this.userRepo.save(user);
@@ -525,7 +526,7 @@ export class AuthService {
     await this.emailService.sendEmail(
       email,
       'Reset your password',
-      `<p>Please click <a href="${appUrl}/reset-password/${resetToken}">here</a> to reset your password. This link expires in 30 minutes.</p>`,
+      `<p>Please click <a href="${appUrl}/reset-password/${resetToken}">here</a> to reset your password. This link expires in 1 hour.</p>`,
     );
   }
 

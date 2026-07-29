@@ -1,14 +1,11 @@
-import {
-  Router,
-  Request,
-  Response,
-  NextFunction,
-  RequestHandler,
-  ErrorRequestHandler,
-} from 'express';
+import { Router } from 'express';
 import { AuthController } from '../controllers/AuthController';
 import { requireAuth } from '../middlewares/authMiddleware';
-import { authRateLimiter, nonceRateLimiter } from '../middlewares/authRateLimiter';
+import {
+  authRateLimiter,
+  nonceRateLimiter,
+  passwordResetRateLimiter,
+} from '../middlewares/authRateLimiter';
 
 const authController = new AuthController();
 const router = Router();
@@ -35,7 +32,9 @@ router.post('/2fa/validate', authRateLimiter, authController.validateTwoFactor);
 router.get('/verify-email/:token', authController.verifyEmail);
 
 // Password reset
-router.post('/forgot-password', authRateLimiter, authController.forgotPassword);
+// /forgot-password is throttled to 3 requests/hour/email (Issue #102) to prevent
+// inbox flooding and reset-token brute-forcing.
+router.post('/forgot-password', passwordResetRateLimiter, authController.forgotPassword);
 router.post('/reset-password/:token', authRateLimiter, authController.resetPassword);
 
 export default router;

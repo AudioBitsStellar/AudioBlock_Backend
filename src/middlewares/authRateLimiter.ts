@@ -99,3 +99,40 @@ export const nonceRateLimiter = rateLimit({
     );
   },
 });
+
+/**
+ * A dedicated limiter for POST /forgot-password (Issue #102). Password reset
+ * requests are throttled per email so an attacker cannot flood a victim's
+ * inbox or brute-force the reset flow. Keyed by (IP, email) via keyGenerator.
+ *
+ * Configuration:
+ *   PASSWORD_RESET_RATE_LIMIT_WINDOW_MS – default: 1 hour
+ *   PASSWORD_RESET_RATE_LIMIT_MAX       – default: 3
+ */
+const passwordResetWindowMs = parseInt(
+  process.env.PASSWORD_RESET_RATE_LIMIT_WINDOW_MS || String(60 * 60 * 1000),
+  10,
+);
+const passwordResetMax = parseInt(process.env.PASSWORD_RESET_RATE_LIMIT_MAX || '3', 10);
+
+export const passwordResetRateLimiter = rateLimit({
+  windowMs: passwordResetWindowMs,
+  max: passwordResetMax,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator,
+  store: new RedisStore({
+    sendCommand: (...args: string[]) => (redis as any).call(...args),
+    prefix: 'pwreset:rl:',
+  }),
+  handler: (req: Request, res: Response) => {
+    const retryAfterSec = Math.ceil(passwordResetWindowMs / 1000);
+    res.setHeader('Retry-After', String(retryAfterSec));
+    handleError(
+      res,
+      AppError.rateLimited('Too many password reset requests. Please try again later.', {
+        retryAfter: retryAfterSec,
+      }),
+    );
+  },
+});
