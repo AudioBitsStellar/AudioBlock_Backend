@@ -112,12 +112,18 @@ app.use('/health', healthRoutes);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/artist', artistRoutes);
+// Plural alias so `GET /api/artists/:id/stats` resolves alongside the existing
+// singular mount (Issue #87).
+app.use('/api/artists', artistRoutes);
 
 // Dynamic wallet routes
 app.use('/api/wallet', walletRoutes);
 
 // Song wallet
 app.use('/api/song', SongRoutes);
+// Plural alias for the song statistics, versioning, and report endpoints
+// (Issues #86, #87, #88), which are specified under /api/songs.
+app.use('/api/songs', SongRoutes);
 
 // Album listing (paginated)
 app.use('/api/album', albumRoutes);

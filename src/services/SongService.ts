@@ -1,5 +1,6 @@
 import { In, Repository } from 'typeorm';
 import { Song } from '../entities/Song';
+import { SongVersion } from '../entities/SongVersion';
 import { User } from '../entities/User';
 import { TransactionLog } from '../entities/TransactionLog';
 import { RoyaltyTemplate } from '../entities/RoyaltyTemplate';
@@ -15,6 +16,8 @@ import { PreparedTransaction } from './Artist/ArtistService';
 import { ScanService } from './ScanService';
 import { SearchIndexService } from './SearchIndexService';
 import { CacheService } from './CacheService';
+import { SongVersionService } from './Song/SongVersionService';
+import { AppError } from '../errors/AppError';
 import logger from '../config/logger';
 import { songsUploadedTotal } from './MetricsService';
 
@@ -23,6 +26,7 @@ export class SongService {
   private userRepo: Repository<User>;
   private logRepo: Repository<TransactionLog>;
   private soroban: SorobanService;
+  private versionServiceInstance?: SongVersionService;
 
   constructor() {
     this.songRepo = AppDataSource.getRepository(Song);
@@ -30,6 +34,18 @@ export class SongService {
     this.logRepo = AppDataSource.getRepository(TransactionLog);
     this.soroban = new SorobanService();
     dotenv.config();
+  }
+
+  /**
+   * Version service, resolved on first use. Building it in the constructor
+   * would resolve the version repository for every SongService instance,
+   * including the mint/retry paths that never touch versions.
+   */
+  private get versionService(): SongVersionService {
+    if (!this.versionServiceInstance) {
+      this.versionServiceInstance = new SongVersionService();
+    }
+    return this.versionServiceInstance;
   }
 
   /**
@@ -156,6 +172,113 @@ export class SongService {
     coverArtPath: string,
     composers: string,
   ): Promise<Song> {
+    const s3Location = await this.mergeScanAndUpload(fileId, totalChunks);
+
+    //  Save song record to DB
+    const song = this.songRepo.create({
+      title,
+      artistAddress,
+      artistId,
+      s3OriginalUrl: s3Location,
+      status: 'processing',
+      description,
+      genre,
+      coverArtPath,
+      composers,
+    });
+    await this.songRepo.save(song);
+    songsUploadedTotal.inc();
+
+    // Every song gets a version 1 record so re-uploads have history to append
+    // to (Issue #86).
+    try {
+      await this.versionService.createInitialVersion(song, artistId);
+    } catch (err) {
+      logger.warn({ songId: song.id, err }, 'Failed to record initial song version');
+    }
+
+    //  Send song for background processing via RabbitMQ
+    const channel = getChannel();
+    if (channel) {
+      channel.sendToQueue(
+        'song_processing',
+        Buffer.from(JSON.stringify({ songId: song.id, fileId })),
+      );
+    }
+
+    return song;
+  }
+
+  /**
+   * Finalize a re-upload of an existing song (Issue #86).
+   *
+   * The merged audio is scanned and uploaded exactly like a first upload, but
+   * instead of creating a new Song row it appends a {@link SongVersion} and
+   * promotes it to active. The previous version's IPFS CID and S3 URL are
+   * preserved on its own version row.
+   *
+   * @param songId - ID of the song being revised.
+   * @param fileId - Upload session ID holding the new chunks.
+   * @param totalChunks - Expected number of chunks to merge.
+   * @param artistId - ID of the artist performing the re-upload.
+   * @param changes - Optional metadata changes and change note.
+   * @returns The song and the newly created active version.
+   */
+  async finalizeReupload(
+    songId: string,
+    fileId: string,
+    totalChunks: number,
+    artistId: string,
+    changes: {
+      title?: string;
+      description?: string;
+      genre?: string;
+      coverArtPath?: string;
+      composers?: string;
+      changeNote?: string;
+    } = {},
+  ): Promise<{ song: Song; version: SongVersion }> {
+    const song = await this.songRepo.findOneBy({ id: songId });
+    if (!song) {
+      throw AppError.notFound('Song not found', undefined, 'SONG_NOT_FOUND');
+    }
+    if (song.artistId !== artistId) {
+      throw AppError.authorization(
+        'Not authorized to re-upload this song',
+        undefined,
+        'NOT_SONG_OWNER',
+      );
+    }
+
+    const s3Location = await this.mergeScanAndUpload(fileId, totalChunks);
+
+    const version = await this.versionService.createVersionFromReupload(songId, artistId, {
+      ...changes,
+      s3OriginalUrl: s3Location,
+      createdBy: artistId,
+    });
+
+    const updated = (await this.songRepo.findOneBy({ id: songId })) ?? song;
+
+    const channel = getChannel();
+    if (channel) {
+      channel.sendToQueue(
+        'song_processing',
+        Buffer.from(JSON.stringify({ songId, fileId, versionNumber: version.versionNumber })),
+      );
+    }
+
+    return { song: updated, version };
+  }
+
+  /**
+   * Merge uploaded chunks, run the malware scan, and upload the merged audio
+   * to S3. Shared by first uploads and re-uploads.
+   *
+   * @returns The S3 URL of the uploaded audio.
+   * @throws {Error} If chunk count mismatch, malware detected, or S3 fails.
+   */
+  private async mergeScanAndUpload(fileId: string, totalChunks: number): Promise<string> {
     const tempDir = path.join('uploads/temp', fileId);
     const mergedDir = 'uploads/merged';
     const finalPath = path.join(mergedDir, `${fileId}.mp3`);
@@ -242,34 +365,7 @@ export class SongService {
       })
       .promise();
 
-    //  Save song record to DB
-    const song = this.songRepo.create({
-      title,
-      artistAddress,
-      artistId,
-      s3OriginalUrl: s3Res.Location,
-      status: 'processing',
-      description,
-      genre,
-      coverArtPath,
-      composers,
-    });
-    await this.songRepo.save(song);
-    songsUploadedTotal.inc();
-
-    //  Send song for background processing via RabbitMQ
-    const channel = getChannel();
-    if (channel) {
-      channel.sendToQueue(
-        'song_processing',
-        Buffer.from(JSON.stringify({ songId: song.id, fileId })),
-      );
-    }
-
-    // Optional cleanup
-    // fs.unlinkSync(finalPath);
-
-    return song;
+    return s3Res.Location;
   }
 
   /**

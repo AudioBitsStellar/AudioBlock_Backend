@@ -88,4 +88,65 @@ export class UploadController {
       handleError(req, res, err);
     }
   };
+
+  /**
+   * POST /api/song/:id/reupload — finalize a re-upload as a new song version
+   * (Issue #86).
+   *
+   * Chunks are uploaded through the existing `/upload/chunk` endpoint; this
+   * call merges them, scans, and appends a new active version rather than
+   * overwriting the previous audio.
+   */
+  finalizeReupload = async (req: Request, res: Response) => {
+    try {
+      const songId = req.params.id as string;
+      const {
+        fileId,
+        totalChunks,
+        title,
+        description,
+        genre,
+        coverArtPath,
+        composers,
+        changeNote,
+      } = req.body;
+
+      const artistId = (req as any).user.id as string;
+
+      const result = await songService.finalizeReupload(
+        songId,
+        fileId,
+        Number(totalChunks),
+        artistId,
+        { title, description, genre, coverArtPath, composers, changeNote },
+      );
+
+      return res.status(201).json({
+        success: true,
+        message: `Version ${result.version.versionNumber} created`,
+        data: { song: result.song, version: result.version },
+      });
+    } catch (err: any) {
+      if (err?.code === 'MALWARE_DETECTED') {
+        logger.warn(
+          { reqId: (req as any).id, route: req.path, threat: err.threat },
+          'Re-upload rejected due to malware detection',
+        );
+        return handleError(
+          req,
+          res,
+          new AppError(
+            err.message,
+            ErrorType.VALIDATION_FAILED,
+            422,
+            true,
+            undefined,
+            'MALWARE_DETECTED',
+          ),
+        );
+      }
+      logger.error({ reqId: (req as any).id, route: req.path, err }, 'finalizeReupload error');
+      handleError(req, res, err);
+    }
+  };
 }

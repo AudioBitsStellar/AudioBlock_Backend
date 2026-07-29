@@ -1,20 +1,14 @@
-import {
-  Router,
-  Request,
-  Response,
-  NextFunction,
-  RequestHandler,
-  ErrorRequestHandler,
-} from 'express';
+import { Router } from 'express';
 import { ArtistProfileController } from '../controllers/ArtistProfileController';
 import { ArtistOnChainController } from '../controllers/ArtistOnChainController';
 import { validateDTO } from '../middlewares/validate';
 import { authArtistMiddleware, requireArtistAndVerified } from '../middlewares/authMiddleware';
-import { UpdateArtistProfileDTO } from '../dtos/UpdateArtistProfileDTO';
 import { ConnectStellarWalletDTO } from '../dtos/ConnectStellarWalletDTO';
 import { PrepareArtistSetupDTO } from '../dtos/PrepareArtistSetupDTO';
 import { SubmitSignedXdrDTO } from '../dtos/SubmitSignedXdrDTO';
 import { upload } from '../middlewares/upload';
+import { etagCache } from '../middlewares/etag';
+import { SongController } from '../controllers/SongController';
 
 const artistProfileController = new ArtistProfileController();
 const artistOnChainController = new ArtistOnChainController();
@@ -49,6 +43,14 @@ router.post(
   requireArtistAndVerified,
   validateDTO(SubmitSignedXdrDTO),
   artistOnChainController.submitSetup,
+);
+
+// Artist-level statistics aggregation (Issue #87). Mounted on both /api/artist
+// and /api/artists, so `GET /api/artists/:id/stats` resolves.
+router.get(
+  '/:id/stats',
+  etagCache({ visibility: 'private', maxAge: 300 }),
+  SongController.getArtistStats,
 );
 
 export default router;

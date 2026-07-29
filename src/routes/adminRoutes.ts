@@ -3,9 +3,12 @@ import { requirePermission } from '../middlewares/authMiddleware';
 import { Permission } from '../types/Permissions';
 import { validateDTO } from '../middlewares/validate';
 import { AssignRoleDTO } from '../dtos/AssignRoleDTO';
+import { BulkModerateSongsDTO } from '../dtos/BulkModerateSongsDTO';
+import { ResolveReportDTO } from '../dtos/ReportSongDTO';
 import { SongController } from '../controllers/SongController';
 import { JobController } from '../controllers/JobController';
 import { AdminController } from '../controllers/AdminController';
+import { bulkModerationRateLimiter } from '../middlewares/bulkModerationRateLimiter';
 
 const router = Router();
 
@@ -35,6 +38,26 @@ router.post(
   '/song/:id/retry',
   requirePermission(Permission.CONTENT_MODERATE),
   SongController.retryFailedSong,
+);
+
+// Bulk song moderation (Issue #85) — admins only, rate limited to 5 bulk
+// operations per minute per admin. The limiter runs after the permission check
+// so unauthorized callers never consume an admin's budget.
+router.post(
+  '/songs/moderate',
+  requirePermission(Permission.CONTENT_MODERATE_BULK),
+  bulkModerationRateLimiter,
+  validateDTO(BulkModerateSongsDTO),
+  AdminController.bulkModerateSongs,
+);
+
+// Content report queue (Issue #88) — moderators and above.
+router.get('/reports', requirePermission(Permission.CONTENT_MODERATE), AdminController.listReports);
+router.put(
+  '/reports/:id/resolve',
+  requirePermission(Permission.CONTENT_MODERATE),
+  validateDTO(ResolveReportDTO),
+  AdminController.resolveReport,
 );
 
 // Search index maintenance (Issue #135)

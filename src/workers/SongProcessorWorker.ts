@@ -34,6 +34,7 @@ import { PinataService } from '../services/PinataService';
 import { precomputeSignedManifest } from './precomputeManifest';
 import { TransactionLogService } from '../services/TransactionLogService';
 import { SearchIndexService } from '../services/SearchIndexService';
+import { SongVersionService } from '../services/Song/SongVersionService';
 import logger from '../config/logger';
 
 const MAIN_QUEUE = 'song_processing';
@@ -55,6 +56,7 @@ export async function startSongWorker() {
     const channel = getChannel();
 
     const logService = new TransactionLogService();
+    const versionService = new SongVersionService();
 
     // Assert main queue and dead-letter queue before consuming.
     await channel.assertQueue(MAIN_QUEUE, { durable: true });
@@ -159,6 +161,19 @@ export async function startSongWorker() {
         song.metadata = metadata;
         await songRepo.save(song);
 
+        // Mirror the processing outputs onto the active revision so each
+        // version keeps its own playable manifest and metadata CID (Issue #86).
+        await versionService
+          .syncActiveVersion(songId, {
+            status: 'ready',
+            hlsMasterUrl: masterUrl,
+            metadataCid: metadataRes.cid,
+            duration: song.duration,
+            loudness: song.loudness,
+            errorReason: null,
+          })
+          .catch((err) => logger.warn({ songId, err }, 'Failed to sync active song version'));
+
         await precomputeSignedManifest(song.id).catch((err) =>
           logger.warn({ err }, 'precompute failed'),
         );
@@ -217,6 +232,17 @@ export async function startSongWorker() {
               song.status = 'failed';
               song.errorReason = (err as Error)?.message || String(err);
               await songRepo.save(song);
+
+              // Keep the active revision's status in step with the song's
+              // (Issue #86), so a failed re-upload is visible per version.
+              await versionService
+                .syncActiveVersion(songId, {
+                  status: 'failed',
+                  errorReason: song.errorReason,
+                })
+                .catch((syncErr) =>
+                  logger.warn({ songId, err: syncErr }, 'Failed to sync failed song version'),
+                );
 
               if (song.user?.id) {
                 const logService = new TransactionLogService();

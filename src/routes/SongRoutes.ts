@@ -9,8 +9,11 @@ import { CreateCoverDTO } from '../dtos/CreateCoverDTO';
 import fs from 'fs';
 import { SongController } from '../controllers/SongController';
 import { SubmitSignedXdrDTO } from '../dtos/SubmitSignedXdrDTO';
+import { ReuploadSongDTO } from '../dtos/ReuploadSongDTO';
+import { ReportSongDTO } from '../dtos/ReportSongDTO';
 import { etagCache } from '../middlewares/etag';
 import { uploadRateLimiter } from '../middlewares/uploadRateLimiter';
+import { requireAuth } from '../middlewares/authMiddleware';
 
 const uploadController = new UploadController();
 const router = Router();
@@ -159,5 +162,31 @@ router.put('/:id/collaborators/:userId', authArtistMiddleware, SongController.up
 
 // Tags (Issue #93)
 router.post('/:id/tags', authArtistMiddleware, SongController.addTags);
+
+// Song statistics (Issue #87). Results are cached for 5 minutes in Redis, so an
+// additional short HTTP cache keeps repeated dashboard polls cheap.
+router.get(
+  '/:id/stats',
+  etagCache({ visibility: 'private', maxAge: 300 }),
+  SongController.getSongStats,
+);
+
+// Library saves — the data source for the `saves` statistic (Issue #87).
+router.post('/:id/save', requireAuth, SongController.saveSong);
+router.delete('/:id/save', requireAuth, SongController.unsaveSong);
+
+// Song versioning (Issue #86)
+router.get('/:id/versions', SongController.listVersions);
+router.get('/:id/versions/:version', SongController.getVersion);
+router.post(
+  '/:id/reupload',
+  authArtistMiddleware,
+  uploadRateLimiter,
+  validateDTO(ReuploadSongDTO),
+  uploadController.finalizeReupload,
+);
+
+// Content moderation reports (Issue #88) — any authenticated user may report.
+router.post('/:id/report', requireAuth, validateDTO(ReportSongDTO), SongController.reportSong);
 
 export default router;
