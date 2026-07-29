@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Request input sanitization middleware stripping stored-XSS payloads (script/iframe/HTML, invisible/control chars) from every string body field, with field-specific length caps (#101)
 - JSDoc comments to all public service methods for IDE hover documentation (#139)
 - Complete environment variable reference documentation (#142)
 - API changelog tracking breaking changes, features, and deprecations (#141)
