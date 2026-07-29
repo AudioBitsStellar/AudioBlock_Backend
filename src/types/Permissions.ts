@@ -20,6 +20,9 @@ export enum Permission {
   // User & role administration
   USER_MANAGE = 'user:manage',
   ROLE_ASSIGN = 'role:assign',
+
+  // Artist verification review (Issue #92)
+  VERIFICATION_REVIEW = 'verification:review',
 }
 
 /**
@@ -32,13 +35,18 @@ export enum Permission {
 export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   [UserRole.LISTENER]: [],
   [UserRole.ARTIST]: [],
-  [UserRole.MODERATOR]: [Permission.CONTENT_MODERATE, Permission.JOBS_VIEW],
+  [UserRole.MODERATOR]: [
+    Permission.CONTENT_MODERATE,
+    Permission.JOBS_VIEW,
+    Permission.VERIFICATION_REVIEW,
+  ],
   [UserRole.ADMIN]: [
     Permission.CONTENT_MODERATE,
     Permission.JOBS_VIEW,
     Permission.SEARCH_MANAGE,
     Permission.USER_MANAGE,
     Permission.ROLE_ASSIGN,
+    Permission.VERIFICATION_REVIEW,
   ],
   [UserRole.SUPER_ADMIN]: Object.values(Permission),
 };

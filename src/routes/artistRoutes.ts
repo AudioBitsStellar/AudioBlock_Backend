@@ -1,19 +1,12 @@
-import {
-  Router,
-  Request,
-  Response,
-  NextFunction,
-  RequestHandler,
-  ErrorRequestHandler,
-} from 'express';
+import { Router } from 'express';
 import { ArtistProfileController } from '../controllers/ArtistProfileController';
 import { ArtistOnChainController } from '../controllers/ArtistOnChainController';
 import { validateDTO } from '../middlewares/validate';
 import { authArtistMiddleware, requireArtistAndVerified } from '../middlewares/authMiddleware';
-import { UpdateArtistProfileDTO } from '../dtos/UpdateArtistProfileDTO';
 import { ConnectStellarWalletDTO } from '../dtos/ConnectStellarWalletDTO';
 import { PrepareArtistSetupDTO } from '../dtos/PrepareArtistSetupDTO';
 import { SubmitSignedXdrDTO } from '../dtos/SubmitSignedXdrDTO';
+import { ApplyVerificationDTO } from '../dtos/ApplyVerificationDTO';
 import { upload } from '../middlewares/upload';
 
 const artistProfileController = new ArtistProfileController();
@@ -50,5 +43,16 @@ router.post(
   validateDTO(SubmitSignedXdrDTO),
   artistOnChainController.submitSetup,
 );
+
+// Artist verification badge (Issue #92). Applying requires the artist role;
+// the badge itself is public so any client can render it on a profile.
+router.post(
+  '/verify/apply',
+  authArtistMiddleware,
+  validateDTO(ApplyVerificationDTO),
+  artistProfileController.applyForVerification,
+);
+router.get('/verify/me', authArtistMiddleware, artistProfileController.getMyVerification);
+router.get('/:id/verification', artistProfileController.getVerificationBadge);
 
 export default router;
