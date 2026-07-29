@@ -1,8 +1,16 @@
-import { Response } from 'express';
+import { Request, Response } from 'express';
+import { ValidationError } from 'class-validator';
 import crypto from 'crypto';
 import { mapToOnChainError } from '../types/OnChainErrorCodes';
 import { AppError } from '../errors/AppError';
 import { logRequestError } from './errorLogger';
+
+/** Shape returned by {@link formatValidationErrors}. */
+interface IValidationFormatResult {
+  success: false;
+  fields: Record<string, string>;
+  message: string[];
+}
 
 export function formatValidationErrors(errors: ValidationError[]): IValidationFormatResult {
   const fields: Record<string, string> = {};
