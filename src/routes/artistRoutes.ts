@@ -6,6 +6,7 @@ import { authArtistMiddleware, requireArtistAndVerified } from '../middlewares/a
 import { ConnectStellarWalletDTO } from '../dtos/ConnectStellarWalletDTO';
 import { PrepareArtistSetupDTO } from '../dtos/PrepareArtistSetupDTO';
 import { SubmitSignedXdrDTO } from '../dtos/SubmitSignedXdrDTO';
+import { ApplyVerificationDTO } from '../dtos/ApplyVerificationDTO';
 import { upload } from '../middlewares/upload';
 import { etagCache } from '../middlewares/etag';
 import { SongController } from '../controllers/SongController';
@@ -45,12 +46,15 @@ router.post(
   artistOnChainController.submitSetup,
 );
 
-// Artist-level statistics aggregation (Issue #87). Mounted on both /api/artist
-// and /api/artists, so `GET /api/artists/:id/stats` resolves.
-router.get(
-  '/:id/stats',
-  etagCache({ visibility: 'private', maxAge: 300 }),
-  SongController.getArtistStats,
+// Artist verification badge (Issue #92). Applying requires the artist role;
+// the badge itself is public so any client can render it on a profile.
+router.post(
+  '/verify/apply',
+  authArtistMiddleware,
+  validateDTO(ApplyVerificationDTO),
+  artistProfileController.applyForVerification,
 );
+router.get('/verify/me', authArtistMiddleware, artistProfileController.getMyVerification);
+router.get('/:id/verification', artistProfileController.getVerificationBadge);
 
 export default router;

@@ -1,18 +1,19 @@
 import { Request, Response } from 'express';
 import { UserService } from '../services/UserService';
-import { ReportService } from '../services/ReportService';
-import { SongModerationService } from '../services/Song/SongModerationService';
+import { ArtistProfileService } from '../services/ArtistProfileService';
 import { handleError } from '../utils/helpers';
 import { HTTP_STATUS } from '../config/constants';
+import { AppError } from '../errors/AppError';
+import { routeParam } from '../utils/routeParams';
+import { VerificationStatus } from '../entities/ArtistVerification';
 
 /**
- * Admin-facing user & role management (Issue #100), bulk song moderation
- * (Issue #85), and the content report queue (Issue #88).
+ * Admin-facing user & role management (Issue #100) and artist verification
+ * review (Issue #92).
  */
 export class AdminController {
   private static userService = new UserService();
-  private static reportService = new ReportService();
-  private static moderationService = new SongModerationService();
+  private static artistProfileService = new ArtistProfileService();
 
   /**
    * POST /api/admin/users/:id/role — assign a role to a user.
@@ -40,61 +41,92 @@ export class AdminController {
   };
 
   /**
-   * POST /api/admin/songs/moderate — apply one action to a batch of songs
-   * (Issue #85).
+   * GET /api/admin/verifications — list verification applications (Issue #92).
    *
-   * Responds 200 with a per-song result list. Individual failures are reported
-   * in `results` rather than failing the whole request; a request is only
-   * rejected outright for an invalid action or an oversized batch.
+   * Defaults to the pending queue; `?status=approved|rejected` inspects history.
    */
-  static bulkModerateSongs = async (req: Request, res: Response) => {
+  static listVerifications = async (req: Request, res: Response) => {
     try {
-      const adminId = (req as any).user.id as string;
-      const { songIds, action } = req.body;
+      const statusParam = typeof req.query.status === 'string' ? req.query.status : undefined;
 
-      const result = await AdminController.moderationService.bulkModerate(songIds, action, adminId);
+      if (
+        statusParam &&
+        !Object.values(VerificationStatus).includes(statusParam as VerificationStatus)
+      ) {
+        return handleError(
+          req,
+          res,
+          AppError.validation(
+            `status must be one of: ${Object.values(VerificationStatus).join(', ')}`,
+            { field: 'status', value: statusParam },
+          ),
+        );
+      }
 
-      return res.status(HTTP_STATUS.OK).json({ success: true, data: result });
-    } catch (error) {
-      handleError(req, res, error);
-    }
-  };
-
-  /** GET /api/admin/reports — pending content report queue (Issue #88). */
-  static listReports = async (req: Request, res: Response) => {
-    try {
       const page = Number(req.query.page) || 1;
       const limit = Number(req.query.limit) || 20;
-      const songId = req.query.songId as string | undefined;
 
-      const result = await AdminController.reportService.listPendingReports(page, limit, songId);
+      const result = await AdminController.artistProfileService.listVerifications(
+        (statusParam as VerificationStatus) ?? VerificationStatus.PENDING,
+        page,
+        limit,
+      );
+
+      return res.status(HTTP_STATUS.OK).json(result);
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  /**
+   * PUT /api/admin/verifications/:id/approve — grant a verification badge
+   * (Issue #92).
+   */
+  static approveVerification = async (req: Request, res: Response) => {
+    try {
+      const adminId = (req as any).user?.id;
+
+      if (!adminId) {
+        return handleError(req, res, AppError.authentication('Admin not authenticated'));
+      }
+
+      const verification = await AdminController.artistProfileService.approveVerification(
+        routeParam(req.params.id),
+        adminId,
+      );
 
       return res.status(HTTP_STATUS.OK).json({
         success: true,
-        data: result.reports,
-        pagination: result.pagination,
+        message: 'Verification approved successfully',
+        verification,
       });
     } catch (error) {
       handleError(req, res, error);
     }
   };
 
-  /** PUT /api/admin/reports/:id/resolve — resolve a report (Issue #88). */
-  static resolveReport = async (req: Request, res: Response) => {
+  /**
+   * PUT /api/admin/verifications/:id/reject — decline an application with a
+   * reason the applicant can act on (Issue #92).
+   */
+  static rejectVerification = async (req: Request, res: Response) => {
     try {
-      const reportId = req.params.id as string;
-      const moderatorId = (req as any).user.id as string;
-      const { actionTaken, resolutionNote } = req.body;
+      const adminId = (req as any).user?.id;
 
-      const report = await AdminController.reportService.resolveReport(reportId, moderatorId, {
-        actionTaken,
-        resolutionNote,
-      });
+      if (!adminId) {
+        return handleError(req, res, AppError.authentication('Admin not authenticated'));
+      }
+
+      const verification = await AdminController.artistProfileService.rejectVerification(
+        routeParam(req.params.id),
+        adminId,
+        req.body.reason,
+      );
 
       return res.status(HTTP_STATUS.OK).json({
         success: true,
-        message: 'Report resolved',
-        data: report,
+        message: 'Verification rejected',
+        verification,
       });
     } catch (error) {
       handleError(req, res, error);
