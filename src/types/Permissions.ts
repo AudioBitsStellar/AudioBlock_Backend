@@ -11,6 +11,13 @@ export enum Permission {
   // Content moderation
   CONTENT_MODERATE = 'content:moderate',
 
+  /**
+   * Bulk song moderation (Issue #85). Held only by admins and above: a single
+   * request can change the status of up to 50 songs, so it is deliberately not
+   * granted to moderators alongside the per-song CONTENT_MODERATE capability.
+   */
+  CONTENT_MODERATE_BULK = 'content:moderate:bulk',
+
   // Background jobs / operational visibility
   JOBS_VIEW = 'jobs:view',
 
@@ -42,6 +49,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   ],
   [UserRole.ADMIN]: [
     Permission.CONTENT_MODERATE,
+    Permission.CONTENT_MODERATE_BULK,
     Permission.JOBS_VIEW,
     Permission.SEARCH_MANAGE,
     Permission.USER_MANAGE,

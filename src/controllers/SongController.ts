@@ -1,7 +1,9 @@
 import { Request, Response } from 'express';
+import { createHash } from 'crypto';
 import AppDataSource from '../config/db';
 import { Song } from '../entities/Song';
 import { SongPlayEvent } from '../entities/SongPlayEvent';
+import { SongSave } from '../entities/SongSave';
 import redis from '../config/redis';
 import { precomputeSignedManifest } from '../workers/precomputeManifest';
 import { handleError, handleOnChainError } from '../utils/helpers';
@@ -9,11 +11,17 @@ import { AppError } from '../errors/AppError';
 import { SongService } from '../services/SongService';
 import { CollaborationService } from '../services/CollaborationService';
 import { TagService } from '../services/TagService';
+import { SongStatsService, parseWindow } from '../services/Song/SongStatsService';
+import { SongVersionService } from '../services/Song/SongVersionService';
+import { ReportService } from '../services/ReportService';
 import logger from '../config/logger';
 
 const songService = new SongService();
 const collaborationService = new CollaborationService();
 const tagService = new TagService();
+const songStatsService = new SongStatsService();
+const songVersionService = new SongVersionService();
+const reportService = new ReportService();
 
 export class SongController {
   static flagSong = async (req: Request, res: Response) => {
@@ -74,7 +82,20 @@ export class SongController {
       const recentlyPlayed = await redis.get(sessionKey);
       if (!recentlyPlayed) {
         await songRepo.increment({ id: songId }, 'playCount', 1);
-        await AppDataSource.getRepository(SongPlayEvent).insert({ songId });
+        // Record who listened so unique-listener statistics can be computed
+        // per time window (Issue #87). Anonymous streams get a hashed IP key
+        // instead of storing the raw address.
+        const listenerId = (req as any).user?.id ?? null;
+        const listenerKey = listenerId
+          ? null
+          : createHash('sha256')
+              .update(`${req.ip ?? 'unknown'}:${process.env.LISTENER_KEY_SALT ?? ''}`)
+              .digest('hex');
+        await AppDataSource.getRepository(SongPlayEvent).insert({
+          songId,
+          listenerId,
+          listenerKey,
+        });
         await redis.set(sessionKey, '1', 'EX', 30);
       }
 
@@ -241,6 +262,129 @@ export class SongController {
       });
     } catch (error) {
       handleError(res, error);
+    }
+  };
+
+  /** GET /api/songs/:id/stats — aggregated song statistics (Issue #87). */
+  static getSongStats = async (req: Request, res: Response) => {
+    try {
+      const songId = req.params.id as string;
+      const window = parseWindow(req.query.window);
+      const stats = await songStatsService.getSongStats(songId, window);
+      return res.status(200).json({ success: true, data: stats });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  /** GET /api/artists/:id/stats — artist-level aggregation (Issue #87). */
+  static getArtistStats = async (req: Request, res: Response) => {
+    try {
+      const artistId = req.params.id as string;
+      const window = parseWindow(req.query.window);
+      const stats = await songStatsService.getArtistStats(artistId, window);
+      return res.status(200).json({ success: true, data: stats });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  /**
+   * POST /api/songs/:id/save — add a song to the caller's library (Issue #87).
+   *
+   * Saves are the data source for the `saves` statistic; a repeat save is a
+   * no-op rather than an error so the client can be idempotent.
+   */
+  static saveSong = async (req: Request, res: Response) => {
+    try {
+      const songId = req.params.id as string;
+      const userId = (req as any).user.id as string;
+
+      const songRepo = AppDataSource.getRepository(Song);
+      const song = await songRepo.findOneBy({ id: songId });
+      if (!song) {
+        throw AppError.notFound('Song not found', undefined, 'SONG_NOT_FOUND');
+      }
+
+      const saveRepo = AppDataSource.getRepository(SongSave);
+      const existing = await saveRepo.findOne({ where: { songId, userId } });
+      if (existing) {
+        return res.status(200).json({ success: true, message: 'Song already saved' });
+      }
+
+      await saveRepo.insert({ songId, userId });
+      await songStatsService.invalidateSong(songId, song.artistId);
+
+      return res.status(201).json({ success: true, message: 'Song saved' });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  /** DELETE /api/songs/:id/save — remove a song from the caller's library. */
+  static unsaveSong = async (req: Request, res: Response) => {
+    try {
+      const songId = req.params.id as string;
+      const userId = (req as any).user.id as string;
+
+      const saveRepo = AppDataSource.getRepository(SongSave);
+      const result = await saveRepo.delete({ songId, userId });
+      if (!result.affected) {
+        throw AppError.notFound('Song is not saved', undefined, 'SAVE_NOT_FOUND');
+      }
+
+      const song = await AppDataSource.getRepository(Song).findOneBy({ id: songId });
+      await songStatsService.invalidateSong(songId, song?.artistId);
+
+      return res.status(200).json({ success: true, message: 'Song removed from library' });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  /** GET /api/songs/:id/versions — every revision of a song (Issue #86). */
+  static listVersions = async (req: Request, res: Response) => {
+    try {
+      const songId = req.params.id as string;
+      const versions = await songVersionService.listVersions(songId);
+      return res.status(200).json({ success: true, count: versions.length, data: versions });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  /** GET /api/songs/:id/versions/:version — one specific revision (Issue #86). */
+  static getVersion = async (req: Request, res: Response) => {
+    try {
+      const songId = req.params.id as string;
+      const versionNumber = Number(req.params.version);
+      const version = await songVersionService.getVersion(songId, versionNumber);
+      return res.status(200).json({ success: true, data: version });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  /** POST /api/songs/:id/report — submit a content report (Issue #88). */
+  static reportSong = async (req: Request, res: Response) => {
+    try {
+      const songId = req.params.id as string;
+      const reporterId = (req as any).user.id as string;
+      const { reason, description } = req.body;
+
+      const result = await reportService.submitReport(songId, reporterId, { reason, description });
+
+      return res.status(201).json({
+        success: true,
+        message: 'Report submitted',
+        data: {
+          report: result.report,
+          songFlagged: result.songFlagged,
+          pendingReports: result.pendingReports,
+        },
+      });
+    } catch (error) {
+      handleError(req, res, error);
     }
   };
 }
