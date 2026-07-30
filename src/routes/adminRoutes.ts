@@ -3,6 +3,7 @@ import { requirePermission } from '../middlewares/authMiddleware';
 import { Permission } from '../types/Permissions';
 import { validateDTO } from '../middlewares/validate';
 import { AssignRoleDTO } from '../dtos/AssignRoleDTO';
+import { RejectVerificationDTO } from '../dtos/RejectVerificationDTO';
 import { SongController } from '../controllers/SongController';
 import { JobController } from '../controllers/JobController';
 import { AdminController } from '../controllers/AdminController';
@@ -54,6 +55,24 @@ router.post(
   requirePermission(Permission.ROLE_ASSIGN),
   validateDTO(AssignRoleDTO),
   AdminController.assignRole,
+);
+
+// Artist verification review (Issue #92) — moderators and above.
+router.get(
+  '/verifications',
+  requirePermission(Permission.VERIFICATION_REVIEW),
+  AdminController.listVerifications,
+);
+router.put(
+  '/verifications/:id/approve',
+  requirePermission(Permission.VERIFICATION_REVIEW),
+  AdminController.approveVerification,
+);
+router.put(
+  '/verifications/:id/reject',
+  requirePermission(Permission.VERIFICATION_REVIEW),
+  validateDTO(RejectVerificationDTO),
+  AdminController.rejectVerification,
 );
 
 export default router;

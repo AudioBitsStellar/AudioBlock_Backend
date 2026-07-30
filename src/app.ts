@@ -26,6 +26,10 @@ import chartRoutes from './routes/ChartRoutes';
 import tagRoutes from './routes/TagRoutes';
 import releaseRoutes from './routes/ReleaseRoutes';
 import subscriptionRoutes from './routes/subscriptionRoutes';
+import apiKeyRoutes from './routes/apiKeyRoutes';
+import songEngagementRoutes from './routes/songEngagementRoutes';
+import commentRoutes from './routes/commentRoutes';
+import libraryRoutes from './routes/libraryRoutes';
 import { getPoolStats, checkDbHealth } from './services/DbPoolMonitor';
 import { dbConnectionState } from './services/DatabaseConnectionManager';
 import { JSON_BODY_LIMIT, URLENCODED_BODY_LIMIT } from './config/constants';
@@ -146,6 +150,19 @@ app.use('/api/user', userRoutes);
 // Subscription management routes (Issue #99)
 app.use('/api/users', subscriptionRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
+
+// API keys for third-party integrations (Issue #89)
+app.use('/api/api-keys', apiKeyRoutes);
+
+// Per-song saves and comments (Issues #90, #91). Mounted at the plural
+// /api/songs alongside the existing singular /api/song upload/stream routes.
+app.use('/api/songs', songEngagementRoutes);
+
+// Comment edit/delete and reply listing (Issue #90)
+app.use('/api/comments', commentRoutes);
+
+// Personal saved-song library (Issue #91)
+app.use('/api/users', libraryRoutes);
 
 //TWITTER CALLBACK ROUTE
 app.use('/api/auth/twitter', twitterRoutes);
