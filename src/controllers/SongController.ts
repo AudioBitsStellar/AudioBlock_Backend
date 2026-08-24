@@ -14,6 +14,7 @@ import { TagService } from '../services/TagService';
 import { SongStatsService, parseWindow } from '../services/Song/SongStatsService';
 import { SongVersionService } from '../services/Song/SongVersionService';
 import { ReportService } from '../services/ReportService';
+import { PlaybackService } from '../services/Song/PlaybackService';
 import logger from '../config/logger';
 
 const songService = new SongService();
@@ -22,6 +23,7 @@ const tagService = new TagService();
 const songStatsService = new SongStatsService();
 const songVersionService = new SongVersionService();
 const reportService = new ReportService();
+const playbackService = new PlaybackService();
 
 export class SongController {
   static flagSong = async (req: Request, res: Response) => {
@@ -383,6 +385,22 @@ export class SongController {
           pendingReports: result.pendingReports,
         },
       });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  /** POST /api/songs/:id/playback — record a play event. */
+  static recordPlayback = async (req: Request, res: Response) => {
+    try {
+      const songId = req.params.id as string;
+      const userId = (req as any).user?.id || null;
+      // Get the IP
+      const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'unknown';
+
+      const counted = await playbackService.recordPlayback(songId, userId, ip);
+
+      return res.status(200).json({ success: true, counted });
     } catch (error) {
       handleError(req, res, error);
     }

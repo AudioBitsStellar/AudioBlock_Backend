@@ -50,6 +50,23 @@ export const requireAuth = (req: Request, res: Response, next: NextFunction) => 
   }
 };
 
+export const optionalAuth = (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      const secret = process.env.JWT_SECRET!;
+      const decoded = jwt.verify(token, secret) as JwtPayload;
+      if (decoded) {
+        (req as any).user = decoded;
+      }
+    }
+  } catch (error) {
+    // ignore
+  }
+  next();
+};
+
 export const requireRoles =
   (...allowedRoles: UserRole[]) =>
   (req: Request, res: Response, next: NextFunction) => {

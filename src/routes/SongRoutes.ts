@@ -186,6 +186,11 @@ router.post(
   uploadController.finalizeReupload,
 );
 
+import { optionalAuth } from '../middlewares/authMiddleware';
+import { playbackRateLimiter } from '../middlewares/playbackRateLimiter';
+// Playback tracking (Issue #76)
+router.post('/:id/playback', optionalAuth, playbackRateLimiter, SongController.recordPlayback);
+
 // Content moderation reports (Issue #88) — any authenticated user may report.
 router.post('/:id/report', requireAuth, validateDTO(ReportSongDTO), SongController.reportSong);
 
