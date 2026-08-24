@@ -1,4 +1,4 @@
-import { IsOptional, IsString } from 'class-validator';
+import { IsString } from 'class-validator';
 import { UserRole } from '../entities/User';
 import { Column } from 'typeorm';
 

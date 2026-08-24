@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { MarketplaceService } from '../services/Marketplace/MarketplaceService';
-import { handleError, handleOnChainError } from '../utils/helpers';
+import { handleError } from '../utils/helpers';
 import { AppError } from '../errors/AppError';
 
 const marketplaceService = new MarketplaceService();

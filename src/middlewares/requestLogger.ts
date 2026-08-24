@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import logger from '../config/logger';
 
 declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
       id?: string;

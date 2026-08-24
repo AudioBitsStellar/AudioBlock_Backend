@@ -585,4 +585,23 @@ export class SongService {
 
     return song;
   }
+
+  /**
+   * Get lyrics for a song.
+   */
+  async getLyrics(songId: string): Promise<{ lyrics: string; language?: string }> {
+    const song = await this.songRepo.findOneBy({ id: songId });
+    if (!song) {
+      throw AppError.notFound('Song not found', undefined, 'SONG_NOT_FOUND');
+    }
+    if (!song.lyrics) {
+      throw AppError.notFound('Lyrics not found for this song', undefined, 'LYRICS_NOT_FOUND');
+    }
+
+    const result: { lyrics: string; language?: string } = { lyrics: song.lyrics };
+    if (song.language) {
+      result.language = song.language;
+    }
+    return result;
+  }
 }

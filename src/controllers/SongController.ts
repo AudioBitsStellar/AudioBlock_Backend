@@ -390,17 +390,12 @@ export class SongController {
     }
   };
 
-  /** POST /api/songs/:id/playback — record a play event. */
-  static recordPlayback = async (req: Request, res: Response) => {
+  /** GET /api/songs/:id/lyrics — get lyrics for a song (Issue #75). */
+  static getLyrics = async (req: Request, res: Response) => {
     try {
       const songId = req.params.id as string;
-      const userId = (req as any).user?.id || null;
-      // Get the IP
-      const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'unknown';
-
-      const counted = await playbackService.recordPlayback(songId, userId, ip);
-
-      return res.status(200).json({ success: true, counted });
+      const lyricsData = await songService.getLyrics(songId);
+      return res.status(200).json({ success: true, data: lyricsData });
     } catch (error) {
       handleError(req, res, error);
     }
