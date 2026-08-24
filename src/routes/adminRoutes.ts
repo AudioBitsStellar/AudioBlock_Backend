@@ -96,4 +96,11 @@ router.put(
   AdminController.rejectVerification,
 );
 
+// Transaction logs visibility (Issue #39)
+router.get(
+  '/transaction-logs',
+  requirePermission(Permission.TRANSACTION_LOGS_VIEW),
+  AdminController.getTransactionLogs,
+);
+
 export default router;
