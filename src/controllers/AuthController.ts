@@ -3,13 +3,10 @@ import { CreateUserDTO } from '../dtos/CreateUserDTO';
 import { JWTDTO } from '../dtos/JWTDTO';
 import { RegisterWithEmailDTO } from '../dtos/RegisterWithEmailDTO';
 import { LoginWithEmailDTO } from '../dtos/LoginWithEmailDTO';
-import { UpdateUserDTO } from '../dtos/UpdateUserDTO';
-import { User } from '../entities/User';
 import { AuthService } from '../services/AuthService';
 import { UserService } from './../services/UserService';
 import { Request, Response } from 'express';
 import { validate } from 'class-validator';
-import { formatValidationErrors } from '../utils/helpers';
 import { AppError } from '../errors/AppError';
 import logger from '../config/logger';
 

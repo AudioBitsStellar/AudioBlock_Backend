@@ -1,20 +1,27 @@
 const eslint = require('@eslint/js');
 const tseslint = require('typescript-eslint');
 const eslintPluginPrettierRecommended = require('eslint-plugin-prettier/recommended');
+const unusedImports = require('eslint-plugin-unused-imports');
 
 module.exports = tseslint.config(
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
   eslintPluginPrettierRecommended,
   {
+    plugins: {
+      'unused-imports': unusedImports,
+    },
     rules: {
       '@typescript-eslint/no-explicit-any': 'warn',
-      '@typescript-eslint/no-unused-vars': [
-        'error',
+      '@typescript-eslint/no-unused-vars': 'off',
+      'unused-imports/no-unused-imports': 'error',
+      'unused-imports/no-unused-vars': [
+        'warn',
         {
-          argsIgnorePattern: '^_',
+          vars: 'all',
           varsIgnorePattern: '^_',
-          caughtErrorsIgnorePattern: '^_',
+          args: 'after-used',
+          argsIgnorePattern: '^_',
         },
       ],
       'prefer-const': 'warn',

@@ -8,8 +8,6 @@ import { PrepareArtistSetupDTO } from '../dtos/PrepareArtistSetupDTO';
 import { SubmitSignedXdrDTO } from '../dtos/SubmitSignedXdrDTO';
 import { ApplyVerificationDTO } from '../dtos/ApplyVerificationDTO';
 import { upload } from '../middlewares/upload';
-import { etagCache } from '../middlewares/etag';
-import { SongController } from '../controllers/SongController';
 
 const artistProfileController = new ArtistProfileController();
 const artistOnChainController = new ArtistOnChainController();

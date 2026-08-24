@@ -15,7 +15,6 @@ jest.mock('../config/soroban', () => ({
   getSorobanRpcUrl: jest.fn(),
 }));
 
-import { SorobanService } from '../services/Soroban/SorobanService';
 import { MarketplaceService } from '../services/Marketplace/MarketplaceService';
 
 let mockSoroban: { prepareInvocation: jest.Mock; submitSignedTransaction: jest.Mock };

@@ -25,10 +25,7 @@ export class RoyaltyTemplateController {
       const template = await templateService.create({ name, userId, splits });
       res.status(201).json({ success: true, data: template });
     } catch (error) {
-      logger.error(
-        { reqId: (req as any).id, route: req.path, err: error },
-        'createTemplate error',
-      );
+      logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'createTemplate error');
       handleError(res, error);
     }
   };
@@ -43,10 +40,7 @@ export class RoyaltyTemplateController {
       const templates = await templateService.findByUser(userId);
       res.status(200).json({ success: true, data: templates });
     } catch (error) {
-      logger.error(
-        { reqId: (req as any).id, route: req.path, err: error },
-        'listTemplates error',
-      );
+      logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'listTemplates error');
       handleError(res, error);
     }
   };
@@ -64,10 +58,7 @@ export class RoyaltyTemplateController {
       const template = await templateService.update(templateId, userId, { name, splits });
       res.status(200).json({ success: true, data: template });
     } catch (error) {
-      logger.error(
-        { reqId: (req as any).id, route: req.path, err: error },
-        'updateTemplate error',
-      );
+      logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'updateTemplate error');
       handleError(res, error);
     }
   };
@@ -83,10 +74,7 @@ export class RoyaltyTemplateController {
       await templateService.delete(templateId, userId);
       res.status(200).json({ success: true, message: 'Template deleted' });
     } catch (error) {
-      logger.error(
-        { reqId: (req as any).id, route: req.path, err: error },
-        'deleteTemplate error',
-      );
+      logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'deleteTemplate error');
       handleError(res, error);
     }
   };

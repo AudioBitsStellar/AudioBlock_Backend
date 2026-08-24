@@ -2,7 +2,6 @@ import { Repository } from 'typeorm';
 import { Subscription, SubscriptionTier, SubscriptionStatus } from '../entities/Subscription';
 import AppDataSource from '../config/db';
 import { AppError } from '../errors/AppError';
-import { ERROR_MESSAGES } from '../config/constants';
 import { validateRequired } from '../validators/ServiceValidator';
 
 /**

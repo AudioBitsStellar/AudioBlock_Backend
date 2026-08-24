@@ -26,10 +26,7 @@ export class CircuitBreaker {
 
   public readonly config: CircuitBreakerConfig;
 
-  constructor(
-    healthCheckFn: () => Promise<boolean>,
-    config?: Partial<CircuitBreakerConfig>,
-  ) {
+  constructor(healthCheckFn: () => Promise<boolean>, config?: Partial<CircuitBreakerConfig>) {
     this.healthCheckFn = healthCheckFn;
     this.config = {
       failureThreshold: config?.failureThreshold ?? 3,
@@ -76,9 +73,7 @@ export class CircuitBreaker {
     if (this.failureCount >= this.config.failureThreshold) {
       this.transitionTo('OPEN');
       this.openedAt = new Date();
-      logger.error(
-        `Circuit breaker opened after ${this.failureCount} consecutive failures`,
-      );
+      logger.error(`Circuit breaker opened after ${this.failureCount} consecutive failures`);
 
       this.resetTimer = setTimeout(() => {
         this.transitionTo('HALF_OPEN');
@@ -93,9 +88,7 @@ export class CircuitBreaker {
 
   async execute<T>(fn: () => Promise<T>): Promise<T> {
     if (this.state === 'OPEN') {
-      throw new CircuitBreakerOpenError(
-        'Circuit breaker is open — please try again later',
-      );
+      throw new CircuitBreakerOpenError('Circuit breaker is open — please try again later');
     }
 
     try {
@@ -160,10 +153,7 @@ export class CircuitBreaker {
   private transitionTo(newState: CircuitState): void {
     const oldState = this.state;
     this.state = newState;
-    logger.info(
-      { oldState, newState },
-      `Circuit breaker state changed: ${oldState} → ${newState}`,
-    );
+    logger.info({ oldState, newState }, `Circuit breaker state changed: ${oldState} → ${newState}`);
   }
 }
 

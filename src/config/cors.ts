@@ -11,10 +11,15 @@ function parseOrigins(): string[] {
     return ['http://localhost:3000', 'http://localhost:3001', 'http://127.0.0.1:5500'];
   }
 
-  const origins = raw.split(',').map((o) => o.trim()).filter(Boolean);
+  const origins = raw
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
 
   if (isProduction && origins.some((o) => o === '*' || o.includes('*'))) {
-    throw new Error('Wildcard origins are not allowed in production. Set explicit ALLOWED_ORIGINS.');
+    throw new Error(
+      'Wildcard origins are not allowed in production. Set explicit ALLOWED_ORIGINS.',
+    );
   }
 
   return origins;
