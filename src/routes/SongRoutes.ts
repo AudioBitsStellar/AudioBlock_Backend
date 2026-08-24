@@ -133,6 +133,9 @@ router.post(
 // Stream Songs
 router.get('/stream/:id', SongController.streamSong);
 
+// Lyrics (Issue #75)
+router.get('/:id/lyrics', requireAuth, SongController.getLyrics);
+
 // Public, read-heavy catalog endpoints get ETag + Cache-Control so clients can
 // revalidate cheaply and skip re-downloading unchanged lists (Issue #133).
 router.get(
