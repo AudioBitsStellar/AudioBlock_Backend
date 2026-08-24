@@ -14,6 +14,7 @@ import { TagService } from '../services/TagService';
 import { SongStatsService, parseWindow } from '../services/Song/SongStatsService';
 import { SongVersionService } from '../services/Song/SongVersionService';
 import { ReportService } from '../services/ReportService';
+import { PlaybackService } from '../services/Song/PlaybackService';
 import logger from '../config/logger';
 
 const songService = new SongService();
@@ -22,6 +23,7 @@ const tagService = new TagService();
 const songStatsService = new SongStatsService();
 const songVersionService = new SongVersionService();
 const reportService = new ReportService();
+const playbackService = new PlaybackService();
 
 export class SongController {
   static flagSong = async (req: Request, res: Response) => {
