@@ -387,4 +387,15 @@ export class SongController {
       handleError(req, res, error);
     }
   };
+
+  /** GET /api/songs/:id/lyrics — get lyrics for a song (Issue #75). */
+  static getLyrics = async (req: Request, res: Response) => {
+    try {
+      const songId = req.params.id as string;
+      const lyricsData = await songService.getLyrics(songId);
+      return res.status(200).json({ success: true, data: lyricsData });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
 }

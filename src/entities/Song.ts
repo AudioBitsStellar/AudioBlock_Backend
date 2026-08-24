@@ -97,6 +97,12 @@ export class Song {
   @Column('simple-json', { nullable: true })
   royaltySplits?: TemplateSplit[];
 
+  @Column({ type: 'text', nullable: true })
+  lyrics?: string;
+
+  @Column({ nullable: true })
+  language?: string;
+
   @CreateDateColumn()
   createdAt!: Date;
 
