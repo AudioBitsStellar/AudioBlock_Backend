@@ -1,8 +1,7 @@
 import { DynamicEvmWalletClient } from '@dynamic-labs-wallet/node-evm';
 import { ThresholdSignatureScheme } from '@dynamic-labs-wallet/core';
 
-import { baseSepolia, liskSepolia } from 'viem/chains';
-import { parseEther } from 'viem/utils';
+import { liskSepolia } from 'viem/chains';
 import { createWalletClient, http } from 'viem';
 import dotenv from 'dotenv';
 

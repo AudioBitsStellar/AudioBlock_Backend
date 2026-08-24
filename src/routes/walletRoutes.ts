@@ -1,11 +1,4 @@
-import {
-  Router,
-  Request,
-  Response,
-  NextFunction,
-  RequestHandler,
-  ErrorRequestHandler,
-} from 'express';
+import { Router } from 'express';
 import { WalletController } from '../controllers/WalletController';
 import { validateDTO } from '../middlewares/validate';
 import { SignMessageDTO } from '../dtos/SignMessageDTO';

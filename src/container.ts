@@ -113,7 +113,7 @@ export class Container {
    */
   createScope(): Container {
     const scopedContainer = new Container();
-    
+
     // Copy service registrations to scoped container
     this.services.forEach((descriptor, name) => {
       scopedContainer.services.set(name, {
@@ -141,16 +141,16 @@ export const SERVICE_NAMES = {
   SONG_SERVICE: 'SongService',
   ALBUM_SERVICE: 'AlbumService',
   GENRE_SERVICE: 'GenreService',
-  
+
   // Artist services
   ARTIST_SERVICE: 'ArtistService',
   ARTIST_PROFILE_SERVICE: 'ArtistProfileService',
-  
+
   // Blockchain services
   SOROBAN_SERVICE: 'SorobanService',
   TRANSACTION_LOG_SERVICE: 'TransactionLogService',
   WALLET_SERVICE: 'WalletService',
-  
+
   // Infrastructure services
   CACHE_SERVICE: 'CacheService',
   EMAIL_SERVICE: 'EmailService',
@@ -159,7 +159,7 @@ export const SERVICE_NAMES = {
   METRICS_SERVICE: 'MetricsService',
   SEARCH_INDEX_SERVICE: 'SearchIndexService',
   BATCH_SERVICE: 'BatchService',
-  
+
   // Marketplace services
   ROYALTY_PAYOUT_SERVICE: 'RoyaltyPayoutService',
   SCAN_SERVICE: 'ScanService',
@@ -182,7 +182,9 @@ export function measureResolution<T>(name: string, resolver: () => T): T {
   } finally {
     const duration = performance.now() - start;
     if (duration > 5) {
-      console.warn(`Service resolution for "${name}" took ${duration.toFixed(2)}ms (threshold: 5ms)`);
+      console.warn(
+        `Service resolution for "${name}" took ${duration.toFixed(2)}ms (threshold: 5ms)`,
+      );
     }
   }
 }

@@ -1,6 +1,3 @@
-import { CreateUserDTO } from '../dtos/CreateUserDTO';
-import { UpdateUserDTO } from '../dtos/UpdateUserDTO';
-import { User } from '../entities/User';
 import { UserService } from './../services/UserService';
 import { Request, Response } from 'express';
 import { handleError } from '../utils/helpers';

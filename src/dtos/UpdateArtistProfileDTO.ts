@@ -1,5 +1,4 @@
 import { IsOptional, IsString, IsNotEmpty } from 'class-validator';
-import { IsImageFile, MaxFileSize } from '../validators/ImageFile';
 
 export class UpdateArtistProfileDTO {
   @IsOptional()
