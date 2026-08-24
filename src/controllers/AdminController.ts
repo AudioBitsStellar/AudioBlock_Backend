@@ -6,6 +6,7 @@ import { HTTP_STATUS } from '../config/constants';
 import { AppError } from '../errors/AppError';
 import { routeParam } from '../utils/routeParams';
 import { VerificationStatus } from '../entities/ArtistVerification';
+import { TransactionLogService } from '../services/TransactionLogService';
 
 /**
  * Admin-facing user & role management (Issue #100) and artist verification
@@ -14,6 +15,7 @@ import { VerificationStatus } from '../entities/ArtistVerification';
 export class AdminController {
   private static userService = new UserService();
   private static artistProfileService = new ArtistProfileService();
+  private static transactionLogService = new TransactionLogService();
 
   /**
    * POST /api/admin/users/:id/role — assign a role to a user.
@@ -128,6 +130,28 @@ export class AdminController {
         message: 'Verification rejected',
         verification,
       });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  /**
+   * GET /api/admin/transaction-logs — list transaction logs (Issue #39).
+   */
+  static getTransactionLogs = async (req: Request, res: Response) => {
+    try {
+      const filters = {
+        userId: req.query.userId as string,
+        status: req.query.status as string,
+        startDate: req.query.startDate as string,
+        endDate: req.query.endDate as string,
+        page: Number(req.query.page) || 1,
+        limit: Number(req.query.limit) || 50,
+      };
+
+      const result = await AdminController.transactionLogService.getAdminLogs(filters);
+
+      return res.status(HTTP_STATUS.OK).json(result);
     } catch (error) {
       handleError(req, res, error);
     }

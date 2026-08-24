@@ -47,4 +47,50 @@ export class TransactionLogService {
   async getLogsByUser(userId: string): Promise<any[]> {
     return this.transactionLogRepo.findBy({ user_id: userId });
   }
+
+  /**
+   * Retrieve transaction logs with filters and pagination for admins (Issue #39).
+   */
+  async getAdminLogs(filters: {
+    userId?: string;
+    status?: string;
+    startDate?: string;
+    endDate?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<{ data: any[]; total: number }> {
+    const query = this.transactionLogRepo.createQueryBuilder('log')
+      .orderBy('log.createdAt', 'DESC');
+
+    if (filters.userId) {
+      query.andWhere('log.user_id = :userId', { userId: filters.userId });
+    }
+    if (filters.status) {
+      query.andWhere('log.action = :status', { status: filters.status });
+    }
+    if (filters.startDate) {
+      query.andWhere('log.createdAt >= :startDate', { startDate: filters.startDate });
+    }
+    if (filters.endDate) {
+      query.andWhere('log.createdAt <= :endDate', { endDate: filters.endDate });
+    }
+
+    const page = filters.page || 1;
+    const limit = filters.limit || 50;
+    query.skip((page - 1) * limit).take(limit);
+
+    const [data, total] = await query.getManyAndCount();
+
+    // The response must include xdr hash (txHash), status (action), error message (description)
+    const mappedData = data.map(log => ({
+      id: log.id,
+      userId: log.user_id,
+      xdrHash: log.txHash,
+      status: log.action,
+      errorMessage: log.description,
+      createdAt: log.createdAt,
+    }));
+
+    return { data: mappedData, total };
+  }
 }

@@ -30,6 +30,9 @@ export enum Permission {
 
   // Artist verification review (Issue #92)
   VERIFICATION_REVIEW = 'verification:review',
+
+  // Transaction logs visibility (Issue #39)
+  TRANSACTION_LOGS_VIEW = 'transaction-logs:view',
 }
 
 /**
@@ -55,6 +58,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     Permission.USER_MANAGE,
     Permission.ROLE_ASSIGN,
     Permission.VERIFICATION_REVIEW,
+    Permission.TRANSACTION_LOGS_VIEW,
   ],
   [UserRole.SUPER_ADMIN]: Object.values(Permission),
 };
