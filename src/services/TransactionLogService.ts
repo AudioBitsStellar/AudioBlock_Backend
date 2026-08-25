@@ -59,7 +59,8 @@ export class TransactionLogService {
     page?: number;
     limit?: number;
   }): Promise<{ data: any[]; total: number }> {
-    const query = this.transactionLogRepo.createQueryBuilder('log')
+    const query = this.transactionLogRepo
+      .createQueryBuilder('log')
       .orderBy('log.createdAt', 'DESC');
 
     if (filters.userId) {
@@ -82,7 +83,7 @@ export class TransactionLogService {
     const [data, total] = await query.getManyAndCount();
 
     // The response must include xdr hash (txHash), status (action), error message (description)
-    const mappedData = data.map(log => ({
+    const mappedData = data.map((log) => ({
       id: log.id,
       userId: log.user_id,
       xdrHash: log.txHash,
@@ -92,5 +93,104 @@ export class TransactionLogService {
     }));
 
     return { data: mappedData, total };
+  }
+
+  /**
+   * Get wallet balance history for a user with filtering and pagination (Issue #84).
+   *
+   * @param userId - The user's UUID.
+   * @param filters - Optional type and date range filters.
+   * @param page - 1-based page number.
+   * @param limit - Results per page (max 100).
+   * @returns Paginated transactions with amount, type, description, and running balance.
+   */
+  async getWalletHistory(
+    userId: string,
+    filters: {
+      type?: string;
+      from?: string;
+      to?: string;
+    } = {},
+    page = 1,
+    limit = 20,
+  ): Promise<{
+    entries: Array<{
+      id: string;
+      amount: number | null;
+      type: string;
+      description: string | null;
+      timestamp: Date;
+      relatedEntityId: string | null;
+      relatedEntityType: string | null;
+      txHash: string;
+    }>;
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+    runningBalance: number;
+  }> {
+    const safePage = Math.max(1, page);
+    const safeLimit = Math.min(Math.max(1, limit), 100);
+
+    const qb = this.transactionLogRepo
+      .createQueryBuilder('log')
+      .where('log.user_id = :userId', { userId })
+      .orderBy('log.createdAt', 'DESC');
+
+    if (filters.type) {
+      qb.andWhere('log.action = :type', { type: filters.type });
+    }
+
+    if (filters.from) {
+      qb.andWhere('log.createdAt >= :from', { from: filters.from });
+    }
+
+    if (filters.to) {
+      qb.andWhere('log.createdAt <= :to', { to: filters.to });
+    }
+
+    qb.skip((safePage - 1) * safeLimit).take(safeLimit);
+
+    const [logs, total] = await qb.getManyAndCount();
+
+    // Calculate running balance: sum all amounts across all time
+    const balanceQb = this.transactionLogRepo
+      .createQueryBuilder('log')
+      .select('COALESCE(SUM(log.amount), 0)', 'balance')
+      .where('log.user_id = :userId', { userId });
+
+    if (filters.type) {
+      balanceQb.andWhere('log.action = :type', { type: filters.type });
+    }
+    if (filters.from) {
+      balanceQb.andWhere('log.createdAt >= :from', { from: filters.from });
+    }
+    if (filters.to) {
+      balanceQb.andWhere('log.createdAt <= :to', { to: filters.to });
+    }
+
+    const balanceResult = await balanceQb.getRawOne();
+    const runningBalance = parseFloat(balanceResult?.balance ?? '0');
+
+    const entries = logs.map((log) => ({
+      id: log.id,
+      amount: log.amount ?? null,
+      type: log.action,
+      description: log.description ?? null,
+      timestamp: log.createdAt,
+      relatedEntityId: log.relatedEntityId ?? null,
+      relatedEntityType: log.relatedEntityType ?? null,
+      txHash: log.txHash,
+    }));
+
+    return {
+      entries,
+      total,
+      page: safePage,
+      limit: safeLimit,
+      totalPages: Math.ceil(total / safeLimit) || 0,
+      runningBalance,
+    };
   }
 }

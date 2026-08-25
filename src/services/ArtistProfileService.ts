@@ -1,6 +1,8 @@
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import AppDataSource from '../config/db';
 import { User, UserRole } from '../entities/User';
+import { UserFollow } from '../entities/UserFollow';
+import { Song } from '../entities/Song';
 import fs from 'fs';
 import { s3 } from '../config/s3';
 import { UpdateArtistProfileDTO } from '../dtos/UpdateArtistProfileDTO';
@@ -68,10 +70,14 @@ export interface VerificationBadge {
 export class ArtistProfileService {
   private userRepo: Repository<User>;
   private verificationRepo: Repository<ArtistVerification>;
+  private followRepo: Repository<UserFollow>;
+  private songRepo: Repository<Song>;
 
   constructor() {
     this.userRepo = AppDataSource.getRepository(User);
     this.verificationRepo = AppDataSource.getRepository(ArtistVerification);
+    this.followRepo = AppDataSource.getRepository(UserFollow);
+    this.songRepo = AppDataSource.getRepository(Song);
   }
 
   /**
@@ -448,5 +454,163 @@ export class ArtistProfileService {
       createdAt: verification.createdAt,
       updatedAt: verification.updatedAt,
     };
+  }
+
+  // ── Follow / Unfollow (Issue #81) ────────────────────────────────────────────
+
+  /**
+   * Follow an artist. Idempotent — following an already-followed artist
+   * returns 200 without error.
+   */
+  async followArtist(
+    followerId: string,
+    followingId: string,
+  ): Promise<{ followerCount: number; followingCount: number }> {
+    validateUUID(followerId, 'followerId');
+    validateUUID(followingId, 'followingId');
+
+    if (followerId === followingId) {
+      throw AppError.validation('Cannot follow yourself');
+    }
+
+    const target = await this.userRepo.findOneBy({ id: followingId });
+    if (!target) {
+      throw AppError.notFound('Artist not found');
+    }
+
+    const existing = await this.followRepo.findOne({
+      where: { followerId, followingId },
+    });
+
+    if (!existing) {
+      await this.followRepo.insert({ followerId, followingId });
+    }
+
+    const [followerCount, followingCount] = await Promise.all([
+      this.followRepo.count({ where: { followingId } }),
+      this.followRepo.count({ where: { followerId: followingId } }),
+    ]);
+
+    return { followerCount, followingCount };
+  }
+
+  /**
+   * Unfollow an artist. Idempotent — unfollowing a non-followed artist
+   * returns 200 without error.
+   */
+  async unfollowArtist(
+    followerId: string,
+    followingId: string,
+  ): Promise<{ followerCount: number; followingCount: number }> {
+    validateUUID(followerId, 'followerId');
+    validateUUID(followingId, 'followingId');
+
+    await this.followRepo.delete({ followerId, followingId });
+
+    const [followerCount, followingCount] = await Promise.all([
+      this.followRepo.count({ where: { followingId } }),
+      this.followRepo.count({ where: { followerId: followingId } }),
+    ]);
+
+    return { followerCount, followingCount };
+  }
+
+  /** Get followers of an artist with pagination. */
+  async getFollowers(
+    artistId: string,
+    page = 1,
+    limit = 20,
+  ): Promise<{ users: Partial<User>[]; total: number; page: number; limit: number }> {
+    validateUUID(artistId, 'artistId');
+
+    const [follows, total] = await this.followRepo.findAndCount({
+      where: { followingId: artistId },
+      relations: ['follower'],
+      skip: (page - 1) * limit,
+      take: limit,
+      order: { createdAt: 'DESC' },
+    });
+
+    const users = follows.map((f) => ({
+      id: f.follower.id,
+      username: f.follower.username,
+      name: f.follower.name,
+      profileImage: f.follower.profileImage,
+      bio: f.follower.bio,
+    }));
+
+    return { users, total, page, limit };
+  }
+
+  /** Get who an artist follows with pagination. */
+  async getFollowing(
+    artistId: string,
+    page = 1,
+    limit = 20,
+  ): Promise<{ users: Partial<User>[]; total: number; page: number; limit: number }> {
+    validateUUID(artistId, 'artistId');
+
+    const [follows, total] = await this.followRepo.findAndCount({
+      where: { followerId: artistId },
+      relations: ['following'],
+      skip: (page - 1) * limit,
+      take: limit,
+      order: { createdAt: 'DESC' },
+    });
+
+    const users = follows.map((f) => ({
+      id: f.following.id,
+      username: f.following.username,
+      name: f.following.name,
+      profileImage: f.following.profileImage,
+      bio: f.following.bio,
+    }));
+
+    return { users, total, page, limit };
+  }
+
+  /** Get follower and following counts for an artist. */
+  async getFollowCounts(artistId: string): Promise<{
+    followerCount: number;
+    followingCount: number;
+  }> {
+    const [followerCount, followingCount] = await Promise.all([
+      this.followRepo.count({ where: { followingId: artistId } }),
+      this.followRepo.count({ where: { followerId: artistId } }),
+    ]);
+    return { followerCount, followingCount };
+  }
+
+  /**
+   * Get personalized feed — recent songs from artists the user follows.
+   * Returns ready, un-flagged songs sorted by recency.
+   */
+  async getFeed(
+    userId: string,
+    page = 1,
+    limit = 20,
+  ): Promise<{ songs: Song[]; total: number; page: number; limit: number }> {
+    validateUUID(userId, 'userId');
+
+    const follows = await this.followRepo.find({
+      where: { followerId: userId },
+      select: ['followingId'],
+    });
+
+    const followingIds = follows.map((f) => f.followingId);
+
+    if (followingIds.length === 0) {
+      return { songs: [], total: 0, page, limit };
+    }
+
+    const [songs, total] = await this.songRepo.findAndCount({
+      where: { artistId: In(followingIds), status: 'ready', flagged: false },
+      relations: ['user'],
+      order: { createdAt: 'DESC' },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+
+    return { songs, total, page, limit };
   }
 }

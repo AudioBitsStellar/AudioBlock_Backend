@@ -1,4 +1,4 @@
-import { In, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Song } from '../entities/Song';
 import { SongVersion } from '../entities/SongVersion';
 import { User } from '../entities/User';
@@ -435,41 +435,114 @@ export class SongService {
   }
 
   /**
-   * Search songs by title / artist / keywords (Issue #135).
+   * Search songs by title / artist / keywords (Issue #135, enhanced per #82).
    *
-   * Hits the precomputed inverted index first; on an index miss (no matching
-   * tokens) falls back to a direct DB `ILIKE` query so results are never lost
-   * just because the index hasn't caught up. Only `ready`, un-flagged songs
-   * are returned.
+   * Uses full-text search across song title, artist name (via JOIN), genre,
+   * and composers with relevance ranking. Results include artist metadata.
+   * Minimum query length: 2 characters.
+   *
+   * @param query  - Search query string (min 2 chars).
+   * @param page   - 1-based page number.
+   * @param limit  - Results per page (max 100).
+   * @returns Paginated, relevance-ranked song results with artist info.
    */
-  async searchSongs(query: string, limit = 20): Promise<Song[]> {
+  async searchSongs(
+    query: string,
+    page = 1,
+    limit = 20,
+  ): Promise<{
+    songs: any[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> {
     const trimmed = (query || '').trim();
-    if (!trimmed) return [];
+    const safePage = Math.max(1, page);
+    const safeLimit = Math.min(Math.max(1, limit), 100);
 
-    const indexedIds = await SearchIndexService.search(trimmed, limit);
-
-    if (indexedIds.length > 0) {
-      const songs = await this.songRepo.find({
-        where: { id: In(indexedIds), status: 'ready', flagged: false },
-      });
-      // Preserve the index's relevance ordering (DB `IN` doesn't guarantee it).
-      const rank = new Map(indexedIds.map((id, i) => [id, i]));
-      return songs.sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
+    if (trimmed.length < 2) {
+      return { songs: [], total: 0, page: safePage, limit: safeLimit, totalPages: 0 };
     }
 
-    // Index miss — fall back to the database.
     const like = `%${trimmed}%`;
-    return this.songRepo
+
+    // Build a relevance-scored query joining the User (artist) table
+    const qb = this.songRepo
       .createQueryBuilder('song')
+      .leftJoinAndSelect('song.user', 'artist')
       .where('song.status = :status', { status: 'ready' })
       .andWhere('song.flagged = false')
       .andWhere(
-        '(song.title ILIKE :like OR song.genre ILIKE :like OR song.composers ILIKE :like)',
+        `(
+          song.title ILIKE :like OR
+          song.genre ILIKE :like OR
+          song.composers ILIKE :like OR
+          song.description ILIKE :like OR
+          artist.name ILIKE :like OR
+          artist.username ILIKE :like
+        )`,
         { like },
       )
-      .orderBy('song.playCount', 'DESC')
-      .take(limit)
-      .getMany();
+      .addSelect(
+        `CASE
+          WHEN song.title ILIKE :exact THEN 100
+          WHEN song.title ILIKE :prefix THEN 70
+          WHEN song.title ILIKE :like THEN 40
+          WHEN artist.name ILIKE :exact THEN 90
+          WHEN artist.name ILIKE :prefix THEN 60
+          WHEN artist.name ILIKE :like THEN 30
+          WHEN artist.username ILIKE :exact THEN 85
+          WHEN artist.username ILIKE :prefix THEN 55
+          WHEN artist.username ILIKE :like THEN 25
+          WHEN song.genre ILIKE :like THEN 15
+          ELSE 10
+        END`,
+        'relevance',
+      )
+      .setParameters({
+        like,
+        exact: trimmed,
+        prefix: `${trimmed}%`,
+      })
+      .orderBy('relevance', 'DESC')
+      .addOrderBy('song.playCount', 'DESC')
+      .skip((safePage - 1) * safeLimit)
+      .take(safeLimit);
+
+    const [songs, total] = await qb.getManyAndCount();
+
+    // Map songs to include artist metadata in the response
+    const enriched = songs.map((song) => ({
+      id: song.id,
+      title: song.title,
+      description: song.description,
+      genre: song.genre,
+      duration: song.duration,
+      playCount: song.playCount,
+      coverArtPath: song.coverArtPath,
+      hlsMasterUrl: song.hlsMasterUrl,
+      metadataCid: song.metadataCid,
+      lyrics: song.lyrics,
+      language: song.language,
+      createdAt: song.createdAt,
+      artist: song.user
+        ? {
+            id: song.user.id,
+            username: song.user.username,
+            name: song.user.name,
+            profileImage: song.user.profileImage,
+          }
+        : null,
+    }));
+
+    return {
+      songs: enriched,
+      total,
+      page: safePage,
+      limit: safeLimit,
+      totalPages: Math.ceil(total / safeLimit) || 0,
+    };
   }
 
   /**

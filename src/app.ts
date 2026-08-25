@@ -13,6 +13,8 @@ import redis from './config/redis';
 import AppDataSource from './config/db';
 import authRoutes from './routes/authRoutes';
 import artistRoutes from './routes/artistRoutes';
+import { ArtistProfileController } from './controllers/ArtistProfileController';
+import { requireAuth } from './middlewares/authMiddleware';
 import twitterRoutes from './routes/twitterRoutes';
 import walletRoutes from './routes/walletRoutes';
 import SongRoutes from './routes/SongRoutes';
@@ -119,6 +121,10 @@ app.use('/api/artist', artistRoutes);
 // Plural alias so `GET /api/artists/:id/stats` resolves alongside the existing
 // singular mount (Issue #87).
 app.use('/api/artists', artistRoutes);
+
+// Personalized feed of songs from followed artists (Issue #81)
+const artistProfileController = new ArtistProfileController();
+app.get('/api/feed', requireAuth, artistProfileController.getFeed);
 
 // Dynamic wallet routes
 app.use('/api/wallet', walletRoutes);
