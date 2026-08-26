@@ -32,7 +32,7 @@ import apiKeyRoutes from './routes/apiKeyRoutes';
 import songEngagementRoutes from './routes/songEngagementRoutes';
 import commentRoutes from './routes/commentRoutes';
 import libraryRoutes from './routes/libraryRoutes';
-import playlistRoutes from './routes/playlistRoutes';
+import notificationRoutes from './routes/notificationRoutes';
 import { getPoolStats, checkDbHealth } from './services/DbPoolMonitor';
 import { dbConnectionState } from './services/DatabaseConnectionManager';
 import { JSON_BODY_LIMIT, URLENCODED_BODY_LIMIT } from './config/constants';
@@ -177,8 +177,8 @@ app.use('/api/comments', commentRoutes);
 // Personal saved-song library (Issue #91)
 app.use('/api/users', libraryRoutes);
 
-// Playlists (Issue #77)
-app.use('/api/playlists', playlistRoutes);
+// User notifications (Issue #79)
+app.use('/api/notifications', notificationRoutes);
 
 //TWITTER CALLBACK ROUTE
 app.use('/api/auth/twitter', twitterRoutes);

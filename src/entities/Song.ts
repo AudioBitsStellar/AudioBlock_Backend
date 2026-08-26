@@ -8,6 +8,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { User } from './User';
+import { Genre } from './Genre';
 import { TemplateSplit } from './RoyaltyTemplate';
 
 @Entity('songs') // pluralize for convention
@@ -25,6 +26,12 @@ export class Song {
   @Column()
   coverArtPath!: string;
 
+  @Column({ nullable: true })
+  coverArtIpfsHash!: string;
+
+  @Column({ type: 'simple-json', nullable: true })
+  coverArtThumbnails!: { [key: string]: string } | null;
+
   @Column()
   title!: string;
 
@@ -33,6 +40,13 @@ export class Song {
 
   @Column({ nullable: true })
   genre!: string;
+
+  @Column({ nullable: true })
+  genreId!: string;
+
+  @ManyToOne(() => Genre, (genre) => genre.songs, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'genreId' })
+  genreEntity?: Genre;
 
   @Column({ nullable: true })
   artistAddress!: string;

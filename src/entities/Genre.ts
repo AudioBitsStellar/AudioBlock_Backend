@@ -5,7 +5,9 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  OneToMany,
 } from 'typeorm';
+import { Song } from './Song';
 
 @Entity()
 export class Genre {
@@ -14,6 +16,9 @@ export class Genre {
 
   @Column({ unique: true })
   name!: string;
+
+  @OneToMany(() => Song, (song) => song.genreEntity)
+  songs!: Song[];
 
   @CreateDateColumn()
   createdAt!: Date;

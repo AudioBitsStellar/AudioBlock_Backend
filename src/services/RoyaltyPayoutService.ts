@@ -7,6 +7,8 @@ import { SorobanContracts } from '../config/soroban';
 import { SorobanService } from './Soroban/SorobanService';
 import { royaltiesPaidTotal } from './MetricsService';
 import { RoyaltyPayoutEvent } from '../types';
+import { NotificationService } from './NotificationService';
+import logger from '../config/logger';
 
 export interface CreateRoyaltyPayoutInput {
   saleEventId: string;
@@ -101,6 +103,28 @@ export class RoyaltyPayoutService {
 
     await this.royaltyPayoutRepo.save(payout);
     royaltiesPaidTotal.inc();
+
+    // Notify the artist about the payout (Issue #79). Best-effort: a
+    // notification failure must never break the payout recording itself.
+    if (input.artistId) {
+      try {
+        await new NotificationService().create({
+          userId: input.artistId,
+          type: 'royalty_payout',
+          title: 'Royalty payout recorded',
+          message: `A royalty payout of ${input.grossAmountStroops} ${
+            input.currency || 'stroops'
+          } was recorded for your music.`,
+          data: { saleEventId: input.saleEventId, songId: input.songId },
+        });
+      } catch (err) {
+        logger.warn(
+          { err, artistId: input.artistId },
+          'Failed to create royalty payout notification',
+        );
+      }
+    }
+
     return payout;
   }
 

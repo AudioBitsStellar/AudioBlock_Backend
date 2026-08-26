@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { DataSource } from 'typeorm';
+import { DataSource, DataSourceOptions } from 'typeorm';
 import dotenv from 'dotenv';
 import { User } from '../entities/User';
 import { Song } from '../entities/Song';
@@ -20,8 +20,7 @@ import { Comment } from '../entities/Comment';
 import { UserSave } from '../entities/UserSave';
 import { ArtistVerification } from '../entities/ArtistVerification';
 import { UserFollow } from '../entities/UserFollow';
-import { Playlist } from '../entities/Playlist';
-import { PlaylistSong } from '../entities/PlaylistSong';
+import { Notification } from '../entities/Notification';
 
 dotenv.config();
 
@@ -96,11 +95,10 @@ const AppDataSource = new DataSource({
     UserSave,
     ArtistVerification,
     UserFollow,
-    Playlist,
-    PlaylistSong,
+    Notification,
   ],
   migrations: ['src/migrations/*.ts', 'dist/migrations/*.js'],
   migrationsTableName: 'migrations',
-});
+} as DataSourceOptions);
 
 export default AppDataSource;

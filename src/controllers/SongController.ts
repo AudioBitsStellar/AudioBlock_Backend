@@ -14,6 +14,7 @@ import { TagService } from '../services/TagService';
 import { SongStatsService, parseWindow } from '../services/Song/SongStatsService';
 import { SongVersionService } from '../services/Song/SongVersionService';
 import { ReportService } from '../services/ReportService';
+import { CoverArtService } from '../services/CoverArtService';
 import { PlaybackService } from '../services/Song/PlaybackService';
 import logger from '../config/logger';
 
@@ -24,6 +25,7 @@ const songStatsService = new SongStatsService();
 const songVersionService = new SongVersionService();
 const reportService = new ReportService();
 const playbackService = new PlaybackService();
+const coverArtService = new CoverArtService();
 
 export class SongController {
   static flagSong = async (req: Request, res: Response) => {
@@ -409,6 +411,35 @@ export class SongController {
       const songId = req.params.id as string;
       const lyricsData = await songService.getLyrics(songId);
       return res.status(200).json({ success: true, data: lyricsData });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  /** POST /api/songs/:id/cover-art — upload + associate cover art (Issue #80). */
+  static uploadCoverArt = async (req: Request, res: Response) => {
+    try {
+      const songId = req.params.id as string;
+      const userId = (req as any).user.id as string;
+      const file = (req as any).file as Express.Multer.File | undefined;
+
+      if (!file) {
+        throw AppError.validation('coverArt file is required', undefined, 'COVER_ART_REQUIRED');
+      }
+
+      const song = await coverArtService.uploadCoverArt(songId, userId, file);
+      return res.status(200).json({ success: true, data: song });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  /** GET /api/songs/:id/cover-art — cover art URLs incl. thumbnails (Issue #80). */
+  static getCoverArt = async (req: Request, res: Response) => {
+    try {
+      const songId = req.params.id as string;
+      const data = await coverArtService.getCoverArt(songId);
+      return res.status(200).json({ success: true, data });
     } catch (error) {
       handleError(req, res, error);
     }
