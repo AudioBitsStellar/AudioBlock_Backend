@@ -2,55 +2,192 @@ import { Request, Response } from 'express';
 import { SongController } from '../../src/controllers/SongController';
 import { SongService } from '../../src/services/SongService';
 import * as utils from '../../src/utils/helpers';
+import { AppError } from '../../src/errors/AppError';
 
 // Mock the SongService class
 jest.mock('../../src/services/SongService');
 
-describe('SongController - getLyrics', () => {
+describe('SongController CRUD operations', () => {
   let req: Partial<Request>;
   let res: Partial<Response>;
-  let mockGetLyrics: jest.Mock;
+  let mockGetSong: jest.Mock;
+  let mockCreateSong: jest.Mock;
+  let mockUpdateSong: jest.Mock;
+  let mockDeleteSong: jest.Mock;
+  let mockListSongs: jest.Mock;
 
   beforeEach(() => {
-    mockGetLyrics = jest.fn();
-    (SongService.prototype.getLyrics as jest.Mock) = mockGetLyrics;
+    mockGetSong = jest.fn();
+    mockCreateSong = jest.fn();
+    mockUpdateSong = jest.fn();
+    mockDeleteSong = jest.fn();
+    mockListSongs = jest.fn();
+
+    (SongService.prototype.getSong as jest.Mock) = mockGetSong;
+    (SongService.prototype.createSong as jest.Mock) = mockCreateSong;
+    (SongService.prototype.updateSong as jest.Mock) = mockUpdateSong;
+    (SongService.prototype.deleteSong as jest.Mock) = mockDeleteSong;
+    (SongService.prototype.listSongs as jest.Mock) = mockListSongs;
 
     req = {
       params: { id: 'song-123' },
-    };
+      body: { title: 'New Song' },
+      query: { page: '1' },
+      user: { id: 'user-1' } as any
+    } as any;
+
     res = {
       status: jest.fn().mockReturnThis(),
       json: jest.fn(),
     };
+    
+    jest.spyOn(utils, 'handleError').mockImplementation((req, res, err) => {
+        const error = err as any;
+        if (error.statusCode === 404) res.status(404).json({ error: 'Not Found' });
+        else if (error.statusCode === 400) res.status(400).json({ error: 'Bad Request' });
+        else if (error.statusCode === 401) res.status(401).json({ error: 'Unauthorized' });
+        else res.status(500).json({ error: 'Server Error' });
+    });
   });
 
   afterEach(() => {
     jest.clearAllMocks();
   });
 
-  it('should return lyrics for a valid song', async () => {
-    mockGetLyrics.mockResolvedValue({ lyrics: 'La la la', language: 'en' });
+  // --- getSong ---
+  describe('getSong', () => {
+    it('success path', async () => {
+      mockGetSong.mockResolvedValue({ id: 'song-123', title: 'Test' });
+      await SongController.getSong(req as Request, res as Response);
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ success: true, data: { id: 'song-123', title: 'Test' } });
+    });
 
-    await SongController.getLyrics(req as Request, res as Response);
+    it('not found (404)', async () => {
+      mockGetSong.mockRejectedValue(AppError.notFound('Not found'));
+      await SongController.getSong(req as Request, res as Response);
+      expect(res.status).toHaveBeenCalledWith(404);
+    });
 
-    expect(mockGetLyrics).toHaveBeenCalledWith('song-123');
-    expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith({
-      success: true,
-      data: { lyrics: 'La la la', language: 'en' },
+    it('validation error (400)', async () => {
+      mockGetSong.mockRejectedValue(AppError.validation('Invalid id'));
+      await SongController.getSong(req as Request, res as Response);
+      expect(res.status).toHaveBeenCalledWith(400);
+    });
+    
+    it('unauthorized (401)', async () => {
+      mockGetSong.mockRejectedValue(AppError.authentication('Unauthorized'));
+      await SongController.getSong(req as Request, res as Response);
+      expect(res.status).toHaveBeenCalledWith(401);
     });
   });
 
-  it('should call handleError on failure', async () => {
-    const error = new Error('Test error');
-    mockGetLyrics.mockRejectedValue(error);
+  // --- createSong ---
+  describe('createSong', () => {
+    it('success path', async () => {
+      mockCreateSong.mockResolvedValue({ id: 'song-new', title: 'New Song' });
+      await SongController.createSong(req as Request, res as Response);
+      expect(res.status).toHaveBeenCalledWith(201);
+      expect(res.json).toHaveBeenCalledWith({ success: true, data: { id: 'song-new', title: 'New Song' } });
+    });
 
-    // We mock handleError using spyOn if possible, but actually handleError is in utils.
-    // Instead of asserting handleError, we just test that it catches the error and doesn't throw.
-    jest.spyOn(utils, 'handleError').mockImplementation(() => {});
+    it('not found (404)', async () => {
+      mockCreateSong.mockRejectedValue(AppError.notFound('User not found'));
+      await SongController.createSong(req as Request, res as Response);
+      expect(res.status).toHaveBeenCalledWith(404);
+    });
 
-    await SongController.getLyrics(req as Request, res as Response);
+    it('validation error (400)', async () => {
+      mockCreateSong.mockRejectedValue(AppError.validation('Bad input'));
+      await SongController.createSong(req as Request, res as Response);
+      expect(res.status).toHaveBeenCalledWith(400);
+    });
+    
+    it('unauthorized (401)', async () => {
+      mockCreateSong.mockRejectedValue(AppError.authentication('Unauthorized'));
+      await SongController.createSong(req as Request, res as Response);
+      expect(res.status).toHaveBeenCalledWith(401);
+    });
+  });
 
-    expect(utils.handleError).toHaveBeenCalledWith(req, res, error);
+  // --- updateSong ---
+  describe('updateSong', () => {
+    it('success path', async () => {
+      mockUpdateSong.mockResolvedValue({ id: 'song-123', title: 'Updated Song' });
+      await SongController.updateSong(req as Request, res as Response);
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it('not found (404)', async () => {
+      mockUpdateSong.mockRejectedValue(AppError.notFound('Song not found'));
+      await SongController.updateSong(req as Request, res as Response);
+      expect(res.status).toHaveBeenCalledWith(404);
+    });
+
+    it('validation error (400)', async () => {
+      mockUpdateSong.mockRejectedValue(AppError.validation('Bad input'));
+      await SongController.updateSong(req as Request, res as Response);
+      expect(res.status).toHaveBeenCalledWith(400);
+    });
+    
+    it('unauthorized (401)', async () => {
+      mockUpdateSong.mockRejectedValue(AppError.authentication('Unauthorized'));
+      await SongController.updateSong(req as Request, res as Response);
+      expect(res.status).toHaveBeenCalledWith(401);
+    });
+  });
+
+  // --- deleteSong ---
+  describe('deleteSong', () => {
+    it('success path', async () => {
+      mockDeleteSong.mockResolvedValue({ success: true });
+      await SongController.deleteSong(req as Request, res as Response);
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it('not found (404)', async () => {
+      mockDeleteSong.mockRejectedValue(AppError.notFound('Song not found'));
+      await SongController.deleteSong(req as Request, res as Response);
+      expect(res.status).toHaveBeenCalledWith(404);
+    });
+
+    it('validation error (400)', async () => {
+      mockDeleteSong.mockRejectedValue(AppError.validation('Bad request'));
+      await SongController.deleteSong(req as Request, res as Response);
+      expect(res.status).toHaveBeenCalledWith(400);
+    });
+    
+    it('unauthorized (401)', async () => {
+      mockDeleteSong.mockRejectedValue(AppError.authentication('Unauthorized'));
+      await SongController.deleteSong(req as Request, res as Response);
+      expect(res.status).toHaveBeenCalledWith(401);
+    });
+  });
+
+  // --- listSongs ---
+  describe('listSongs', () => {
+    it('success path', async () => {
+      mockListSongs.mockResolvedValue([{ id: 'song-1' }]);
+      await SongController.listSongs(req as Request, res as Response);
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it('not found (404)', async () => {
+      mockListSongs.mockRejectedValue(AppError.notFound('Not found'));
+      await SongController.listSongs(req as Request, res as Response);
+      expect(res.status).toHaveBeenCalledWith(404);
+    });
+
+    it('validation error (400)', async () => {
+      mockListSongs.mockRejectedValue(AppError.validation('Bad request'));
+      await SongController.listSongs(req as Request, res as Response);
+      expect(res.status).toHaveBeenCalledWith(400);
+    });
+    
+    it('unauthorized (401)', async () => {
+      mockListSongs.mockRejectedValue(AppError.authentication('Unauthorized'));
+      await SongController.listSongs(req as Request, res as Response);
+      expect(res.status).toHaveBeenCalledWith(401);
+    });
   });
 });

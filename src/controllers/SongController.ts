@@ -28,6 +28,52 @@ const playbackService = new PlaybackService();
 const coverArtService = new CoverArtService();
 
 export class SongController {
+  static getSong = async (req: Request, res: Response) => {
+    try {
+      const song = await songService.getSong(req.params.id);
+      return res.status(200).json({ success: true, data: song });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  static createSong = async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user.id;
+      const song = await songService.createSong(req.body, userId);
+      return res.status(201).json({ success: true, data: song });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  static updateSong = async (req: Request, res: Response) => {
+    try {
+      const song = await songService.updateSong(req.params.id, req.body);
+      return res.status(200).json({ success: true, data: song });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  static deleteSong = async (req: Request, res: Response) => {
+    try {
+      await songService.deleteSong(req.params.id);
+      return res.status(200).json({ success: true, data: null });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  static listSongs = async (req: Request, res: Response) => {
+    try {
+      const songs = await songService.listSongs(req.query);
+      return res.status(200).json({ success: true, data: songs });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
   static flagSong = async (req: Request, res: Response) => {
     try {
       const songId = req.params.id as string;

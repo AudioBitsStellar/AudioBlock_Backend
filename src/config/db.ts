@@ -2,6 +2,8 @@ import 'reflect-metadata';
 import { DataSource, DataSourceOptions } from 'typeorm';
 import dotenv from 'dotenv';
 import { User } from '../entities/User';
+import { ActivityFeed } from '../entities/ActivityFeed';
+import { RefreshToken } from '../entities/RefreshToken';
 import { Song } from '../entities/Song';
 import { TransactionLog } from '../entities/TransactionLog';
 import { Genre } from '../entities/Genre';
@@ -76,6 +78,8 @@ const AppDataSource = new DataSource({
         }
       : undefined,
   entities: [
+    ActivityFeed,
+    RefreshToken,
     User,
     Song,
     TransactionLog,

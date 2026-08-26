@@ -112,6 +112,12 @@ app.get('/health/db', async (req, res) => {
   });
 });
 
+import activityRoutes from './routes/activityRoutes';
+import { apiRateLimiter } from './middlewares/rateLimiter';
+
+app.use('/api', apiRateLimiter);
+app.use('/api', activityRoutes);
+
 // Liveness / readiness / detailed health probes for orchestration and load
 // balancer configuration (Issue #146): GET /health/live, /health/ready,
 // /health/detailed.
@@ -154,8 +160,9 @@ app.use('/api/releases', releaseRoutes);
 // Marketplace Soroban relay (list + buy)
 app.use('/api/marketplace', marketplaceRoutes);
 
+import { adminRateLimiter } from './middlewares/rateLimiter';
 // Admin moderation routes
-app.use('/api/admin', adminRoutes);
+app.use('/api/admin', adminRateLimiter, adminRoutes);
 
 // User profile routes
 app.use('/api/user', userRoutes);
