@@ -1,0 +1,21 @@
+# Each line is a file pattern followed by one or more owners.
+# Order matters: the last matching pattern takes precedence.
+
+# Default owner for any unmatched paths
+* @Darkvader-ship-it
+
+# Core backend logic
+/src/controllers/ @Darkvader-ship-it
+/src/services/  @Darkvader-ship-it
+/src/entities/  @Darkvader-ship-it
+
+# Infrastructure & data
+/src/workers/    @Darkvader-ship-it
+/src/migrations/ @Darkvader-ship-it
+/Dockerfile      @Darkvader-ship-it
+/docker-compose*.yml @Darkvader-ship-it
+
+# Quality & documentation
+/tests/ @Darkvader-ship-it
+/docs/  @Darkvader-ship-it
+/.github/ @Darkvader-ship-it

@@ -1,0 +1,9 @@
+{
+  "type": "object",
+  "required": ["success", "message", "wallet"],
+  "properties": {
+    "success": { "type": "boolean" },
+    "message": { "type": "string" },
+    "wallet": { "type": "object" }
+  }
+}

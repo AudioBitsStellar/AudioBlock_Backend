@@ -1,7 +1,7 @@
-import { IsString, IsNotEmpty } from "class-validator";
+import { IsString, IsNotEmpty } from 'class-validator';
 
 export class PrepareArtistSetupDTO {
   @IsString()
-  @IsNotEmpty({ message: "cid is required." })
+  @IsNotEmpty({ message: 'cid is required.' })
   cid!: string;
 }

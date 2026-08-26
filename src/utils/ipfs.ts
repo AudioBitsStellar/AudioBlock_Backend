@@ -1,17 +1,16 @@
-import { PinataSDK } from "pinata";
-import fs from "fs";
-import path from "path";
-
+import { PinataSDK } from 'pinata';
+import fs from 'fs';
+import path from 'path';
 
 export const pinata = new PinataSDK({
   pinataJwt: process.env.PINATA_JWT!,
-    pinataGateway: process.env.PINATA_GATEWAY!,
+  pinataGateway: process.env.PINATA_GATEWAY!,
 });
 
 /**
  * Upload a single file to IPFS (using Pinata)
  */
-export async function uploadFileToPinata(filePath: string, mimeType = "audio/mpeg") {
+export async function uploadFileToPinata(filePath: string, mimeType = 'audio/mpeg') {
   const fileBuffer = fs.readFileSync(filePath);
   const blob = new Blob([fileBuffer]);
   const file = new File([blob], path.basename(filePath), { type: mimeType });
@@ -19,8 +18,6 @@ export async function uploadFileToPinata(filePath: string, mimeType = "audio/mpe
   const upload = await pinata.upload.public.file(file);
   return upload; // { cid, uri, name }
 }
-
-
 
 /**
  * Uploads a full HLS folder (master.m3u8 + all .ts files)
@@ -42,7 +39,6 @@ export async function uploadHLSFolderToPinata(folderPath: string) {
 
   return result; // { cid, ipfsUrl, etc. }
 }
-
 
 /**
  * Upload JSON metadata to IPFS

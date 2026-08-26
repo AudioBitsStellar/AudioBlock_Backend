@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * 1'
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm ci
+      - name: Run ESLint
+        run: npm run lint
+
+  build-and-scan:
+    runs-on: ubuntu-latest
+    needs: lint
+    permissions:
+      contents: read
+      security-events: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t audioblock-backend .
+
+      - name: Scan base image (node:20)
+        id: scan-base
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@0.29.0
+        with:
+          image-ref: node:20
+          format: sarif
+          output: trivy-base-results.sarif
+          exit-code: 1
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+
+      - name: Scan final image
+        id: scan-final
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@0.29.0
+        with:
+          image-ref: audioblock-backend
+          format: sarif
+          output: trivy-final-results.sarif
+          exit-code: 1
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+
+      - name: Upload SARIF results (base)
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-base-results.sarif
+          category: trivy-base
+
+      - name: Upload SARIF results (final)
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-final-results.sarif
+          category: trivy-final
+
+      - name: Archive scan results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-results-${{ github.sha }}
+          path: |
+            trivy-base-results.sarif
+            trivy-final-results.sarif
+          retention-days: 90
+
+      - name: Block merge on critical/high findings
+        if: (github.event_name == 'push' || github.event_name == 'pull_request') && (steps.scan-base.outcome == 'failure' || steps.scan-final.outcome == 'failure')
+        run: exit 1

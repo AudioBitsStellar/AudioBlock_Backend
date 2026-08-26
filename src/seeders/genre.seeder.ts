@@ -1,38 +1,38 @@
-import AppDataSource from "../config/db";
-import { Genre } from "../entities/Genre";
+import AppDataSource from '../config/db';
+import { Genre } from '../entities/Genre';
+import { CacheService } from '../services/CacheService';
 
 export async function seedGenres() {
   const genreRepo = AppDataSource.getRepository(Genre);
   const count = await genreRepo.count();
   if (count > 0) {
-    console.log("⚠️  Genres already seeded, skipping...");
+    console.log('⚠️  Genres already seeded, skipping...');
     return;
   }
 
   const genres = [
-    "Pop",
-    "Hip-Hop",
-    "R&B",
-    "Afrobeat",
-    "Reggae",
-    "Dancehall",
-    "Rock",
-    "Electronic",
-    "House",
-    "Techno",
-    "Gospel",
-    "Country",
-    "Jazz",
-    "Blues",
-    "Folk",
-    "Indie",
-    "Soul",
-    "Trap",
-    "Amapiano",
-    "Latin",
+    'Pop',
+    'Hip-Hop',
+    'R&B',
+    'Afrobeat',
+    'Reggae',
+    'Dancehall',
+    'Rock',
+    'Electronic',
+    'House',
+    'Techno',
+    'Gospel',
+    'Country',
+    'Jazz',
+    'Blues',
+    'Folk',
+    'Indie',
+    'Soul',
+    'Trap',
+    'Amapiano',
+    'Latin',
   ];
 
-  // Avoid inserting duplicates
   for (const name of genres) {
     const exists = await genreRepo.findOne({ where: { name } });
     if (!exists) {
@@ -44,6 +44,6 @@ export async function seedGenres() {
     }
   }
 
-  
-  console.log("🎵 Genre seeding complete!");
+  await CacheService.invalidateGenreList();
+  console.log('🎵 Genre seeding complete!');
 }

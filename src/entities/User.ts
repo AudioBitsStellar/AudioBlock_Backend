@@ -1,4 +1,4 @@
-import { IsEmail } from "class-validator";
+import { IsEmail } from 'class-validator';
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -6,25 +6,28 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   Unique,
-  OneToOne,
   OneToMany,
-} from "typeorm";
-import { Song } from "./Song";
-import { Transaction } from "ethers";
-import { TransactionLog } from "./TransactionLog";
-import { Album } from "./Album";
-import { RoyaltyPayout } from "./RoyaltyPayout";
+} from 'typeorm';
+import { Song } from './Song';
+import { TransactionLog } from './TransactionLog';
+import { Album } from './Album';
+import { RoyaltyPayout } from './RoyaltyPayout';
 
 export enum UserRole {
-  LISTENER = "listener",
-  ARTIST = "artist",
-  ADMIN = "admin",
+  // `listener` is the default role for a regular platform user.
+  LISTENER = 'listener',
+  ARTIST = 'artist',
+  // `moderator` can act on content (flag/unflag) without full admin rights.
+  MODERATOR = 'moderator',
+  ADMIN = 'admin',
+  // `super_admin` holds every permission, including managing other admins.
+  SUPER_ADMIN = 'super_admin',
 }
 
-@Entity("users")
-@Unique(["walletAddress", "email", "username"])
+@Entity('users')
+@Unique(['walletAddress', 'email', 'username'])
 export class User {
-  @PrimaryGeneratedColumn("uuid")
+  @PrimaryGeneratedColumn('uuid')
   id!: string;
 
   @Column({ unique: true, nullable: true })
@@ -34,7 +37,7 @@ export class User {
   profileImage?: string;
 
   @Column({
-    type: "enum",
+    type: 'enum',
     enum: UserRole,
     default: UserRole.LISTENER,
   })
@@ -69,7 +72,7 @@ export class User {
   @Column({ nullable: true })
   passwordResetTokenExpiry?: Date;
 
-  @Column("simple-json", { nullable: true })
+  @Column('simple-json', { nullable: true })
   twoFactorRecoveryCodeHashes?: string[];
 
   /** Stellar G... public key the artist connected (e.g. via Freighter) for Soroban actions. */
@@ -94,16 +97,16 @@ export class User {
   @IsEmail()
   email?: string;
 
-  @Column("float", { default: 0 })
+  @Column('float', { default: 0 })
   rewardPoints!: number;
 
-  @Column("int", { default: 0 })
+  @Column('int', { default: 0 })
   totalStreams!: number;
 
-  @Column("int", { default: 0 })
+  @Column('int', { default: 0 })
   totalStreamTime!: number;
 
-  @Column("int", { default: 0 })
+  @Column('int', { default: 0 })
   uniqueListeners!: number;
 
   @Column({ nullable: true })
@@ -147,6 +150,14 @@ export class User {
 
   @Column({ default: false })
   facebookConnected?: boolean;
+
+  /** IPFS hash of the user's avatar (Issue #83). */
+  @Column({ nullable: true })
+  avatarIpfsHash?: string;
+
+  /** Whether the user's profile is publicly visible (Issue #83). */
+  @Column({ default: true })
+  isProfilePublic!: boolean;
 
   @CreateDateColumn()
   createdAt!: Date;

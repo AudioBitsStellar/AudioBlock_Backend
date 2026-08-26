@@ -6,13 +6,13 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
-} from "typeorm";
-import { User } from "./User";
+} from 'typeorm';
+import { User } from './User';
 
 export enum RoyaltyPayoutStatus {
-  PENDING = "pending",
-  RECONCILED = "reconciled",
-  DISCREPANCY = "discrepancy",
+  PENDING = 'pending',
+  RECONCILED = 'reconciled',
+  DISCREPANCY = 'discrepancy',
 }
 
 export interface RoyaltySplit {
@@ -22,9 +22,9 @@ export interface RoyaltySplit {
   actualAmountStroops?: string;
 }
 
-@Entity("royalty_payouts")
+@Entity('royalty_payouts')
 export class RoyaltyPayout {
-  @PrimaryGeneratedColumn("uuid")
+  @PrimaryGeneratedColumn('uuid')
   id!: string;
 
   @Column({ unique: true })
@@ -48,17 +48,17 @@ export class RoyaltyPayout {
   @Column({ nullable: true })
   sellerPublicKey?: string;
 
-  @Column({ default: "stroops" })
+  @Column({ default: 'stroops' })
   currency!: string;
 
-  @Column({ type: "bigint" })
+  @Column({ type: 'bigint' })
   grossAmountStroops!: string;
 
-  @Column("simple-json")
+  @Column('simple-json')
   expectedSplits!: RoyaltySplit[];
 
   @Column({
-    type: "enum",
+    type: 'enum',
     enum: RoyaltyPayoutStatus,
     default: RoyaltyPayoutStatus.PENDING,
   })
@@ -67,14 +67,14 @@ export class RoyaltyPayout {
   @Column({ nullable: true })
   discrepancyReason?: string;
 
-  @Column({ type: "timestamp", nullable: true })
+  @Column({ type: 'timestamp', nullable: true })
   reconciledAt?: Date;
 
   @ManyToOne(() => User, (user) => user.royaltyPayouts, {
     nullable: true,
-    onDelete: "SET NULL",
+    onDelete: 'SET NULL',
   })
-  @JoinColumn({ name: "artist_id" })
+  @JoinColumn({ name: 'artist_id' })
   artist?: User;
 
   @Column({ nullable: true })

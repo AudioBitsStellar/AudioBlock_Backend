@@ -1,0 +1,8 @@
+# Trivy Ignore List
+# Format: CVE-ID [# optional comment]
+# Add entries below for accepted/low-risk vulnerabilities after review.
+# Each entry must be justified in the comment.
+
+# Example:
+# CVE-2023-1234  # Accepted: low severity, only exploitable with local access
+# CVE-2023-5678  # Accepted: in unused dependency, pending removal in next refactor

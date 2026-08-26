@@ -1,10 +1,9 @@
-import { IsOptional, IsString, IsNotEmpty } from "class-validator";
-import { IsImageFile, MaxFileSize } from "../validators/ImageFile";
+import { IsOptional, IsString, IsNotEmpty } from 'class-validator';
 
 export class UpdateArtistProfileDTO {
   @IsOptional()
   @IsString()
-  @IsNotEmpty({ message: "Artist name is required." })
+  @IsNotEmpty({ message: 'Artist name is required.' })
   username?: string;
 
   @IsOptional()
@@ -26,5 +25,4 @@ export class UpdateArtistProfileDTO {
   @IsOptional()
   @IsString()
   website?: string;
-
 }

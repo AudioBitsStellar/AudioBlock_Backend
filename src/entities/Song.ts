@@ -6,23 +6,31 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
-} from "typeorm";
-import { User } from "./User";
+} from 'typeorm';
+import { User } from './User';
+import { Genre } from './Genre';
+import { TemplateSplit } from './RoyaltyTemplate';
 
-@Entity("songs") // pluralize for convention
+@Entity('songs') // pluralize for convention
 export class Song {
-  @PrimaryGeneratedColumn("uuid")
+  @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @ManyToOne(() => User, (user) => user.songs, { onDelete: "CASCADE" })
-  @JoinColumn({ name: "artistId" }) // foreign key column
+  @ManyToOne(() => User, (user) => user.songs, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'artistId' }) // foreign key column
   user!: User;
 
   @Column()
-  artistId!: string; 
+  artistId!: string;
 
   @Column()
-  coverArtPath!: string; 
+  coverArtPath!: string;
+
+  @Column({ nullable: true })
+  coverArtIpfsHash!: string;
+
+  @Column({ type: 'simple-json', nullable: true })
+  coverArtThumbnails!: { [key: string]: string } | null;
 
   @Column()
   title!: string;
@@ -32,6 +40,13 @@ export class Song {
 
   @Column({ nullable: true })
   genre!: string;
+
+  @Column({ nullable: true })
+  genreId!: string;
+
+  @ManyToOne(() => Genre, (genre) => genre.songs, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'genreId' })
+  genreEntity?: Genre;
 
   @Column({ nullable: true })
   artistAddress!: string;
@@ -51,8 +66,11 @@ export class Song {
   @Column({ nullable: true })
   loudness!: number; // LUFS
 
-  @Column({ default: "processing" })
-  status!: "processing" | "ready" | "failed";
+  @Column({ default: 'processing' })
+  status!: 'processing' | 'ready' | 'failed';
+
+  @Column({ nullable: true })
+  errorReason!: string | null;
 
   @Column({ default: 0 })
   playCount!: number;
@@ -61,8 +79,8 @@ export class Song {
   metadataCid!: string;
 
   /** On-chain minting state, independent of streaming readiness above. */
-  @Column({ default: "not_minted" })
-  mintStatus!: "not_minted" | "pending" | "minted" | "failed";
+  @Column({ default: 'not_minted' })
+  mintStatus!: 'not_minted' | 'pending' | 'minted' | 'failed';
 
   /** song_id returned by the catalog Soroban contract once minting succeeds. */
   @Column({ nullable: true })
@@ -72,7 +90,7 @@ export class Song {
   @Column({ nullable: true })
   onChainTokenId?: string;
 
-  @Column({ type: "json", nullable: true })
+  @Column({ type: 'json', nullable: true })
   metadata: any;
 
   @Column({ nullable: true })
@@ -81,14 +99,23 @@ export class Song {
   @Column({ default: false })
   flagged!: boolean;
 
-  @Column({ type: "timestamp", nullable: true })
+  @Column({ type: 'timestamp', nullable: true })
   flaggedAt!: Date | null;
 
   @Column({ nullable: true })
   flaggedBy!: string | null;
 
-  @Column({ type: "text", nullable: true })
+  @Column({ type: 'text', nullable: true })
   flagReason!: string | null;
+
+  @Column('simple-json', { nullable: true })
+  royaltySplits?: TemplateSplit[];
+
+  @Column({ type: 'text', nullable: true })
+  lyrics?: string;
+
+  @Column({ nullable: true })
+  language?: string;
 
   @CreateDateColumn()
   createdAt!: Date;

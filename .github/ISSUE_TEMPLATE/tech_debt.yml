@@ -1,0 +1,74 @@
+name: Tech Debt
+description: Track technical debt, refactoring work, or code quality improvements
+title: '[Tech Debt]: '
+labels: ['tech-debt']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template to document areas of the codebase that need refactoring, cleanup, or architectural improvement.
+
+  - type: textarea
+    id: location
+    attributes:
+      label: Location
+      description: File paths, module names, or components affected.
+      placeholder: |
+        - src/services/SongService.ts
+        - src/workers/SongProcessorWorker.ts
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe the technical debt — what is wrong and why it was introduced.
+    validations:
+      required: true
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: What problems does this debt cause today? (e.g. slow tests, brittle deploys, onboarding friction)
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed_fix
+    attributes:
+      label: Proposed fix
+      description: High-level approach to resolving the debt.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - Low — cosmetic / minor
+        - Medium — slows development
+        - High — causes bugs or blocks features
+        - Critical — security or data integrity risk
+    validations:
+      required: true
+
+  - type: dropdown
+    id: effort
+    attributes:
+      label: Estimated effort
+      options:
+        - Small (< 2 hours)
+        - Medium (half day)
+        - Large (1-2 days)
+        - X-Large (more than 2 days)
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Links to related issues, PRs, or external resources.
