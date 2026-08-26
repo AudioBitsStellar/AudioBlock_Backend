@@ -35,6 +35,7 @@ import { precomputeSignedManifest } from './precomputeManifest';
 import { TransactionLogService } from '../services/TransactionLogService';
 import { SearchIndexService } from '../services/SearchIndexService';
 import { SongVersionService } from '../services/Song/SongVersionService';
+import { NotificationService } from '../services/NotificationService';
 import logger from '../config/logger';
 
 const MAIN_QUEUE = 'song_processing';
@@ -178,6 +179,19 @@ export async function startSongWorker() {
           logger.warn({ err }, 'precompute failed'),
         );
 
+        // Let the artist know their song went live (Issue #79).
+        try {
+          await new NotificationService().create({
+            userId: song.user.id,
+            type: 'song_status',
+            title: 'Song is live',
+            message: `Your song "${song.title}" has finished processing and is now live.`,
+            data: { songId: song.id, status: 'ready' },
+          });
+        } catch (err) {
+          logger.warn({ songId, err }, 'Failed to create song-ready notification');
+        }
+
         await CacheService.cacheSong(songId, song);
 
         // Song is now live and searchable — update the precomputed search
@@ -252,6 +266,22 @@ export async function startSongWorker() {
                   'SONG_FAILED',
                   `Song ${songId} failed processing after ${MAX_ATTEMPTS} attempts: ${song.errorReason}`,
                 );
+
+                // Notify the artist that processing failed (Issue #79).
+                try {
+                  await new NotificationService().create({
+                    userId: song.user.id,
+                    type: 'song_status',
+                    title: 'Song processing failed',
+                    message: `Your song could not be processed: ${song.errorReason}`,
+                    data: { songId, status: 'failed' },
+                  });
+                } catch (notifyErr) {
+                  logger.warn(
+                    { songId, err: notifyErr },
+                    'Failed to create song-failed notification',
+                  );
+                }
               }
             }
           } catch (updateErr) {

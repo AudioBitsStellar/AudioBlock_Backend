@@ -26,6 +26,12 @@ export class Song {
   @Column()
   coverArtPath!: string;
 
+  @Column({ nullable: true })
+  coverArtIpfsHash!: string;
+
+  @Column({ type: 'simple-json', nullable: true })
+  coverArtThumbnails!: { [key: string]: string } | null;
+
   @Column()
   title!: string;
 
