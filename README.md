@@ -120,6 +120,7 @@ appropriate role (`authArtistMiddleware` for artist-only routes).
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
+| GET | `/:id/metadata` | — | **Public artist metadata** — returns `{ openGraph: { title, description, image, url, type }, jsonLd: { "@context","@type","name",... }, profile: { id, username, name, bio, profileImage, pageCover, website, twitterUsername } }` for OG tags / link previews and search indexing. No private fields (email, walletAddress, stellarPublicKey) are ever exposed. Append `?format=html` for an HTML fragment with `<meta property="og:*">` + `<script type="application/ld+json">`. |
 | PATCH | `/update-profile` | artist | Updates bio/website/etc., accepts `profileImage`/`pageCover` uploads |
 | POST | `/onchain/connect-wallet` | artist | Records the artist's Stellar public key |
 | POST | `/onchain/prepare-setup` | artist | Builds an unsigned `setup_artist_profile` Soroban transaction |
@@ -133,8 +134,9 @@ appropriate role (`authArtistMiddleware` for artist-only routes).
 | POST | `/upload/cover` | artist | Uploads cover art, pushes to S3 |
 | POST | `/upload/finalize` | artist | Merges chunks, creates the `Song` row, queues background processing |
 | GET | `/stream/:id` | — | Returns the song's HLS manifest (presigned S3 URLs), cached in Redis |
+| GET | `/embed/:id` | — | **Embeddable player** — returns `{ title, coverArtPath, artist: { name, username, profileImage }, streamUrl, hlsMasterUrl, duration }` for public/ready songs without auth; rate-limited via Redis (`30s` per IP per song, same bucket as streaming). Use as `GET /api/song/embed/:id` or `GET /api/embed/song/:id`. For playlists: `GET /api/embed/album/:id`. No private data exposed. |
 | POST | `/:id/onchain/prepare-mint` | artist | Builds an unsigned `upload_and_mint_song` Soroban transaction |
-| POST | `/:id/onchain/submit-mint` | artist | Submits the wallet-signed mint transaction |
+| POST | `/:id/onchain/submit-mint` | artist | Submits the wallet-signed mint transaction (triggers `song.minted` webhook) |
 
 ### Wallet — `/api/wallet` (EVM, Dynamic Labs)
 
@@ -142,6 +144,52 @@ appropriate role (`authArtistMiddleware` for artist-only routes).
 |---|---|---|---|
 | POST | `/evm/create` | — | Creates an MPC-backed EVM wallet via Dynamic Labs |
 | POST | `/evm/signMessage` | — | Signs a message with a Dynamic-managed wallet |
+
+### Webhooks — `/api/webhooks`
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/register` | any authenticated | Registers a webhook subscription: `{ endpoint: "https://example.com/hook", eventTypes: ["song.minted","sale.completed"], secret?: "optional-hmac-secret" }`. Returns the created subscription with `id` + generated `secret` (store it — used to verify `X-Webhook-Signature`). |
+| GET | `/` | any authenticated | Lists your webhook subscriptions |
+| DELETE | `/:id` | any authenticated | Deletes your webhook subscription |
+| POST | `/:id/test` | any authenticated | Sends a test `test.event` payload to verify the endpoint |
+
+Events: `song.minted` (also `mint_status_changed` legacy), `sale.completed` (also `sale_completed`). Each delivery sends `POST` with `Content-Type: application/json`, `X-Webhook-Signature: <hmac-sha256 hex of JSON body>`, body `{ eventId, eventType, timestamp, ...eventData }`. Failed deliveries retry **3× with exponential backoff** (`1s, 2s, 4s`) before being dead-lettered. Hook is emitted in `SongService.submitSongMintTx` (after mint) and `MarketplaceService.submitBuy` (after sale).
+
+Signature verification (recipient):
+```js
+const sig = req.headers['x-webhook-signature'];
+const expected = crypto.createHmac('sha256', secret).update(JSON.stringify(req.body)).digest('hex');
+if (!crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(sig))) throw new Error('invalid signature');
+```
+
+### Takedown — `/api/takedown` (copyright workflow)
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/request` | any authenticated | Creates a **dedicated `TakedownRequest`** (distinct from generic `ContentReport`/flag): `{ songId, reason: "copyright" | "trademark" | "other", description?, evidenceUrl? }`. Status `pending`. |
+| GET | `/` | admin | Lists takedown requests (filter `?status=pending&songId=...`) |
+| GET | `/:id` | admin | Gets single takedown request |
+| PATCH | `/:id/review` | admin | Reviews takedown: `{ action: "approve" | "reject" | "reverse", reviewNotes? }`. `approve` temporarily unpublishes the song (`song.flagged=true`, `flagReason=takedown:...`, streaming returns 404) — **reversible**; `reverse` republishes if the claim is resolved in the artist's favor (restores `previousFlagged` state). |
+
+This workflow is **separate from general moderation** (`PATCH /api/admin/song/:id/flag`) and uses its own `takedown_requests` table, supporting audit and reversibility.
+
+### Embed — `/api/embed`
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/song/:id` | — | Lightweight embed data for third-party sites: `{ title, coverArtPath, artist:{name,username,profileImage}, streamUrl, hlsMasterUrl, duration, genre }`. Works for `status="ready"` and not-flagged songs **without authentication**, CORS-open, Redis-throttled `30s` per IP per song (same limit as `GET /api/song/stream/:id`). Also available as `GET /api/song/embed/:id`. |
+| GET | `/album/:id` | — | Playlist embed: `{ title, coverArtPath, artist, songs: [SongEmbedData] }` — skips unavailable songs. Same rate limiting. |
+
+Example embed usage:
+```html
+<iframe src="https://api.audioblock.com/api/embed/song/<songId>" width="320" height="120"></iframe>
+<script>
+fetch('https://api.audioblock.com/api/song/embed/<songId>').then(r=>r.json()).then(({data})=>{
+  // data.streamUrl -> fetch HLS manifest, data.coverArtPath -> <img>, data.artist.name
+});
+</script>
+```
 
 ### Twitter OAuth — `/api/auth/twitter`
 

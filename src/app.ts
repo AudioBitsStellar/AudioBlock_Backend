@@ -16,6 +16,9 @@ import walletRoutes from "./routes/walletRoutes";
 import SongRoutes from "./routes/SongRoutes";
 import marketplaceRoutes from "./routes/marketplaceRoutes";
 import adminRoutes from "./routes/adminRoutes";
+import webhookRoutes from "./routes/webhookRoutes";
+import takedownRoutes from "./routes/takedownRoutes";
+import embedRoutes from "./routes/embedRoutes";
 
 
 // Route imports
@@ -90,6 +93,15 @@ app.use("/api/marketplace", marketplaceRoutes);
 
 // Admin moderation routes
 app.use("/api/admin", adminRoutes);
+
+// Webhook subscriptions (third-party event delivery)
+app.use("/api/webhooks", webhookRoutes);
+
+// Copyright takedown workflow (distinct from general moderation)
+app.use("/api/takedown", takedownRoutes);
+
+// Embeddable player (public, no auth)
+app.use("/api/embed", embedRoutes);
 
 
 //TWITTER CALLBACK ROUTE

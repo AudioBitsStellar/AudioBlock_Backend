@@ -7,6 +7,8 @@ import { TransactionLog } from "../entities/TransactionLog";
 import { Genre } from "../entities/Genre";
 import { Album } from "../entities/Album";
 import { RoyaltyPayout } from "../entities/RoyaltyPayout";
+import { WebhookSubscription } from "../entities/WebhookSubscription";
+import { TakedownRequest } from "../entities/TakedownRequest";
 
 
 
@@ -29,7 +31,9 @@ const AppDataSource = new DataSource({
     TransactionLog,
     Genre,
     Album,
-    RoyaltyPayout
+    RoyaltyPayout,
+    WebhookSubscription,
+    TakedownRequest
   ],
   migrations: ["src/migrations/*.ts", "dist/migrations/*.js"],
   migrationsTableName: "migrations",

@@ -8,6 +8,7 @@ import multer from "multer";
 import { CreateCoverDTO } from "../dtos/CreateCoverDTO";
 import fs from "fs";
 import { SongController } from "../controllers/SongController";
+import { EmbedController } from "../controllers/EmbedController";
 import { SubmitSignedXdrDTO } from "../dtos/SubmitSignedXdrDTO";
 
 const uploadController = new UploadController();
@@ -108,6 +109,9 @@ router.post("/upload/finalize", authArtistMiddleware, validateDTO(FinalizeUpload
 // Stream Songs
 router.get("/stream/:id", SongController.streamSong);
 router.get("/popular", SongController.getPopularSongs);
+
+// Embeddable player endpoint — public, no auth, same rate limiting as streaming (Redis throttle)
+router.get("/embed/:id", EmbedController.getSongEmbed);
 
 // Soroban on-chain song minting: the artist's wallet signs, the backend
 // only builds and relays the transaction.

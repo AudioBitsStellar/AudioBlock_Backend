@@ -55,6 +55,25 @@ export class MarketplaceService {
   /** Submits the buyer's signed `buy_nft` transaction and returns the tx hash. */
   async submitBuy(signedXdr: string): Promise<{ txHash: string }> {
     const { hash } = await this.soroban.submitSignedTransaction(signedXdr);
+
+    // ── Webhook event emission (sale completed) ────────────────────────────
+    try {
+      const { WebhookService } = await import("../WebhookService");
+      const webhook = new WebhookService();
+      await webhook.publish("sale.completed", {
+        txHash: hash,
+        // tokenId not directly available here; include hash for linkage
+        // Caller can enrich via MarketplaceController if needed
+      });
+      await webhook.publish("sale_completed", { txHash: hash });
+    } catch (webhookErr) {
+      // Non-fatal — sale succeeded even if webhook fails
+      try {
+        const logger = (await import("../../config/logger")).default;
+        logger.warn({ err: webhookErr }, "Webhook publish failed for sale.completed — non-fatal");
+      } catch {}
+    }
+
     return { txHash: hash };
   }
 }

@@ -248,6 +248,30 @@ export class SongService {
       song.mintStatus = "minted";
       await this.songRepo.save(song);
 
+      // ── Webhook event emission (song minted) ─────────────────────────────
+      try {
+        const { WebhookService } = await import("./WebhookService");
+        const webhook = new WebhookService();
+        await webhook.publish("song.minted", {
+          songId: song.id,
+          onChainSongId: song.onChainSongId,
+          onChainTokenId: song.onChainTokenId,
+          txHash: hash,
+          artistId: song.artistId,
+          title: song.title,
+        });
+        await webhook.publish("mint_status_changed", {
+          songId: song.id,
+          onChainSongId: song.onChainSongId,
+          tokenId: song.onChainTokenId,
+          txHash: hash,
+          previousStatus: "minting",
+          newStatus: "minted",
+        });
+      } catch (webhookErr) {
+        logger.warn({ err: webhookErr, songId }, "Webhook publish failed for song.minted — non-fatal");
+      }
+
       return { txHash: hash, songId: song.onChainSongId, tokenId: song.onChainTokenId };
     } catch (error) {
       song.mintStatus = "failed";
