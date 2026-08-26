@@ -27,10 +27,12 @@ type LoginWithEmailResult =
 
 export class AuthService {
   private userRepo: Repository<User>;
+  private refreshTokenRepo: Repository<RefreshToken>;
   private emailService: EmailService;
 
   constructor() {
     this.userRepo = AppDataSource.getRepository(User);
+    this.refreshTokenRepo = AppDataSource.getRepository(RefreshToken);
     this.emailService = new EmailService();
   }
 
@@ -57,7 +59,7 @@ export class AuthService {
       emailVerified: user.emailVerified ?? (user.passwordHash ? false : undefined),
     };
 
-    return jwt.sign(payload, JWT_SECRET, { expiresIn: '1d' });
+    return jwt.sign(payload, JWT_SECRET, { expiresIn: '15m' });
   }
 
   /** Registers a user with email + password instead of a wallet signature. */
@@ -417,64 +419,59 @@ export class AuthService {
     return `refresh:${userId}`;
   }
 
-  private async storeRefreshToken(userId: string, refreshToken: string): Promise<void> {
-    await redis.set(
-      this.getRefreshTokenKey(userId),
-      refreshToken,
-      'EX',
-      REFRESH_TOKEN_EXPIRY_SECONDS,
-    );
-  }
-
-  private async verifyRefreshToken(token: string): Promise<JwtPayload> {
-    const JWT_SECRET = process.env.JWT_SECRET as string;
-    if (!JWT_SECRET) {
-      throw AppError.businessLogic('JWT_SECRET not set in environment variables');
-    }
-
-    try {
-      return jwt.verify(token, JWT_SECRET) as JwtPayload;
-    } catch {
-      throw AppError.authentication('Invalid refresh token');
-    }
+  private async storeRefreshToken(userId: string, refreshToken: string, familyId?: string): Promise<void> {
+    const expiresAt = new Date();
+    expiresAt.setSeconds(expiresAt.getSeconds() + REFRESH_TOKEN_EXPIRY_SECONDS);
+    const rt = this.refreshTokenRepo.create({
+      userId,
+      token: refreshToken,
+      expiresAt,
+      familyId: familyId || randomUUID()
+    });
+    await this.refreshTokenRepo.save(rt);
   }
 
   async refreshToken(token: string): Promise<{ token: string; refreshToken: string }> {
     const payload = await this.verifyRefreshToken(token);
     const userId = payload?.id as string;
-    if (!userId) {
-      throw AppError.authentication('Invalid refresh token');
+    if (!userId) throw AppError.authentication('Invalid refresh token');
+
+    const rt = await this.refreshTokenRepo.findOne({ where: { token } });
+    if (!rt) throw AppError.authentication('Invalid refresh token');
+
+    if (rt.revoked) {
+      // Reuse detected! Invalidate family
+      if (rt.familyId) {
+        await this.refreshTokenRepo.update({ familyId: rt.familyId }, { revoked: true });
+      }
+      throw AppError.authentication('Refresh token reuse detected');
     }
 
-    const currentRefreshToken = await redis.get(this.getRefreshTokenKey(userId));
-    if (!currentRefreshToken || currentRefreshToken !== token) {
-      throw AppError.authentication('Invalid refresh token');
+    if (rt.expiresAt < new Date()) {
+      throw AppError.authentication('Refresh token expired');
     }
 
     const user = await this.userRepo.findOneBy({ id: userId });
-    if (!user) {
-      throw AppError.authentication('Invalid refresh token');
-    }
+    if (!user) throw AppError.authentication('Invalid refresh token');
+
+    // Revoke old token
+    rt.revoked = true;
+    await this.refreshTokenRepo.save(rt);
 
     const newToken = this.signToken(user);
     const newRefreshToken = this.signRefreshToken(user);
-    await this.storeRefreshToken(user.id, newRefreshToken);
+    await this.storeRefreshToken(user.id, newRefreshToken, rt.familyId);
+    
     return { token: newToken, refreshToken: newRefreshToken };
   }
 
   async logout(refreshToken: string): Promise<void> {
     const payload = await this.verifyRefreshToken(refreshToken);
     const userId = payload?.id as string;
-    if (!userId) {
-      throw AppError.authentication('Invalid refresh token');
+    if (userId) {
+      // Invalidate all for user
+      await this.refreshTokenRepo.update({ userId }, { revoked: true });
     }
-
-    const currentRefreshToken = await redis.get(this.getRefreshTokenKey(userId));
-    if (!currentRefreshToken || currentRefreshToken !== refreshToken) {
-      throw AppError.authentication('Invalid refresh token');
-    }
-
-    await redis.del(this.getRefreshTokenKey(userId));
   }
 
   /**

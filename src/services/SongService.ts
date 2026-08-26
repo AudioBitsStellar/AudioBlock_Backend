@@ -18,10 +18,40 @@ import { SearchIndexService } from './SearchIndexService';
 import { CacheService } from './CacheService';
 import { SongVersionService } from './Song/SongVersionService';
 import { AppError } from '../errors/AppError';
+import { ActivityService } from './ActivityService';
 import logger from '../config/logger';
 import { songsUploadedTotal } from './MetricsService';
 
+const activityService = new ActivityService();
+
 export class SongService {
+  async getSong(id: string) {
+    const song = await this.songRepo.findOne({ where: { id } });
+    if (!song) throw AppError.notFound('Song not found');
+    return song;
+  }
+
+  async createSong(data: any, userId: string) {
+    const song = this.songRepo.create({ ...data, user: { id: userId } });
+    return await this.songRepo.save(song);
+  }
+
+  async updateSong(id: string, data: any) {
+    const song = await this.getSong(id);
+    Object.assign(song, data);
+    return await this.songRepo.save(song);
+  }
+
+  async deleteSong(id: string) {
+    const song = await this.getSong(id);
+    await this.songRepo.remove(song);
+    return { success: true };
+  }
+
+  async listSongs(query: any) {
+    return await this.songRepo.find({ take: 20 });
+  }
+
   private songRepo: Repository<Song>;
   private userRepo: Repository<User>;
   private logRepo: Repository<TransactionLog>;
@@ -206,6 +236,7 @@ export class SongService {
       );
     }
 
+    activityService.recordActivity(artistId, 'song_upload', song.id, 'song');
     return song;
   }
 

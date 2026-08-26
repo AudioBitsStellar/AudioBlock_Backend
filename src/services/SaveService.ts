@@ -7,6 +7,7 @@ import {
 import { Song } from '../entities/Song';
 import AppDataSource from '../config/db';
 import { AppError } from '../errors/AppError';
+import { ActivityService } from './ActivityService';
 import { ERROR_MESSAGES } from '../config/constants';
 import { validateStringLength, validateUUID } from '../validators/ServiceValidator';
 
@@ -47,6 +48,8 @@ export interface SaveResult {
 /**
  * Service layer for user song saves/bookmarks (Issue #91).
  */
+const activityService = new ActivityService();
+
 export class SaveService {
   private saveRepo: Repository<UserSave>;
   private songRepo: Repository<Song>;
