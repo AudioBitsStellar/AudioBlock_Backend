@@ -121,15 +121,28 @@ export class SongController {
   static searchSongs = async (req: Request, res: Response) => {
     try {
       const q = (req.query.q as string) || '';
+      const page = parseInt(req.query.page as string) || 1;
       const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
 
-      const songs = await songService.searchSongs(q, limit);
+      if (q.trim().length > 0 && q.trim().length < 2) {
+        return res.status(200).json({
+          success: true,
+          query: q,
+          songs: [],
+          total: 0,
+          page,
+          limit,
+          totalPages: 0,
+          message: 'Search query must be at least 2 characters',
+        });
+      }
+
+      const result = await songService.searchSongs(q, page, limit);
 
       return res.status(200).json({
         success: true,
         query: q,
-        count: songs.length,
-        data: songs,
+        ...result,
       });
     } catch (error) {
       handleError(req, res, error);

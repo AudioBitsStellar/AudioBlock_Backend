@@ -229,6 +229,141 @@ export class UserService {
   }
 
   /**
+   * Update the authenticated user's profile settings (Issue #83).
+   * Accepts display name, bio, avatar IPFS hash, and privacy toggle.
+   *
+   * @param userId - The authenticated user's UUID.
+   * @param data - Profile fields to update.
+   * @returns Updated User entity (public-safe fields only).
+   */
+  async updateProfile(
+    userId: string,
+    data: {
+      name?: string;
+      bio?: string;
+      avatarIpfsHash?: string;
+      profileImage?: string;
+      isProfilePublic?: boolean;
+    },
+  ): Promise<Partial<User>> {
+    validateRequired(userId, 'userId');
+
+    const user = await this.userRepo.findOneBy({ id: userId });
+    if (!user) {
+      throw AppError.notFound(ERROR_MESSAGES.USER_NOT_FOUND);
+    }
+
+    // Validate name length
+    if (data.name !== undefined) {
+      if (data.name.length > 50) {
+        throw AppError.validation('Name must be 50 characters or fewer', {
+          field: 'name',
+          max: 50,
+        });
+      }
+      user.name = data.name;
+    }
+
+    // Validate bio length
+    if (data.bio !== undefined) {
+      if (data.bio.length > 500) {
+        throw AppError.validation('Bio must be 500 characters or fewer', {
+          field: 'bio',
+          max: 500,
+        });
+      }
+      user.bio = data.bio;
+    }
+
+    if (data.avatarIpfsHash !== undefined) {
+      user.avatarIpfsHash = data.avatarIpfsHash;
+    }
+
+    if (data.profileImage !== undefined) {
+      user.profileImage = data.profileImage;
+    }
+
+    if (data.isProfilePublic !== undefined) {
+      user.isProfilePublic = data.isProfilePublic;
+    }
+
+    const saved = await this.userRepo.save(user);
+    return this.toProfileResponse(saved);
+  }
+
+  /**
+   * Get the authenticated user's own full profile (Issue #83).
+   */
+  async getOwnProfile(userId: string): Promise<Partial<User>> {
+    validateRequired(userId, 'userId');
+
+    const user = await this.userRepo.findOneBy({ id: userId });
+    if (!user) {
+      throw AppError.notFound(ERROR_MESSAGES.USER_NOT_FOUND);
+    }
+
+    return this.toProfileResponse(user);
+  }
+
+  /**
+   * Get another user's public profile, respecting privacy settings (Issue #83).
+   */
+  async getPublicProfile(userId: string): Promise<Partial<User> | { private: true }> {
+    validateRequired(userId, 'userId');
+
+    const user = await this.userRepo.findOneBy({ id: userId });
+    if (!user) {
+      throw AppError.notFound(ERROR_MESSAGES.USER_NOT_FOUND);
+    }
+
+    if (user.isProfilePublic === false) {
+      return { private: true };
+    }
+
+    return {
+      id: user.id,
+      username: user.username,
+      name: user.name,
+      bio: user.bio,
+      profileImage: user.profileImage,
+      avatarIpfsHash: user.avatarIpfsHash,
+      pageCover: user.pageCover,
+      website: user.website,
+      role: user.role,
+      totalStreams: user.totalStreams,
+      uniqueListeners: user.uniqueListeners,
+    };
+  }
+
+  /**
+   * Map a User entity to a clean profile response shape.
+   */
+  private toProfileResponse(user: User): Partial<User> {
+    return {
+      id: user.id,
+      username: user.username,
+      name: user.name,
+      email: user.email,
+      bio: user.bio,
+      profileImage: user.profileImage,
+      avatarIpfsHash: user.avatarIpfsHash,
+      pageCover: user.pageCover,
+      website: user.website,
+      role: user.role,
+      walletAddress: user.walletAddress,
+      stellarPublicKey: user.stellarPublicKey,
+      isProfilePublic: user.isProfilePublic,
+      twitterUsername: user.twitterUsername,
+      totalStreams: user.totalStreams,
+      uniqueListeners: user.uniqueListeners,
+      rewardPoints: user.rewardPoints,
+      emailVerified: user.emailVerified,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
+  }
+
+  /**
    * Generate JWT token for user (extracted to avoid duplication)
    */
   private generateToken(user: User): string {

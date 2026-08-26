@@ -2,7 +2,11 @@ import { Router } from 'express';
 import { ArtistProfileController } from '../controllers/ArtistProfileController';
 import { ArtistOnChainController } from '../controllers/ArtistOnChainController';
 import { validateDTO } from '../middlewares/validate';
-import { authArtistMiddleware, requireArtistAndVerified } from '../middlewares/authMiddleware';
+import {
+  authArtistMiddleware,
+  requireArtistAndVerified,
+  requireAuth,
+} from '../middlewares/authMiddleware';
 import { ConnectStellarWalletDTO } from '../dtos/ConnectStellarWalletDTO';
 import { PrepareArtistSetupDTO } from '../dtos/PrepareArtistSetupDTO';
 import { SubmitSignedXdrDTO } from '../dtos/SubmitSignedXdrDTO';
@@ -54,5 +58,11 @@ router.post(
 );
 router.get('/verify/me', authArtistMiddleware, artistProfileController.getMyVerification);
 router.get('/:id/verification', artistProfileController.getVerificationBadge);
+
+// Follow / Unfollow (Issue #81)
+router.post('/:id/follow', requireAuth, artistProfileController.followArtist);
+router.delete('/:id/follow', requireAuth, artistProfileController.unfollowArtist);
+router.get('/:id/followers', artistProfileController.getFollowers);
+router.get('/:id/following', artistProfileController.getFollowing);
 
 export default router;

@@ -118,4 +118,78 @@ export class ArtistProfileController {
       handleError(req, res, error);
     }
   };
+
+  // ── Follow / Unfollow / Feed (Issue #81) ──────────────────────────────────────
+
+  /** POST /api/artists/:id/follow */
+  followArtist = async (req: Request, res: Response) => {
+    try {
+      const followerId = (req as any).user?.id;
+      if (!followerId) {
+        return handleError(req, res, AppError.authentication('Unauthorized'));
+      }
+      const artistId = routeParam(req.params.id);
+      const result = await this.artistProfileService.followArtist(followerId, artistId);
+      return res.status(HTTP_STATUS.OK).json({ success: true, data: result });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  /** DELETE /api/artists/:id/follow */
+  unfollowArtist = async (req: Request, res: Response) => {
+    try {
+      const followerId = (req as any).user?.id;
+      if (!followerId) {
+        return handleError(req, res, AppError.authentication('Unauthorized'));
+      }
+      const artistId = routeParam(req.params.id);
+      const result = await this.artistProfileService.unfollowArtist(followerId, artistId);
+      return res.status(HTTP_STATUS.OK).json({ success: true, data: result });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  /** GET /api/artists/:id/followers */
+  getFollowers = async (req: Request, res: Response) => {
+    try {
+      const artistId = routeParam(req.params.id);
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+      const result = await this.artistProfileService.getFollowers(artistId, page, limit);
+      return res.status(HTTP_STATUS.OK).json({ success: true, ...result });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  /** GET /api/artists/:id/following */
+  getFollowing = async (req: Request, res: Response) => {
+    try {
+      const artistId = routeParam(req.params.id);
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+      const result = await this.artistProfileService.getFollowing(artistId, page, limit);
+      return res.status(HTTP_STATUS.OK).json({ success: true, ...result });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  /** GET /api/feed — personalized feed of songs from followed artists */
+  getFeed = async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return handleError(req, res, AppError.authentication('Unauthorized'));
+      }
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+      const result = await this.artistProfileService.getFeed(userId, page, limit);
+      return res.status(HTTP_STATUS.OK).json({ success: true, ...result });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
 }

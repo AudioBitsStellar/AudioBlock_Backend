@@ -151,6 +151,14 @@ export class User {
   @Column({ default: false })
   facebookConnected?: boolean;
 
+  /** IPFS hash of the user's avatar (Issue #83). */
+  @Column({ nullable: true })
+  avatarIpfsHash?: string;
+
+  /** Whether the user's profile is publicly visible (Issue #83). */
+  @Column({ default: true })
+  isProfilePublic!: boolean;
+
   @CreateDateColumn()
   createdAt!: Date;
 

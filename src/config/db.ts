@@ -19,6 +19,7 @@ import { ApiKey } from '../entities/ApiKey';
 import { Comment } from '../entities/Comment';
 import { UserSave } from '../entities/UserSave';
 import { ArtistVerification } from '../entities/ArtistVerification';
+import { UserFollow } from '../entities/UserFollow';
 
 dotenv.config();
 
@@ -92,6 +93,7 @@ const AppDataSource = new DataSource({
     Comment,
     UserSave,
     ArtistVerification,
+    UserFollow,
   ],
   migrations: ['src/migrations/*.ts', 'dist/migrations/*.js'],
   migrationsTableName: 'migrations',

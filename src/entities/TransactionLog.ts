@@ -30,6 +30,18 @@ export class TransactionLog {
   @Column({ nullable: true })
   description?: string;
 
+  /** Transaction amount for wallet balance history (Issue #84). */
+  @Column('decimal', { precision: 18, scale: 6, nullable: true })
+  amount?: number;
+
+  /** Associated entity ID (song, album, etc.) for context (Issue #84). */
+  @Column({ nullable: true })
+  relatedEntityId?: string;
+
+  /** Type of the related entity: 'song' | 'album' | 'payout' | 'purchase' (Issue #84). */
+  @Column({ nullable: true })
+  relatedEntityType?: string;
+
   @CreateDateColumn()
   createdAt!: Date;
 
