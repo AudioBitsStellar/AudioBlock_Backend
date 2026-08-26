@@ -40,8 +40,11 @@ export class ApiKey {
   keyHash!: string;
 
   /** Non-secret display prefix, e.g. `abk_1a2b3c4d`. */
-  @Column({ length: 32 })
-  keyPrefix!: string;
+  @Column({ length: 32, nullable: true })
+  keyPrefix?: string;
+
+  @Column({ type: 'simple-array', nullable: true })
+  scopes!: string[];
 
   /**
    * Permission strings granted to this key. A key can never exceed the

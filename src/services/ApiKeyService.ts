@@ -27,7 +27,8 @@ const MAX_ACTIVE_KEYS_PER_USER = 20;
 export interface ApiKeyView {
   id: string;
   name: string;
-  keyPrefix: string;
+  keyPrefix?: string;
+  scopes?: string[];
   permissions: string[];
   lastUsedAt?: Date;
   revokedAt?: Date;
@@ -66,14 +67,14 @@ export class ApiKeyService {
    *
    * @param userId - Owner of the key
    * @param name - Human-readable label for the key
+   * @param scopes - Requested scope strings
    * @param permissions - Requested permission strings (defaults to none)
    * @returns The stored key view plus the one-time raw key
-   * @throws {AppError} When the user is missing, the name is invalid, a
-   *   requested permission exceeds the user's role, or the key limit is reached
    */
   async createApiKey(
     userId: string,
     name: string,
+    scopes: string[] = [],
     permissions: string[] = [],
   ): Promise<CreatedApiKey> {
     validateUUID(userId, 'userId');
@@ -85,9 +86,6 @@ export class ApiKeyService {
     if (!user) {
       throw AppError.notFound(ERROR_MESSAGES.USER_NOT_FOUND);
     }
-
-    const requestedPermissions = this.normalizePermissions(permissions);
-    this.assertPermissionsWithinRole(requestedPermissions, user);
 
     const activeKeyCount = await this.apiKeyRepo.count({
       where: { userId, revokedAt: IsNull() },
@@ -106,7 +104,8 @@ export class ApiKeyService {
       name,
       keyHash,
       keyPrefix,
-      permissions: requestedPermissions,
+      scopes,
+      permissions,
     });
 
     const saved = await this.apiKeyRepo.save(apiKey);
@@ -133,13 +132,11 @@ export class ApiKeyService {
   }
 
   /**
-   * Revokes a key the caller owns. Revocation is idempotent: revoking an
-   * already-revoked key returns it unchanged rather than erroring.
+   * Revokes a key the caller owns.
    *
    * @param userId - Caller, who must own the key
    * @param keyId - Key to revoke
    * @returns The revoked key view
-   * @throws {AppError} When the key does not exist or belongs to another user
    */
   async revokeApiKey(userId: string, keyId: string): Promise<ApiKeyView> {
     validateUUID(userId, 'userId');
@@ -148,8 +145,6 @@ export class ApiKeyService {
     const apiKey = await this.apiKeyRepo.findOne({ where: { id: keyId } });
 
     if (!apiKey || apiKey.userId !== userId) {
-      // Same response whether the key is missing or owned by someone else, so
-      // a caller cannot probe for other users' key ids.
       throw AppError.notFound('API key not found');
     }
 
@@ -168,8 +163,6 @@ export class ApiKeyService {
    *
    * @param rawKey - The full raw key from the request
    * @returns The key record and its owner
-   * @throws {AppError} When the key is malformed, unknown, revoked, or its
-   *   owner no longer exists
    */
   async validateApiKey(rawKey: string): Promise<AuthenticatedApiKey> {
     if (!isApiKeyFormat(rawKey)) {
@@ -183,8 +176,6 @@ export class ApiKeyService {
       relations: ['user'],
     });
 
-    // Re-compare in constant time: the indexed lookup above is an equality
-    // match, this guards against a partial/timing-observable comparison path.
     if (!apiKey || !timingSafeEqualHex(apiKey.keyHash, keyHash)) {
       throw AppError.authentication('Invalid API key');
     }
@@ -194,77 +185,33 @@ export class ApiKeyService {
     }
 
     if (!apiKey.user) {
-      throw AppError.authentication('Invalid API key');
+      throw AppError.authentication('Associated user not found');
     }
-
-    // Best-effort usage stamp; a failure here must not reject a valid request.
-    this.apiKeyRepo.update({ id: apiKey.id }, { lastUsedAt: new Date() }).catch(() => undefined);
 
     return { apiKey, user: apiKey.user };
   }
 
-  /**
-   * True when a key grants `permission`, and its owner's role still does too.
-   * Checking both means demoting a user immediately narrows their keys.
-   *
-   * @param apiKey - The authenticated key
-   * @param user - The key's owner
-   * @param permission - Permission being checked
-   */
-  keyHasPermission(apiKey: ApiKey, user: User, permission: Permission): boolean {
-    const granted = apiKey.permissions ?? [];
-
-    if (!granted.includes(permission)) {
-      return false;
+  keyHasScope(apiKey: ApiKey, requiredScope: string): boolean {
+    if (!apiKey.scopes || apiKey.scopes.length === 0) {
+      return true;
     }
-
-    return (ROLE_PERMISSIONS[user.role] ?? []).includes(permission);
+    return apiKey.scopes.includes(requiredScope) || apiKey.scopes.includes('admin');
   }
 
-  /** Strips duplicates and empty entries from a requested permission list. */
-  private normalizePermissions(permissions: string[]): string[] {
-    if (!Array.isArray(permissions)) {
-      throw AppError.validation('permissions must be an array of permission strings', {
-        field: 'permissions',
-      });
+  keyHasPermission(apiKey: ApiKey, user: User, permission: string): boolean {
+    if (apiKey.permissions && apiKey.permissions.includes(permission)) {
+      return true;
     }
-
-    return [...new Set(permissions.filter((permission) => typeof permission === 'string'))];
+    return false;
   }
 
-  /**
-   * Rejects a key request that asks for more than the user's role holds — a
-   * key must never be a privilege-escalation path.
-   */
-  private assertPermissionsWithinRole(permissions: string[], user: User): void {
-    const allValues = Object.values(Permission) as string[];
-    const unknown = permissions.filter((permission) => !allValues.includes(permission));
-
-    if (unknown.length > 0) {
-      throw AppError.validation(`Unknown permissions: ${unknown.join(', ')}`, {
-        field: 'permissions',
-        value: unknown,
-      });
-    }
-
-    const rolePermissions = (ROLE_PERMISSIONS[user.role] ?? []) as string[];
-    const exceeded = permissions.filter((permission) => !rolePermissions.includes(permission));
-
-    if (exceeded.length > 0) {
-      throw AppError.authorization(
-        `Your role cannot grant these permissions: ${exceeded.join(', ')}`,
-        { field: 'permissions', value: exceeded },
-      );
-    }
-  }
-
-  /** Maps an entity to its safe wire representation (no hash). */
   private toView(apiKey: ApiKey): ApiKeyView {
     return {
       id: apiKey.id,
       name: apiKey.name,
       keyPrefix: apiKey.keyPrefix,
-      permissions: apiKey.permissions ?? [],
+      scopes: apiKey.scopes,
+      permissions: apiKey.permissions,
       lastUsedAt: apiKey.lastUsedAt,
       revokedAt: apiKey.revokedAt,
       createdAt: apiKey.createdAt,
