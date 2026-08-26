@@ -20,6 +20,8 @@ import { Comment } from '../entities/Comment';
 import { UserSave } from '../entities/UserSave';
 import { ArtistVerification } from '../entities/ArtistVerification';
 import { UserFollow } from '../entities/UserFollow';
+import { Playlist } from '../entities/Playlist';
+import { PlaylistSong } from '../entities/PlaylistSong';
 
 dotenv.config();
 
@@ -94,6 +96,8 @@ const AppDataSource = new DataSource({
     UserSave,
     ArtistVerification,
     UserFollow,
+    Playlist,
+    PlaylistSong,
   ],
   migrations: ['src/migrations/*.ts', 'dist/migrations/*.js'],
   migrationsTableName: 'migrations',
