@@ -1,132 +1,12 @@
 openapi: 3.0.3
 info:
-  title: AudioBlock Backend API
-  description: |
-    REST API for the AudioBlock music NFT platform. Handles authentication,
-    artist profiles, song uploads, Stellar/Soroban on-chain interactions,
-    marketplace listings, and admin moderation. Includes per-API-key scopes (read-only, upload, admin).
+  title: AudioBlocks API Reference
   version: 1.0.0
-  contact:
-    name: AudioBitsStellar
-    url: https://github.com/AudioBitsStellar/AudioBlock_Backend
-
-servers:
-  - url: http://localhost:4000
-    description: Local development
-  - url: https://api.audioblockz.com
-    description: Production
-
-tags:
-  - name: Auth
-    description: Authentication and session management
-  - name: Artist
-    description: Artist profile and on-chain setup
-  - name: Song
-    description: Song upload, streaming, and on-chain minting
-  - name: Marketplace
-    description: NFT listing and purchase (Soroban relay)
-  - name: Wallet
-    description: EVM wallet utilities (Dynamic Labs)
-  - name: Admin
-    description: Admin moderation and job management
-  - name: Health
-    description: Service health checks
-  - name: ApiKey
-    description: API key management with scopes
-
-components:
-  securitySchemes:
-    BearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
-      description: JWT issued by POST /api/auth/login or /api/auth/login-email
-
-  schemas:
-    Error:
-      type: object
-      required: [error, message]
-      properties:
-        error:
-          type: string
-          example: Unauthorized
-        message:
-          type: string
-          example: Invalid or expired token
-
-    UserTokenResponse:
-      type: object
-      properties:
-        accessToken:
-          type: string
-        user:
-          type: object
-          properties:
-            id:
-              type: string
-            email:
-              type: string
-            role:
-              type: string
-              enum: [artist, listener, admin]
-
-    SignedXdrBody:
-      type: object
-      required: [signedXdr]
-      properties:
-        signedXdr:
-          type: string
-          description: Base64-encoded signed Stellar transaction XDR
-
-    JobStatus:
-      type: object
-      properties:
-        id:
-          type: string
-        type:
-          type: string
-        status:
-          type: string
-          enum: [pending, running, completed, failed]
-        createdAt:
-          type: string
-          format: date-time
-        updatedAt:
-          type: string
-          format: date-time
-
+  description: API reference for AudioBlocks including per-API-key scopes and permissions (read-only, upload, admin).
 paths:
-  # ── Auth ──────────────────────────────────────────────────────────────────
-
-  /api/auth/nonce/{email}:
-    get:
-      tags: [Auth]
-      summary: Get wallet login nonce
-      description: Returns a one-time nonce that the client must sign with their wallet private key to authenticate.
-      parameters:
-        - name: email
-          in: path
-          required: true
-          schema:
-            type: string
-            format: email
-      responses:
-        '200':
-          description: Nonce issued
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  nonce:
-                    type: string
-        '429':
-          description: Rate limit exceeded
-
   /api/api-keys:
     post:
-      tags: [ApiKey]
-      summary: Create an API key with explicit scopes
+      summary: Create an API key with scopes/permissions
       requestBody:
         required: true
         content:
@@ -136,11 +16,14 @@ paths:
               properties:
                 name:
                   type: string
+                permissions:
+                  type: array
+                  items:
+                    type: string
                 scopes:
                   type: array
                   items:
                     type: string
-                    enum: [read-only, upload, admin]
       responses:
         '201':
-          description: API key created successfully
+          description: API key successfully created
