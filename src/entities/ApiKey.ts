@@ -44,6 +44,12 @@ export class ApiKey {
   keyPrefix!: string;
 
   /**
+   * Rate-limit tier for the API key (e.g., standard, high, unlimited).
+   */
+  @Column({ length: 50, default: 'standard' })
+  rateLimitTier!: string;
+
+  /**
    * Permission strings granted to this key. A key can never exceed the
    * permissions its owning user's role holds — that is enforced at issue time
    * and re-checked on every request.
