@@ -1,23 +1,20 @@
-import { Router } from 'express';
-import { UploadController } from '../controllers/UploadController';
-import { validateDTO } from '../middlewares/validate';
-import { FinalizeUploadDTO } from '../dtos/FinalizeUploadDTO';
-import { UploadChunkDTO } from '../dtos/UploadChunkDTO';
-import { authArtistMiddleware } from '../middlewares/authMiddleware';
-import multer from 'multer';
-import { CreateCoverDTO } from '../dtos/CreateCoverDTO';
-import fs from 'fs';
-import { SongController } from '../controllers/SongController';
-import { SubmitSignedXdrDTO } from '../dtos/SubmitSignedXdrDTO';
-import { ReuploadSongDTO } from '../dtos/ReuploadSongDTO';
-import { ReportSongDTO } from '../dtos/ReportSongDTO';
-import { etagCache } from '../middlewares/etag';
-import { uploadRateLimiter } from '../middlewares/uploadRateLimiter';
-import { requireAuth } from '../middlewares/authMiddleware';
+import {Router} from "express";
+import { UploadController } from "../controllers/UploadController";
+import { validateDTO } from "../middlewares/validate";
+import { FinalizeUploadDTO } from "../dtos/FinalizeUploadDTO";
+import { UploadChunkDTO } from "../dtos/UploadChunkDTO";
+import { authArtistMiddleware } from "../middlewares/authMiddleware";
+import multer from "multer";
+import { CreateCoverDTO } from "../dtos/CreateCoverDTO";
+import fs from "fs";
+import { SongController } from "../controllers/SongController";
+import { EmbedController } from "../controllers/EmbedController";
+import { SubmitSignedXdrDTO } from "../dtos/SubmitSignedXdrDTO";
 
 const uploadController = new UploadController();
 const router = Router();
 // const upload = multer({ dest: "uploads/chunks/" });
+
 
 // ── Chunked upload limits (#63) ───────────────────────────────────────────────
 //
@@ -42,23 +39,23 @@ const CHUNK_MAX_SIZE_BYTES = process.env.CHUNK_UPLOAD_MAX_BYTES
   : 10 * 1024 * 1024; // 10 MB per chunk (safety cap), configurable via CHUNK_UPLOAD_MAX_BYTES
 
 const ALLOWED_AUDIO_MIMES = [
-  'audio/mpeg', // .mp3
-  'audio/wav', // .wav
-  'audio/x-wav', // .wav (alt)
-  'audio/flac', // .flac
-  'audio/x-flac', // .flac (alt)
-  'audio/ogg', // .ogg
-  'audio/aac', // .aac
-  'audio/mp4', // .m4a
-  'audio/x-m4a', // .m4a (alt)
-  'audio/webm', // .webm
+  "audio/mpeg",        // .mp3
+  "audio/wav",         // .wav
+  "audio/x-wav",       // .wav (alt)
+  "audio/flac",        // .flac
+  "audio/x-flac",      // .flac (alt)
+  "audio/ogg",         // .ogg
+  "audio/aac",         // .aac
+  "audio/mp4",         // .m4a
+  "audio/x-m4a",       // .m4a (alt)
+  "audio/webm",        // .webm
 ];
 
-const ALLOWED_IMAGE_MIMES = ['image/jpeg', 'image/png', 'image/jpg'];
+const ALLOWED_IMAGE_MIMES = ["image/jpeg", "image/png", "image/jpg"];
 
 const chunkStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const uploadDir = 'uploads/temp';
+    const uploadDir = "uploads/temp";
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
@@ -66,12 +63,12 @@ const chunkStorage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     cb(null, `${Date.now()}-${Math.random().toString(36).substring(7)}`);
-  },
+  }
 });
 
 const coverStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const uploadDir = 'uploads/temp';
+    const uploadDir = "uploads/temp";
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
@@ -79,7 +76,7 @@ const coverStorage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     cb(null, `${Date.now()}-${Math.random().toString(36).substring(7)}`);
-  },
+  }
 });
 
 const chunkUpload = multer({
@@ -87,12 +84,10 @@ const chunkUpload = multer({
   limits: { fileSize: CHUNK_MAX_SIZE_BYTES },
   fileFilter: (req, file, cb) => {
     if (!ALLOWED_AUDIO_MIMES.includes(file.mimetype)) {
-      return cb(
-        new Error('Invalid file type. Allowed audio formats: MP3, WAV, FLAC, OGG, AAC, M4A, WebM'),
-      );
+      return cb(new Error("Invalid file type. Allowed audio formats: MP3, WAV, FLAC, OGG, AAC, M4A, WebM"));
     }
     cb(null, true);
-  },
+  }
 });
 
 const coverUpload = multer({
@@ -100,124 +95,32 @@ const coverUpload = multer({
   limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB for cover images
   fileFilter: (req, file, cb) => {
     if (!ALLOWED_IMAGE_MIMES.includes(file.mimetype)) {
-      return cb(new Error('Invalid file type. Allowed image formats: JPG, PNG'));
+      return cb(new Error("Invalid file type. Allowed image formats: JPG, PNG"));
     }
     cb(null, true);
-  },
+  }
 });
 // const upload = multer({ dest: "uploads/temp/" });
-router.post(
-  '/upload/chunk',
-  authArtistMiddleware,
-  uploadRateLimiter,
-  chunkUpload.single('chunk'),
-  validateDTO(UploadChunkDTO),
-  uploadController.uploadChunk,
-);
-router.post(
-  '/upload/cover',
-  authArtistMiddleware,
-  uploadRateLimiter,
-  coverUpload.single('cover'),
-  validateDTO(CreateCoverDTO),
-  uploadController.uploadCover,
-);
-router.post(
-  '/upload/finalize',
-  authArtistMiddleware,
-  uploadRateLimiter,
-  validateDTO(FinalizeUploadDTO),
-  uploadController.finalizeUpload,
-);
+router.post("/upload/chunk", authArtistMiddleware, chunkUpload.single("chunk"), validateDTO(UploadChunkDTO), uploadController.uploadChunk);
+router.post("/upload/cover", authArtistMiddleware, coverUpload.single("cover"), validateDTO(CreateCoverDTO), uploadController.uploadCover);
+router.post("/upload/finalize", authArtistMiddleware, validateDTO(FinalizeUploadDTO), uploadController.finalizeUpload);
+
 
 // Stream Songs
-router.get('/stream/:id', SongController.streamSong);
+router.get("/stream/:id", SongController.streamSong);
+router.get("/popular", SongController.getPopularSongs);
 
-// ── Cover art upload (Issue #80) ─────────────────────────────────────────────
-// Max 10 MB, formats: JPEG, PNG, WebP. Only the song owner may upload.
-const COVER_ART_MAX_SIZE_BYTES = 10 * 1024 * 1024;
-const coverArtUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: COVER_ART_MAX_SIZE_BYTES },
-  fileFilter: (req, file, cb) => {
-    const allowed = ['image/jpeg', 'image/png', 'image/webp'];
-    if (!allowed.includes(file.mimetype)) {
-      return cb(new Error('Invalid file type. Allowed cover art formats: JPEG, PNG, WebP'));
-    }
-    cb(null, true);
-  },
-});
-
-router.post(
-  '/:id/cover-art',
-  authArtistMiddleware,
-  coverArtUpload.single('coverArt'),
-  SongController.uploadCoverArt,
-);
-router.get('/:id/cover-art', SongController.getCoverArt);
-
-// Lyrics (Issue #75)
-router.get('/:id/lyrics', requireAuth, SongController.getLyrics);
-
-// Public, read-heavy catalog endpoints get ETag + Cache-Control so clients can
-// revalidate cheaply and skip re-downloading unchanged lists (Issue #133).
-router.get(
-  '/popular',
-  etagCache({ visibility: 'public', maxAge: 60 }),
-  SongController.getPopularSongs,
-);
-router.get('/search', etagCache({ visibility: 'public', maxAge: 30 }), SongController.searchSongs);
+// Embeddable player endpoint — public, no auth, same rate limiting as streaming (Redis throttle)
+router.get("/embed/:id", EmbedController.getSongEmbed);
 
 // Soroban on-chain song minting: the artist's wallet signs, the backend
 // only builds and relays the transaction.
-router.post('/:id/onchain/prepare-mint', authArtistMiddleware, SongController.prepareMint);
+router.post("/:id/onchain/prepare-mint", authArtistMiddleware, SongController.prepareMint);
 router.post(
-  '/:id/onchain/submit-mint',
+  "/:id/onchain/submit-mint",
   authArtistMiddleware,
   validateDTO(SubmitSignedXdrDTO),
-  SongController.submitMint,
+  SongController.submitMint
 );
-
-// Apply royalty split template to a song (Issue #98)
-router.post('/:id/apply-template', authArtistMiddleware, SongController.applyTemplate);
-
-// Song collaborators + royalty splits (Issue #96)
-router.get('/:id/collaborators', SongController.listCollaborators);
-router.post('/:id/collaborators', authArtistMiddleware, SongController.addCollaborator);
-router.put('/:id/collaborators/:userId', authArtistMiddleware, SongController.updateCollaborator);
-
-// Tags (Issue #93)
-router.post('/:id/tags', authArtistMiddleware, SongController.addTags);
-
-// Song statistics (Issue #87). Results are cached for 5 minutes in Redis, so an
-// additional short HTTP cache keeps repeated dashboard polls cheap.
-router.get(
-  '/:id/stats',
-  etagCache({ visibility: 'private', maxAge: 300 }),
-  SongController.getSongStats,
-);
-
-// Library saves — the data source for the `saves` statistic (Issue #87).
-router.post('/:id/save', requireAuth, SongController.saveSong);
-router.delete('/:id/save', requireAuth, SongController.unsaveSong);
-
-// Song versioning (Issue #86)
-router.get('/:id/versions', SongController.listVersions);
-router.get('/:id/versions/:version', SongController.getVersion);
-router.post(
-  '/:id/reupload',
-  authArtistMiddleware,
-  uploadRateLimiter,
-  validateDTO(ReuploadSongDTO),
-  uploadController.finalizeReupload,
-);
-
-import { optionalAuth } from '../middlewares/authMiddleware';
-import { playbackRateLimiter } from '../middlewares/playbackRateLimiter';
-// Playback tracking (Issue #76)
-router.post('/:id/playback', optionalAuth, playbackRateLimiter, SongController.recordPlayback);
-
-// Content moderation reports (Issue #88) — any authenticated user may report.
-router.post('/:id/report', requireAuth, validateDTO(ReportSongDTO), SongController.reportSong);
 
 export default router;
