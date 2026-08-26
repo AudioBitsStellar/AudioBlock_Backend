@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { DataSource } from 'typeorm';
+import { DataSource, DataSourceOptions } from 'typeorm';
 import dotenv from 'dotenv';
 import { User } from '../entities/User';
 import { Song } from '../entities/Song';
@@ -97,6 +97,6 @@ const AppDataSource = new DataSource({
   ],
   migrations: ['src/migrations/*.ts', 'dist/migrations/*.js'],
   migrationsTableName: 'migrations',
-});
+} as DataSourceOptions);
 
 export default AppDataSource;

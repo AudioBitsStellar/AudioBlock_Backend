@@ -133,6 +133,29 @@ router.post(
 // Stream Songs
 router.get('/stream/:id', SongController.streamSong);
 
+// ── Cover art upload (Issue #80) ─────────────────────────────────────────────
+// Max 10 MB, formats: JPEG, PNG, WebP. Only the song owner may upload.
+const COVER_ART_MAX_SIZE_BYTES = 10 * 1024 * 1024;
+const coverArtUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: COVER_ART_MAX_SIZE_BYTES },
+  fileFilter: (req, file, cb) => {
+    const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowed.includes(file.mimetype)) {
+      return cb(new Error('Invalid file type. Allowed cover art formats: JPEG, PNG, WebP'));
+    }
+    cb(null, true);
+  },
+});
+
+router.post(
+  '/:id/cover-art',
+  authArtistMiddleware,
+  coverArtUpload.single('coverArt'),
+  SongController.uploadCoverArt,
+);
+router.get('/:id/cover-art', SongController.getCoverArt);
+
 // Lyrics (Issue #75)
 router.get('/:id/lyrics', requireAuth, SongController.getLyrics);
 
