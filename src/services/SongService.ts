@@ -1,4 +1,4 @@
-import { Repository } from 'typeorm';
+import { FindOptionsOrder, Repository } from 'typeorm';
 import { Song } from '../entities/Song';
 import { SongVersion } from '../entities/SongVersion';
 import { User } from '../entities/User';
@@ -525,6 +525,80 @@ export class SongService {
       metadataCid: song.metadataCid,
       lyrics: song.lyrics,
       language: song.language,
+      createdAt: song.createdAt,
+      artist: song.user
+        ? {
+            id: song.user.id,
+            username: song.user.username,
+            name: song.user.name,
+            profileImage: song.user.profileImage,
+          }
+        : null,
+    }));
+
+    return {
+      songs: enriched,
+      total,
+      page: safePage,
+      limit: safeLimit,
+      totalPages: Math.ceil(total / safeLimit) || 0,
+    };
+  }
+
+  /**
+   * Browse songs by genre with pagination and sorting (Issue #78).
+   *
+   * Only ready, unflagged songs are returned, enriched with artist metadata.
+   * Sorting is validated against a fixed allow-list so arbitrary SQL cannot be
+   * injected via the sort query parameter.
+   *
+   * @param genreId - Genre entity id to filter by.
+   * @param page    - 1-based page number.
+   * @param limit   - Results per page (max 100).
+   * @param sort    - 'newest' | 'most_played' | 'alphabetical'.
+   * @returns Paginated song results with total count for client-side pagination.
+   */
+  async getSongsByGenre(
+    genreId: string,
+    page = 1,
+    limit = 20,
+    sort: 'newest' | 'most_played' | 'alphabetical' = 'newest',
+  ): Promise<{
+    songs: any[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> {
+    const safePage = Math.max(1, page);
+    const safeLimit = Math.min(Math.max(1, limit), 100);
+
+    const orderMap: Record<string, FindOptionsOrder<Song>> = {
+      newest: { createdAt: 'DESC' },
+      most_played: { playCount: 'DESC' },
+      alphabetical: { title: 'ASC' },
+    };
+    const orderBy: FindOptionsOrder<Song> = orderMap[sort] ?? { createdAt: 'DESC' };
+
+    const [songs, total] = await this.songRepo.findAndCount({
+      where: { genreId, status: 'ready', flagged: false },
+      relations: ['user'],
+      order: orderBy,
+      skip: (safePage - 1) * safeLimit,
+      take: safeLimit,
+    });
+
+    const enriched = songs.map((song) => ({
+      id: song.id,
+      title: song.title,
+      description: song.description,
+      genre: song.genre,
+      genreId: song.genreId,
+      duration: song.duration,
+      playCount: song.playCount,
+      coverArtPath: song.coverArtPath,
+      hlsMasterUrl: song.hlsMasterUrl,
+      metadataCid: song.metadataCid,
       createdAt: song.createdAt,
       artist: song.user
         ? {
