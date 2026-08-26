@@ -1,9 +1,12 @@
 import { Request, Response } from 'express';
 import { MarketplaceService } from '../services/Marketplace/MarketplaceService';
+import { NotificationService } from '../services/NotificationService';
 import { handleError } from '../utils/helpers';
 import { AppError } from '../errors/AppError';
+import logger from '../config/logger';
 
 const marketplaceService = new MarketplaceService();
+const notificationService = new NotificationService();
 
 export class MarketplaceController {
   static prepareListing = async (req: Request, res: Response) => {
@@ -59,7 +62,25 @@ export class MarketplaceController {
   static submitBuy = async (req: Request, res: Response) => {
     try {
       const { signedXdr } = req.body;
+      const userId = (req as any).user?.id as string | undefined;
       const result = await marketplaceService.submitBuy(signedXdr);
+
+      // Notify the buyer that their purchase completed (Issue #79).
+      // Best-effort: a notification failure must not fail the purchase.
+      if (userId) {
+        try {
+          await notificationService.create({
+            userId,
+            type: 'marketplace_sale',
+            title: 'Purchase completed',
+            message: 'Your marketplace purchase was completed successfully.',
+            data: { txHash: result.txHash },
+          });
+        } catch (err) {
+          logger.warn({ err, userId }, 'Failed to create marketplace sale notification');
+        }
+      }
+
       return res.status(200).json({ success: true, data: result });
     } catch (error) {
       handleError(req, res, error);
