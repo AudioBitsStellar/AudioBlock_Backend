@@ -726,6 +726,8 @@ npm run format
 | Command                       | Description                                                               |
 | ----------------------------- | ------------------------------------------------------------------------- |
 | `npm run seed:genres`         | Manually re-runs the genre seeder (also runs automatically on every boot) |
+| `npm run seed:test`           | Seeds the database with representative test users, songs, and albums      |
+| `npm run db:seed:test`        | Alias for `npm run seed:test` (safe guards against non-test DB)           |
 | `npm run reconcile:royalties` | Runs the royalty reconciliation job                                       |
 
 ### Git Hooks

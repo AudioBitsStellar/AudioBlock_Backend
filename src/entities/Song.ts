@@ -69,7 +69,7 @@ export class Song {
   @Column({ default: 'processing' })
   status!: 'processing' | 'ready' | 'failed';
 
-  @Column({ nullable: true })
+  @Column({ type: 'text', nullable: true })
   errorReason!: string | null;
 
   @Column({ default: 0 })
@@ -90,7 +90,7 @@ export class Song {
   @Column({ nullable: true })
   onChainTokenId?: string;
 
-  @Column({ type: 'json', nullable: true })
+  @Column({ type: 'simple-json', nullable: true })
   metadata: any;
 
   @Column({ nullable: true })
@@ -99,14 +99,14 @@ export class Song {
   @Column({ default: false })
   flagged!: boolean;
 
-  @Column({ type: 'timestamp', nullable: true })
-  flaggedAt!: Date | null;
-
-  @Column({ nullable: true })
-  flaggedBy!: string | null;
+  @Column({ type: 'datetime', nullable: true })
+  flaggedAt?: Date | null;
 
   @Column({ type: 'text', nullable: true })
-  flagReason!: string | null;
+  flaggedBy?: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  flagReason?: string | null;
 
   @Column('simple-json', { nullable: true })
   royaltySplits?: TemplateSplit[];

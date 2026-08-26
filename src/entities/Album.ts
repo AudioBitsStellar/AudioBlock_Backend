@@ -42,7 +42,7 @@ export class Album {
   @Column({ nullable: true })
   metadataCid!: string;
 
-  @Column({ type: 'json', nullable: true })
+  @Column({ type: 'simple-json', nullable: true })
   metadata: any;
 
   @Column({ nullable: true })

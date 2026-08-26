@@ -37,7 +37,7 @@ export class User {
   profileImage?: string;
 
   @Column({
-    type: 'enum',
+    type: 'simple-enum',
     enum: UserRole,
     default: UserRole.LISTENER,
   })
