@@ -74,6 +74,25 @@ export const requireApiKey = async (req: Request, res: Response, next: NextFunct
   }
 };
 
+export const requireApiKeyScope = (scope: string) => (req: Request, res: Response, next: NextFunction) => {
+  return requireApiKey(req, res, () => {
+    const apiKey = (req as any).apiKey as ApiKey | undefined;
+    if (!apiKey) {
+      return handleError(req, res, AppError.authentication('Unauthorized: No API key provided'));
+    }
+
+    if (!apiKeyService.keyHasScope(apiKey, scope)) {
+      return handleError(
+        req,
+        res,
+        AppError.authorization(`Forbidden: API key missing required scope: ${scope}`),
+      );
+    }
+
+    return next();
+  });
+};
+
 /**
  * Authenticates with an API key, then authorizes against a scoped permission.
  *
