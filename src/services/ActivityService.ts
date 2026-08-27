@@ -1,73 +1,54 @@
+import { Repository, In } from 'typeorm';
 import AppDataSource from '../config/db';
 import { ActivityFeed } from '../entities/ActivityFeed';
-import { User } from '../entities/User';
+import { UserFollow } from '../entities/UserFollow';
 import { AppError } from '../errors/AppError';
 
+export interface GetActivityFeedOptions {
+  userId: string;
+  mode?: 'all' | 'following';
+  limit?: number;
+  offset?: number;
+}
+
 export class ActivityService {
-  private activityRepo = AppDataSource.getRepository(ActivityFeed);
-  private userRepo = AppDataSource.getRepository(User);
+  private activityRepo: Repository<ActivityFeed>;
+  private userFollowRepo: Repository<UserFollow>;
 
-  async recordActivity(
-    userId: string,
-    actionType: 'song_upload' | 'song_purchase' | 'artist_follow' | 'song_save' | 'album_release',
-    targetId: string,
-    targetType: string,
-    metadata?: any
-  ): Promise<void> {
-    try {
-      const activity = this.activityRepo.create({
-        userId,
-        actionType,
-        targetId,
-        targetType,
-        metadata,
+  constructor() {
+    this.activityRepo = AppDataSource.getRepository(ActivityFeed);
+    this.userFollowRepo = AppDataSource.getRepository(UserFollow);
+  }
+
+  async getActivityFeed(options: GetActivityFeedOptions): Promise<ActivityFeed[]> {
+    const { userId, mode = 'all', limit = 20, offset = 0 } = options;
+
+    if (mode === 'following') {
+      // Find all users that the given user follows
+      const follows = await this.userFollowRepo.find({
+        where: { followerId: userId },
+        select: ['followingId'],
       });
-      await this.activityRepo.save(activity);
-    } catch (error) {
-      console.error('Failed to record activity', error);
-    }
-  }
 
-  async getFeed(userId: string, cursor?: string, limit = 20) {
-    // For now, we only query for the user's own activities as 'following' relation is not defined in User
-    const userIds = [userId];
-    
-    const ninetyDaysAgo = new Date();
-    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+      const followingIds = follows.map((f) => f.followingId);
 
-    let query = this.activityRepo.createQueryBuilder('activity')
-      .where('activity.userId IN (:...userIds)', { userIds })
-      .andWhere('activity.createdAt > :ninetyDaysAgo', { ninetyDaysAgo });
+      if (followingIds.length === 0) {
+        return [];
+      }
 
-    if (cursor) {
-      query = query.andWhere('activity.id < :cursor', { cursor });
+      return await this.activityRepo.find({
+        where: { userId: In(followingIds) },
+        order: { createdAt: 'DESC' },
+        take: limit,
+        skip: offset,
+      });
     }
 
-    const activities = await query
-      .orderBy('activity.createdAt', 'DESC')
-      .limit(limit)
-      .getMany();
-
-    return activities;
-  }
-
-  async getUserActivities(userId: string, cursor?: string, limit = 20) {
-    const ninetyDaysAgo = new Date();
-    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-
-    let query = this.activityRepo.createQueryBuilder('activity')
-      .where('activity.userId = :userId', { userId })
-      .andWhere('activity.createdAt > :ninetyDaysAgo', { ninetyDaysAgo });
-
-    if (cursor) {
-      query = query.andWhere('activity.id < :cursor', { cursor });
-    }
-
-    const activities = await query
-      .orderBy('activity.createdAt', 'DESC')
-      .limit(limit)
-      .getMany();
-
-    return activities;
+    // Default mode: platform-wide or user specific
+    return await this.activityRepo.find({
+      order: { createdAt: 'DESC' },
+      take: limit,
+      skip: offset,
+    });
   }
 }
