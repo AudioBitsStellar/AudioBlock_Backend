@@ -397,3 +397,10 @@ export function getRequiredEnv(key: string): string {
   }
   return value;
 }
+
+/**
+ * Format timestamp for logs
+ */
+export function formatTimestamp(): string {
+  return new Date().toISOString();
+}
