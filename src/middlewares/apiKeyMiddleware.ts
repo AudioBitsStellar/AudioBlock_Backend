@@ -1,15 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
 import { ApiKeyService } from '../services/ApiKeyService';
-import { ApiKey } from '../entities/ApiKey';
+import { ApiKey, ApiKeyScope } from '../entities/ApiKey';
 import { Permission } from '../types/Permissions';
 import { AppError } from '../errors/AppError';
 import { handleError } from '../utils/helpers';
 import { createTieredApiRateLimiter } from './rateLimiter';
 
-/** Header carrying the raw API key. */
 export const API_KEY_HEADER = 'x-api-key';
 
-/** Extend Express Request to carry the API key resolved by requireApiKey. */
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
@@ -21,11 +19,6 @@ declare global {
 
 const apiKeyService = new ApiKeyService();
 
-/**
- * Reads the raw key from `X-API-Key`, falling back to `Authorization: ApiKey <key>`.
- * The JWT `Bearer` scheme is deliberately not accepted here so the two
- * authentication systems stay distinct.
- */
 function extractRawKey(req: Request): string | undefined {
   const headerKey = req.headers[API_KEY_HEADER];
 
@@ -83,14 +76,27 @@ export const requireApiKey = async (req: Request, res: Response, next: NextFunct
   }
 };
 
-/**
- * Authenticates with an API key, then authorizes against a scoped permission.
- *
- * Returns 401 when the key is absent or invalid and 403 when the key is valid
- * but was not granted the permission (or its owner's role no longer holds it).
- *
- * @param permission - Permission the key must carry
- */
+export const requireApiKeyScope = (scope: ApiKeyScope) => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    return requireApiKey(req, res, () => {
+      const apiKey = (req as any).apiKey as ApiKey | undefined;
+      if (!apiKey) {
+        return handleError(req, res, AppError.authentication('Unauthorized: No API key provided'));
+      }
+
+      if (!apiKeyService.keyHasScope(apiKey, scope)) {
+        return handleError(
+          req,
+          res,
+          AppError.authorization(`Forbidden: API key missing required scope: ${scope}`),
+        );
+      }
+
+      return next();
+    });
+  };
+};
+
 export const requireApiKeyPermission =
   (permission: Permission) => (req: Request, res: Response, next: NextFunction) => {
     return requireApiKey(req, res, () => {
@@ -113,13 +119,6 @@ export const requireApiKeyPermission =
     });
   };
 
-/**
- * Accepts either a JWT or an API key, for endpoints exposed to both first-party
- * clients and third-party integrations. The JWT path is tried first so existing
- * behaviour is unchanged for browser clients.
- *
- * @param jwtMiddleware - The JWT middleware to try first (usually requireAuth)
- */
 export const requireAuthOrApiKey =
   (jwtMiddleware: (req: Request, res: Response, next: NextFunction) => void) =>
   (req: Request, res: Response, next: NextFunction) => {

@@ -1,21 +1,8 @@
-import { IsNull, Repository } from 'typeorm';
-import { ApiKey } from '../entities/ApiKey';
+import { getRepository } from 'typeorm';
+import { ApiKey, ApiKeyScope } from '../entities/ApiKey';
 import { User } from '../entities/User';
-import AppDataSource from '../config/db';
 import { AppError } from '../errors/AppError';
-import { ERROR_MESSAGES } from '../config/constants';
-import {
-  validateRequired,
-  validateStringLength,
-  validateUUID,
-} from '../validators/ServiceValidator';
-import { Permission, ROLE_PERMISSIONS } from '../types/Permissions';
-import {
-  generateApiKey,
-  hashApiKey,
-  isApiKeyFormat,
-  timingSafeEqualHex,
-} from '../utils/apiKeyCrypto';
+import * as crypto from 'crypto';
 
 /** Maximum length of the user-supplied key name. */
 const API_KEY_NAME_MAX_LENGTH = 100;
@@ -51,13 +38,8 @@ export interface AuthenticatedApiKey {
  * (Issue #89).
  */
 export class ApiKeyService {
-  private apiKeyRepo: Repository<ApiKey>;
-  private userRepo: Repository<User>;
-
-  constructor() {
-    this.apiKeyRepo = AppDataSource.getRepository(ApiKey);
-    this.userRepo = AppDataSource.getRepository(User);
-  }
+  private apiKeyRepo = getRepository(ApiKey);
+  private userRepo = getRepository(User);
 
   /**
    * Issues a new API key for a user.
@@ -76,6 +58,7 @@ export class ApiKeyService {
   async createApiKey(
     userId: string,
     name: string,
+    scopes: ApiKeyScope[] = [],
     permissions: string[] = [],
     rateLimitTier: string = 'standard',
   ): Promise<CreatedApiKey> {
@@ -84,25 +67,12 @@ export class ApiKeyService {
     validateStringLength(name, 'name', 1, API_KEY_NAME_MAX_LENGTH);
 
     const user = await this.userRepo.findOne({ where: { id: userId } });
-
     if (!user) {
-      throw AppError.notFound(ERROR_MESSAGES.USER_NOT_FOUND);
+      throw AppError.notFound('User not found');
     }
 
-    const requestedPermissions = this.normalizePermissions(permissions);
-    this.assertPermissionsWithinRole(requestedPermissions, user);
-
-    const activeKeyCount = await this.apiKeyRepo.count({
-      where: { userId, revokedAt: IsNull() },
-    });
-
-    if (activeKeyCount >= MAX_ACTIVE_KEYS_PER_USER) {
-      throw AppError.businessLogic(
-        `API key limit reached (${MAX_ACTIVE_KEYS_PER_USER} active keys). Revoke an existing key first.`,
-      );
-    }
-
-    const { rawKey, keyHash, keyPrefix } = generateApiKey();
+    const rawKey = `ab_${crypto.randomBytes(32).toString('hex')}`;
+    const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
 
     const apiKey = this.apiKeyRepo.create({
       userId,
@@ -231,7 +201,6 @@ export class ApiKeyService {
         `Permission '${invalid}' exceeds the capabilities of role '${user.role}'`,
       );
     }
-  }
 
   private toView(apiKey: ApiKey): ApiKeyView {
     return {
