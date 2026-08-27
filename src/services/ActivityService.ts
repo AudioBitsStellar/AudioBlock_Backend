@@ -4,36 +4,82 @@ import { ActivityFeed } from '../entities/ActivityFeed';
 import { UserFollow } from '../entities/UserFollow';
 import { AppError } from '../errors/AppError';
 
+export const KNOWN_ACTIVITY_TYPES = [
+  'song_upload',
+  'song_purchase',
+  'artist_follow',
+  'song_save',
+  'album_release',
+] as const;
+
+export type ActivityType = (typeof KNOWN_ACTIVITY_TYPES)[number];
+
 export class ActivityService {
   private activityRepo: Repository<ActivityFeed>;
   private userFollowRepo: Repository<UserFollow>;
 
-  constructor() {
-    this.activityRepo = AppDataSource.getRepository(ActivityFeed);
-    this.userFollowRepo = AppDataSource.getRepository(UserFollow);
+  async recordActivity(
+    userId: string,
+    actionType: ActivityType,
+    targetId: string,
+    targetType: string,
+    metadata?: any
+  ): Promise<void> {
+    try {
+      const activity = this.activityRepo.create({
+        userId,
+        actionType,
+        targetId,
+        targetType,
+        metadata,
+      });
+      await this.activityRepo.save(activity);
+    } catch (error) {
+      console.error('Failed to record activity', error);
+    }
   }
 
-  /**
-   * Retrieve activity feed items. Supports an optional 'followingOnly' mode
-   * which scopes results to accounts followed by the specified user.
-   */
-  async getActivityFeed(userId?: string, followingOnly?: boolean, limit: number = 20, offset: number = 0): Promise<{ items: ActivityFeed[]; total: number }> {
-    if (followingOnly) {
-      if (!userId) {
-        throw AppError.authentication('Authentication required for following-only activity feed');
+  private validateTypes(types: string[]): void {
+    for (const t of types) {
+      if (!((KNOWN_ACTIVITY_TYPES as readonly string[]).includes(t))) {
+        throw AppError.badRequest(`Invalid activity type: ${t}`);
       }
+    }
+  }
 
-      // Retrieve IDs of users that the current user follows
-      const follows = await this.userFollowRepo.find({
-        where: { followerId: userId },
-        select: ['followingId'],
-      });
+  async getFeed(userId: string, cursor?: string, limit = 20, typeFilter?: string | string[]) {
+    // For now, we only query for the user's own activities as 'following' relation is not defined in User
+    const userIds = [userId];
+    
+    const ninetyDaysAgo = new Date();
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+
+    let query = this.activityRepo.createQueryBuilder('activity')
+      .where('activity.userId IN (:...userIds)', { userIds })
+      .andWhere('activity.createdAt > :ninetyDaysAgo', { ninetyDaysAgo });
+
+    if (typeFilter) {
+      const types = Array.isArray(typeFilter) ? typeFilter : typeFilter.split(',').map(s => s.trim()).filter(Boolean);
+      this.validateTypes(types);
+      if (types.length > 0) {
+        query = query.andWhere('activity.actionType IN (:...types)', { types });
+      }
+    }
+
+    if (cursor) {
+      query = query.andWhere('activity.id < :cursor', { cursor });
+    }
+
+    const activities = await query
+      .orderBy('activity.createdAt', 'DESC')
+      .limit(limit)
+      .getMany();
 
       const followingIds = follows.map((f) => f.followingId);
 
-      if (followingIds.length === 0) {
-        return { items: [], total: 0 };
-      }
+  async getUserActivities(userId: string, cursor?: string, limit = 20, typeFilter?: string | string[]) {
+    const ninetyDaysAgo = new Date();
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
       const [items, total] = await this.activityRepo.findAndCount({
         where: { userId: In(followingIds) },
@@ -43,7 +89,16 @@ export class ActivityService {
         relations: ['user'],
       });
 
-      return { items, total };
+    if (typeFilter) {
+      const types = Array.isArray(typeFilter) ? typeFilter : typeFilter.split(',').map(s => s.trim()).filter(Boolean);
+      this.validateTypes(types);
+      if (types.length > 0) {
+        query = query.andWhere('activity.actionType IN (:...types)', { types });
+      }
+    }
+
+    if (cursor) {
+      query = query.andWhere('activity.id < :cursor', { cursor });
     }
 
     const [items, total] = await this.activityRepo.findAndCount({

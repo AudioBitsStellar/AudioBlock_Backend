@@ -7,6 +7,9 @@ services:
     ports:
       - "4000:4000"
     env_file: .env.docker
+    environment:
+      # Declared here as a default (Issue #404); overlay files override it.
+      - NODE_ENV=development
     depends_on:
       - db
       - redis

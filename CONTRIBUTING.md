@@ -26,6 +26,25 @@ Thank you for your interest in contributing to AudioBlock Backend! This document
    npm run dev
    \`\`\`
 
+## Test Coverage Threshold (#396)
+
+CI enforces minimum coverage via `jest --coverage`. The thresholds (defined in `jest.config.js`) are:
+
+| Metric | Minimum |
+|---|---|
+| Lines | 50% |
+| Functions | 50% |
+| Branches | 40% |
+| Statements | 50% |
+
+Run coverage locally before pushing:
+
+```bash
+npm run test:coverage
+```
+
+Jest will exit non-zero and print which metric fell below threshold. Keep new code covered — do not lower the thresholds without a team discussion.
+
 ## Coding Standards
 Please refer to our [Coding Conventions](docs/conventions.md) document for detailed guidelines on how to format and structure your code. Our project uses ESLint and Prettier to enforce these standards. Run `npm run lint:fix` before submitting your code.
 

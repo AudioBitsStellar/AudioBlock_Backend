@@ -17,6 +17,7 @@ an artist's behalf without ever holding their private key.
 - [On-Chain Integration: Client Signs, Backend Relays](#on-chain-integration-client-signs-backend-relays)
 - [Authentication](#authentication)
 - [Environment Variables](#environment-variables)
+- [Documentation](#documentation)
 - [Getting Started](#getting-started)
 - [Scripts](#scripts)
 - [Known Issues / Cleanup Backlog](#known-issues--cleanup-backlog)
@@ -525,6 +526,18 @@ full current schema (User, Song, Album, Genre, TransactionLog, RoyaltyPayout).
 The first deployment to a new database will run this migration to set up all
 tables and indexes.
 
+## Documentation
+
+Additional in-repo docs live under [`docs/`](docs/):
+
+- [Deployment & Scaling Guide](docs/deployment-and-scaling.md) — expected
+  CPU/memory sizing for the API and the ffmpeg-backed worker, how to measure
+  it, and how to scale each process (Issue #405)
+- [Architecture](docs/ARCHITECTURE.md) — high-level module layout
+- [Database Schema](docs/database-schema.md) & [Migrations](docs/migrations.md)
+- [Conventions](docs/conventions.md), [ADR catalog](docs/adrs/), and the
+  [OpenAPI spec](docs/openapi.yaml)
+
 ## Getting Started
 
 ### With Docker (recommended)
@@ -539,6 +552,24 @@ docker compose up --build
 This brings up Postgres, Redis, RabbitMQ, pgAdmin (`localhost:5050`), and the
 API itself (`localhost:4000`) with hot-reload enabled via
 `docker-compose.override.yml`.
+
+#### Docker Compose consistency (Issue #404)
+
+The repo tracks five compose files — `docker-compose.yml` (base),
+`docker-compose.dev.yml`, `docker-compose.override.yml`,
+`docker-compose.prod.yml`, and `docker-compose.test.yml`. The base file is the
+source of truth for the full topology; overlay files only extend it. To keep
+the files from silently drifting apart (e.g. an env var added to one but not
+the others):
+
+```bash
+npm run compose:check
+```
+
+The script fails (exit 1) if an overlay references a service the base file does
+not define, or if an overlay sets an environment key that the base file has
+never declared. It is also run automatically in CI, so a PR that introduces
+drift will be caught before merge.
 
 ### Without Docker
 
@@ -566,6 +597,7 @@ npm run dev
 | `npm test` | Runs the full Jest suite (`src/__tests__/**/*.test.ts`) |
 | `npm test -- src/__tests__/health.test.ts` | Runs a single test file (swap in any path under `src/__tests__`) |
 | `npm run test:watch` | Runs Jest in watch mode |
+| `npm run compose:check` | Validates that all docker-compose files are mutually consistent (Issue #404) |
 
 ## Known Issues / Cleanup Backlog
 

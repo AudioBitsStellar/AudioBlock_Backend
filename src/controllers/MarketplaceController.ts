@@ -86,4 +86,64 @@ export class MarketplaceController {
       handleError(req, res, error);
     }
   };
+  static prepareAuction = async (req: Request, res: Response) => {
+    try {
+      const stellarPublicKey = (req as any).user?.stellarPublicKey as string;
+      const { tokenId, startingPriceInStroops, durationSeconds } = req.body;
+      if (!stellarPublicKey) {
+        throw AppError.businessLogic(
+          'Connect a Stellar wallet before listing',
+          undefined,
+          'WALLET_NOT_CONNECTED',
+        );
+      }
+      const prepared = await marketplaceService.prepareAuction(
+        stellarPublicKey,
+        Number(tokenId),
+        Number(startingPriceInStroops),
+        Number(durationSeconds)
+      );
+      return res.status(200).json({ success: true, data: prepared });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  static submitAuction = async (req: Request, res: Response) => {
+    try {
+      const { signedXdr } = req.body;
+      const result = await marketplaceService.submitAuction(signedXdr);
+      return res.status(200).json({ success: true, data: result });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  static prepareBid = async (req: Request, res: Response) => {
+    try {
+      const stellarPublicKey = (req as any).user?.stellarPublicKey as string;
+      const { tokenId, bidAmountInStroops } = req.body;
+      if (!stellarPublicKey) {
+        throw AppError.businessLogic(
+          'Connect a Stellar wallet before bidding',
+          undefined,
+          'WALLET_NOT_CONNECTED',
+        );
+      }
+      const prepared = await marketplaceService.prepareBid(stellarPublicKey, Number(tokenId), Number(bidAmountInStroops));
+      return res.status(200).json({ success: true, data: prepared });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  static submitBid = async (req: Request, res: Response) => {
+    try {
+      const { signedXdr } = req.body;
+      const result = await marketplaceService.submitBid(signedXdr);
+      return res.status(200).json({ success: true, data: result });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
 }

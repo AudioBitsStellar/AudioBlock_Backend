@@ -18,8 +18,8 @@ export enum RoyaltyPayoutStatus {
 export interface RoyaltySplit {
   recipientPublicKey: string;
   shareBps: number;
-  expectedAmountStroops: string;
-  actualAmountStroops?: string;
+  expectedAmount: string;
+  actualAmount?: string;
 }
 
 @Entity('royalty_payouts')
@@ -52,7 +52,7 @@ export class RoyaltyPayout {
   currency!: string;
 
   @Column({ type: 'bigint' })
-  grossAmountStroops!: string;
+  grossAmount!: string;
 
   @Column('simple-json')
   expectedSplits!: RoyaltySplit[];

@@ -16,4 +16,10 @@ router.post('/:id/songs', requireAuth, PlaylistController.addSong);
 router.delete('/:id/songs/:songId', requireAuth, PlaylistController.removeSong);
 router.put('/:id/reorder', requireAuth, PlaylistController.reorder);
 
+// Collaborative editing (Issue #406).
+router.get('/:id/collaborators', requireAuth, PlaylistController.listCollaborators);
+router.post('/:id/collaborators', requireAuth, PlaylistController.addCollaborator);
+router.put('/:id/collaborators/:userId', requireAuth, PlaylistController.updateCollaboratorRole);
+router.delete('/:id/collaborators/:userId', requireAuth, PlaylistController.removeCollaborator);
+
 export default router;
