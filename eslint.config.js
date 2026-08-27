@@ -26,7 +26,7 @@ module.exports = tseslint.config(
       ],
       'prefer-const': 'warn',
       'consistent-return': 'warn',
-      complexity: ['warn', 15],
+      complexity: ['error', 15],
       'max-lines-per-function': ['warn', 50],
       'max-lines': ['warn', 300],
       'max-params': ['warn', 5],

@@ -65,6 +65,7 @@ export async function startSongWorker() {
 
     logger.info(`🎵 Waiting for messages in queue: ${MAIN_QUEUE} (max attempts: ${MAX_ATTEMPTS})`);
 
+    // eslint-disable-next-line complexity -- existing handler tracked in docs/refactoring_priority.md
     channel.consume(MAIN_QUEUE, async (msg) => {
       if (!msg) return;
 

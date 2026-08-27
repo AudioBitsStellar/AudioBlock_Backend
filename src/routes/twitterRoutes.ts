@@ -55,6 +55,7 @@ router.get('/init', authArtistMiddleware, async (req: Request, res: Response) =>
 // token refresh flow is needed.  If a future feature requires posting tweets
 // or reading DMs on the user's behalf, persist access_token / refresh_token
 // and implement the OAuth 2.0 refresh flow at that point.
+// eslint-disable-next-line complexity -- existing handler tracked in docs/refactoring_priority.md
 router.get('/callback', async (req: Request, res: Response) => {
   const { code, state } = req.query as { code?: string; state?: string };
 

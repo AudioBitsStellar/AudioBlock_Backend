@@ -90,6 +90,7 @@ export class SongVersionService {
    * @throws {AppError} 404 when the song does not exist, 403 when the caller
    *   does not own it.
    */
+  // eslint-disable-next-line complexity -- existing method tracked in docs/refactoring_priority.md
   async createVersionFromReupload(
     songId: string,
     artistId: string,
