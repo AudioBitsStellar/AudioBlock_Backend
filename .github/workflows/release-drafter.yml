@@ -1,0 +1,26 @@
+name: Release Drafter
+
+on:
+  # Re-draft on every push to main (e.g. after a PR is merged)
+  push:
+    branches:
+      - main
+  # Also allow manually triggering a draft from the Actions UI
+  workflow_dispatch:
+
+permissions:
+  contents: write       # needed to create/update the draft release
+  pull-requests: read   # needed to read PR titles & labels
+
+jobs:
+  update_release_draft:
+    name: Update Release Draft
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Draft / update release notes
+        uses: release-drafter/release-drafter@v6
+        with:
+          config-name: release-drafter.yml   # points to .github/release-drafter.yml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
