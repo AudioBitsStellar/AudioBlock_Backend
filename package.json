@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "jest",
+    "test:coverage": "jest --coverage",
     "test:integration": "jest --runInBand tests/integration/**/*.test.ts",
     "test:watch": "jest --watch",
     "test:dynamic": "ts-node-esm src/scripts/dynamic.ts",
