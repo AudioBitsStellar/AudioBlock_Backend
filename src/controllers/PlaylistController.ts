@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { PlaylistService } from '../services/PlaylistService';
+import { PlaylistCollaboratorRole } from '../entities/PlaylistCollaborator';
 import { handleError } from '../utils/helpers';
 import { AppError } from '../errors/AppError';
 
@@ -10,12 +11,14 @@ export class PlaylistController {
   static create = async (req: Request, res: Response) => {
     try {
       const userId = (req as any).user.id as string;
-      const { name, description, isPublic, coverImageUrl } = req.body;
+      const { name, description, isPublic, coverImageUrl, isRuleBased, rule } = req.body;
       const playlist = await playlistService.create(userId, {
         name,
         description,
         isPublic,
         coverImageUrl,
+        isRuleBased,
+        rule,
       });
       return res.status(201).json({ success: true, data: playlist });
     } catch (error) {
@@ -54,7 +57,7 @@ export class PlaylistController {
     try {
       const playlistId = req.params.id as string;
       const userId = (req as any).user.id as string;
-      const { name, description, isPublic, coverImageUrl } = req.body;
+      const { name, description, isPublic, coverImageUrl, isRuleBased, rule } = req.body;
 
       if (Object.keys(req.body ?? {}).length === 0) {
         throw AppError.validation('Nothing to update', undefined, 'PLAYLIST_EMPTY_UPDATE');
@@ -65,6 +68,8 @@ export class PlaylistController {
         description,
         isPublic,
         coverImageUrl,
+        isRuleBased,
+        rule,
       });
       return res.status(200).json({ success: true, data: playlist });
     } catch (error) {
@@ -133,6 +138,67 @@ export class PlaylistController {
 
       const playlist = await playlistService.reorder(playlistId, userId, songIds);
       return res.status(200).json({ success: true, data: playlist });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  /** GET /api/playlists/:id/collaborators — list a playlist's collaborators. */
+  static listCollaborators = async (req: Request, res: Response) => {
+    try {
+      const playlistId = req.params.id as string;
+      const viewerId = (req as any).user.id as string;
+      const collaborators = await playlistService.listCollaborators(playlistId, viewerId);
+      return res.status(200).json({ success: true, data: collaborators });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  /** POST /api/playlists/:id/collaborators — invite a collaborator (owner only). */
+  static addCollaborator = async (req: Request, res: Response) => {
+    try {
+      const playlistId = req.params.id as string;
+      const userId = (req as any).user.id as string;
+      const role =
+        (req.body?.role as PlaylistCollaboratorRole | undefined) ?? PlaylistCollaboratorRole.EDITOR;
+      const collaborator = await playlistService.addCollaborator(playlistId, userId, {
+        userId: req.body?.userId as string,
+        role,
+      });
+      return res.status(201).json({ success: true, data: collaborator });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  /** PUT /api/playlists/:id/collaborators/:userId — update a collaborator's role (owner only). */
+  static updateCollaboratorRole = async (req: Request, res: Response) => {
+    try {
+      const playlistId = req.params.id as string;
+      const ownerId = (req as any).user.id as string;
+      const targetUserId = req.params.userId as string;
+      const role = req.body?.role as PlaylistCollaboratorRole;
+      const collaborator = await playlistService.updateCollaboratorRole(
+        playlistId,
+        ownerId,
+        targetUserId,
+        role,
+      );
+      return res.status(200).json({ success: true, data: collaborator });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  /** DELETE /api/playlists/:id/collaborators/:userId — remove a collaborator. */
+  static removeCollaborator = async (req: Request, res: Response) => {
+    try {
+      const playlistId = req.params.id as string;
+      const requesterId = (req as any).user.id as string;
+      const targetUserId = req.params.userId as string;
+      await playlistService.removeCollaborator(playlistId, requesterId, targetUserId);
+      return res.status(200).json({ success: true, message: 'Collaborator removed' });
     } catch (error) {
       handleError(req, res, error);
     }
