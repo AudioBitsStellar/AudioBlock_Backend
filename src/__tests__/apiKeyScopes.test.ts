@@ -4,6 +4,7 @@ import { ApiKey } from '../entities/ApiKey';
 import { User } from '../entities/User';
 import { Permission } from '../types/Permissions';
 
+// Test suite for API key scope validation and permission enforcement
 describe('ApiKey scopes and permissions enforcement', () => {
   let apiKeyService: ApiKeyService;
 
