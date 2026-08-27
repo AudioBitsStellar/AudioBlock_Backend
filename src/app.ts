@@ -19,7 +19,7 @@ import adminRoutes from "./routes/adminRoutes";
 import webhookRoutes from "./routes/webhookRoutes";
 import takedownRoutes from "./routes/takedownRoutes";
 import embedRoutes from "./routes/embedRoutes";
-
+import royaltyPayoutRoutes from "./routes/royaltyPayoutRoutes";
 
 // Route imports
 
@@ -90,6 +90,9 @@ app.use("/api/song", SongRoutes);
 
 // Marketplace Soroban relay (list + buy)
 app.use("/api/marketplace", marketplaceRoutes);
+
+// Royalty payouts
+app.use("/api/royalty-payouts", royaltyPayoutRoutes);
 
 // Admin moderation routes
 app.use("/api/admin", adminRoutes);

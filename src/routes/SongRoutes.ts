@@ -123,4 +123,8 @@ router.post(
   SongController.submitMint
 );
 
+// Collaborator dispute endpoints
+router.post("/:id/collaborators/dispute", authArtistMiddleware, SongController.disputeSplit);
+router.post("/:id/collaborators/:userId/resolve-dispute", authArtistMiddleware, SongController.resolveDispute);
+
 export default router;
