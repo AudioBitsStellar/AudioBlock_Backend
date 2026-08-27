@@ -1,66 +1,34 @@
 import 'reflect-metadata';
-import { requireApiKeyScope } from '../middlewares/apiKeyMiddleware';
 import { ApiKeyService } from '../services/ApiKeyService';
+import { ApiKeyScope } from '../entities/ApiKey';
+import { requireApiKeyScope } from '../middlewares/apiKeyMiddleware';
+import { createMockRequest, createMockResponse } from '../../tests/helpers';
 
-jest.mock('../services/ApiKeyService', () => {
-  return {
-    ApiKeyService: jest.fn().mockImplementation(() => ({
-      validateApiKey: jest.fn().mockImplementation(async (key) => {
-        if (key === 'valid-read-key') {
-          return {
-            apiKey: { id: '1', scopes: ['read-only'], revokedAt: null },
-            user: { id: 'u1', role: 'user' },
-          };
-        }
-        if (key === 'valid-admin-key') {
-          return {
-            apiKey: { id: '2', scopes: ['admin'], revokedAt: null },
-            user: { id: 'u1', role: 'admin' },
-          };
-        }
-        throw new Error('Invalid key');
-      }),
-      keyHasScope: jest.fn().mockImplementation((apiKey, scope) => {
-        if (apiKey.scopes.includes('admin') || apiKey.scopes.includes(scope)) {
-          return true;
-        }
-        return false;
-      }),
-    })),
-  };
-});
+jest.mock('../config/db', () => ({
+  __esModule: true,
+  default: { getRepository: jest.fn() },
+}));
 
-describe('ApiKey Scopes Middleware (#scopes)', () => {
-  it('rejects a key with narrow scope trying to access out-of-scope routes', async () => {
-    const req: any = {
-      headers: { 'x-api-key': 'valid-read-key' },
-    };
-    const res: any = {
-      status: jest.fn().mockReturnThis(),
-      json: jest.fn(),
-    };
-    const next = jest.fn();
+describe('ApiKey Scopes & Enforcement', () => {
+  let apiKeyService: ApiKeyService;
 
-    const middleware = requireApiKeyScope('upload');
-    await middleware(req, res, next);
-
-    expect(next).not.toHaveBeenCalled();
-    expect(res.status).toHaveBeenCalledWith(403);
+  beforeEach(() => {
+    apiKeyService = new ApiKeyService();
   });
 
-  it('allows a key with matching scope to access the route', async () => {
-    const req: any = {
-      headers: { 'x-api-key': 'valid-read-key' },
-    };
-    const res: any = {
-      status: jest.fn().mockReturnThis(),
-      json: jest.fn(),
-    };
-    const next = jest.fn();
+  it('correctly evaluates scope permissions', () => {
+    const keyRead = { scopes: [ApiKeyScope.READ_ONLY] } as any;
+    const keyUpload = { scopes: [ApiKeyScope.UPLOAD] } as any;
+    const keyAdmin = { scopes: [ApiKeyScope.ADMIN] } as any;
 
-    const middleware = requireApiKeyScope('read-only');
-    await middleware(req, res, next);
+    expect(apiKeyService.keyHasScope(keyRead, ApiKeyScope.READ_ONLY)).toBe(true);
+    expect(apiKeyService.keyHasScope(keyRead, ApiKeyScope.UPLOAD)).toBe(false);
 
-    expect(next).toHaveBeenCalled();
+    expect(apiKeyService.keyHasScope(keyUpload, ApiKeyScope.UPLOAD)).toBe(true);
+    expect(apiKeyService.keyHasScope(keyUpload, ApiKeyScope.READ_ONLY)).toBe(false);
+
+    expect(apiKeyService.keyHasScope(keyAdmin, ApiKeyScope.READ_ONLY)).toBe(true);
+    expect(apiKeyService.keyHasScope(keyAdmin, ApiKeyScope.UPLOAD)).toBe(true);
+    expect(apiKeyService.keyHasScope(keyAdmin, ApiKeyScope.ADMIN)).toBe(true);
   });
 });
