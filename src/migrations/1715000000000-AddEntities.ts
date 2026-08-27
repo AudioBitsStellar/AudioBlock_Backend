@@ -21,3 +21,4 @@ export class AddEntities1715000000000 implements MigrationInterface {
         await queryRunner.query(`DROP TABLE "refresh_tokens"`);
     }
 }
+

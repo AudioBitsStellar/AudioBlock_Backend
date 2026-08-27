@@ -4,10 +4,11 @@ import { RegisterWithEmailDTO } from '../dtos/RegisterWithEmailDTO';
 import { LoginWithEmailDTO } from '../dtos/LoginWithEmailDTO';
 import { Repository } from 'typeorm';
 import { User } from '../entities/User';
+import { RefreshToken } from '../entities/RefreshToken';
 import AppDataSource from '../config/db';
 import jwt, { JwtPayload } from 'jsonwebtoken';
 import redis from '../config/redis';
-import { randomBytes } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
 import bcrypt from 'bcrypt';
 import { generateSecret, generateURI, verifySync } from 'otplib';
 import QRCode from 'qrcode';
@@ -60,6 +61,20 @@ export class AuthService {
     };
 
     return jwt.sign(payload, JWT_SECRET, { expiresIn: '15m' });
+  }
+
+  private signRefreshToken(user: User): string {
+    const REFRESH_SECRET = process.env.REFRESH_TOKEN_SECRET || process.env.JWT_SECRET || 'secret';
+    return jwt.sign({ id: user.id }, REFRESH_SECRET, { expiresIn: '7d' });
+  }
+
+  private async verifyRefreshToken(token: string): Promise<JwtPayload | null> {
+    const REFRESH_SECRET = process.env.REFRESH_TOKEN_SECRET || process.env.JWT_SECRET || 'secret';
+    try {
+      return jwt.verify(token, REFRESH_SECRET) as JwtPayload;
+    } catch {
+      throw AppError.authentication('Invalid refresh token');
+    }
   }
 
   /** Registers a user with email + password instead of a wallet signature. */
@@ -419,14 +434,18 @@ export class AuthService {
     return `refresh:${userId}`;
   }
 
-  private async storeRefreshToken(userId: string, refreshToken: string, familyId?: string): Promise<void> {
+  private async storeRefreshToken(
+    userId: string,
+    refreshToken: string,
+    familyId?: string,
+  ): Promise<void> {
     const expiresAt = new Date();
     expiresAt.setSeconds(expiresAt.getSeconds() + REFRESH_TOKEN_EXPIRY_SECONDS);
     const rt = this.refreshTokenRepo.create({
       userId,
       token: refreshToken,
       expiresAt,
-      familyId: familyId || randomUUID()
+      familyId: familyId || randomUUID(),
     });
     await this.refreshTokenRepo.save(rt);
   }
@@ -461,7 +480,7 @@ export class AuthService {
     const newToken = this.signToken(user);
     const newRefreshToken = this.signRefreshToken(user);
     await this.storeRefreshToken(user.id, newRefreshToken, rt.familyId);
-    
+
     return { token: newToken, refreshToken: newRefreshToken };
   }
 

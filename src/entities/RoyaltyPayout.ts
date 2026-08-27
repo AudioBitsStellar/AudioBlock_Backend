@@ -58,7 +58,7 @@ export class RoyaltyPayout {
   expectedSplits!: RoyaltySplit[];
 
   @Column({
-    type: 'enum',
+    type: 'simple-enum',
     enum: RoyaltyPayoutStatus,
     default: RoyaltyPayoutStatus.PENDING,
   })
@@ -67,7 +67,7 @@ export class RoyaltyPayout {
   @Column({ nullable: true })
   discrepancyReason?: string;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ type: 'datetime', nullable: true })
   reconciledAt?: Date;
 
   @ManyToOne(() => User, (user) => user.royaltyPayouts, {

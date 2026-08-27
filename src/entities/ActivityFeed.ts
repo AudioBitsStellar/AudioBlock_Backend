@@ -1,31 +1,39 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn, Index } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  ManyToOne,
+  JoinColumn,
+  Index,
+} from 'typeorm';
 import { User } from './User';
 
 @Entity('activity_feed')
 @Index(['userId', 'createdAt'])
 export class ActivityFeed {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   @Column()
-  userId: string;
+  userId!: string;
 
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })
-  user: User;
+  user!: User;
 
   @Column()
-  actionType: string;
+  actionType!: string;
 
   @Column()
-  targetId: string;
+  targetId!: string;
 
   @Column()
-  targetType: string;
+  targetType!: string;
 
   @Column('jsonb', { nullable: true })
-  metadata: any;
+  metadata?: any;
 
   @CreateDateColumn()
-  createdAt: Date;
+  createdAt!: Date;
 }

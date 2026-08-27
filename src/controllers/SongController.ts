@@ -30,7 +30,7 @@ const coverArtService = new CoverArtService();
 export class SongController {
   static getSong = async (req: Request, res: Response) => {
     try {
-      const song = await songService.getSong(req.params.id);
+      const song = await songService.getSong(req.params.id as string);
       return res.status(200).json({ success: true, data: song });
     } catch (error) {
       handleError(req, res, error);
@@ -49,7 +49,7 @@ export class SongController {
 
   static updateSong = async (req: Request, res: Response) => {
     try {
-      const song = await songService.updateSong(req.params.id, req.body);
+      const song = await songService.updateSong(req.params.id as string, req.body);
       return res.status(200).json({ success: true, data: song });
     } catch (error) {
       handleError(req, res, error);
@@ -58,7 +58,7 @@ export class SongController {
 
   static deleteSong = async (req: Request, res: Response) => {
     try {
-      await songService.deleteSong(req.params.id);
+      await songService.deleteSong(req.params.id as string);
       return res.status(200).json({ success: true, data: null });
     } catch (error) {
       handleError(req, res, error);
