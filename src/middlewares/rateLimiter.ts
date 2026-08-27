@@ -62,3 +62,22 @@ const ADMIN_MAX = parseInt(process.env.ADMIN_RATE_LIMIT_MAX || '30', 10);
 export const apiRateLimiter = createSlidingWindowLimiter(API_WINDOW, API_MAX, 'api:rl');
 export const uploadRateLimiter = createSlidingWindowLimiter(UPLOAD_WINDOW, UPLOAD_MAX, 'upload:rl');
 export const adminRateLimiter = createSlidingWindowLimiter(ADMIN_WINDOW, ADMIN_MAX, 'admin:rl');
+
+export const createTieredApiRateLimiter = (
+  tierLimits: Record<string, { windowMs: number; max: number }>,
+  defaultTier: string = 'standard'
+) => {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const apiKey = (req as any).apiKey;
+    const tier = apiKey?.rateLimitTier && tierLimits[apiKey.rateLimitTier] ? apiKey.rateLimitTier : defaultTier;
+    const config = tierLimits[tier] || tierLimits[defaultTier] || { windowMs: API_WINDOW, max: API_MAX };
+    
+    const limiter = createSlidingWindowLimiter(
+      config.windowMs,
+      config.max,
+      `api:tier:${tier}`,
+      (r) => apiKey ? `api:rl:key:${apiKey.id}` : `${'api:rl'}:${r.ip}`
+    );
+    return limiter(req, res, next);
+  };
+};
