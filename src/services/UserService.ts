@@ -41,16 +41,30 @@ export class UserService {
    * @throws {AppError} If signature invalid, nonce expired/mismatch, or user already exists.
    */
   async createUser(data: CreateUserDTO): Promise<{ user: User; token: string }> {
-    // Service-layer input validation
-    validateRequired(data.email, 'email');
-    validateRequired(data.walletAddress, 'walletAddress');
-    validateRequired(data.signature, 'signature');
-    validateRequired(data.message, 'message');
-
-    validateEmail(data.email);
-    validateEthereumAddress(data.walletAddress);
-
     const dto = Object.assign(new CreateUserDTO(), data);
+
+    await this.validateUserCreation(dto);
+    await this.checkUserExists(dto.walletAddress);
+
+    const savedUser = await this.persistUser(dto);
+    await this.logUserCreation(savedUser);
+
+    const token = this.generateToken(savedUser);
+
+    return { user: savedUser, token };
+  }
+
+  /**
+   * Validate user creation input and signature.
+   */
+  private async validateUserCreation(dto: CreateUserDTO): Promise<void> {
+    validateRequired(dto.email, 'email');
+    validateRequired(dto.walletAddress, 'walletAddress');
+    validateRequired(dto.signature, 'signature');
+    validateRequired(dto.message, 'message');
+
+    validateEmail(dto.email);
+    validateEthereumAddress(dto.walletAddress);
 
     const recoveredAddress = verifyMessage(dto.message, dto.signature);
 
@@ -58,7 +72,6 @@ export class UserService {
       throw AppError.authentication(ERROR_MESSAGES.INVALID_SIGNATURE);
     }
 
-    // Extract and validate nonce from message
     const nonceMatch = dto.message.match(REGEX_PATTERNS.NONCE_IN_MESSAGE);
 
     if (!nonceMatch) {
@@ -66,7 +79,6 @@ export class UserService {
     }
     const nonce = nonceMatch[1];
 
-    // Verify nonce exists and matches stored one
     const storedNonce = await redis.get(`nonce:${dto.email}`);
 
     if (!storedNonce) {
@@ -77,31 +89,40 @@ export class UserService {
       throw AppError.authentication(ERROR_MESSAGES.NONCE_MISMATCH);
     }
 
-    //  Delete nonce immediately (one-time use)
     await redis.del(`nonce:${dto.email}`);
+  }
 
-    // Check if user already exists
+  /**
+   * Check if user already exists by wallet address.
+   */
+  private async checkUserExists(walletAddress: string): Promise<void> {
     const existingUser = await this.userRepo.findOneBy({
-      walletAddress: dto.walletAddress,
+      walletAddress,
     });
     if (existingUser) {
       throw AppError.conflict(ERROR_MESSAGES.USER_ALREADY_EXISTS);
     }
+  }
 
+  /**
+   * Persist user to database.
+   */
+  private async persistUser(dto: CreateUserDTO): Promise<User> {
     const user = this.userRepo.create(dto);
-    const savedUser = await this.userRepo.save(user);
+    return await this.userRepo.save(user);
+  }
 
+  /**
+   * Log user creation transaction.
+   */
+  private async logUserCreation(user: User): Promise<void> {
     const log = this.transactionLogRepo.create({
-      user_id: savedUser.id,
+      user_id: user.id,
       txHash: '',
       action: TRANSACTION_ACTIONS.CREATE_USER,
-      description: `User with wallet ${savedUser.walletAddress} created.`,
+      description: `User with wallet ${user.walletAddress} created.`,
     });
     await this.transactionLogRepo.save(log);
-
-    const token = this.generateToken(savedUser);
-
-    return { user: savedUser, token };
   }
 
   /**
