@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { RoyaltyTemplateService } from '../services/RoyaltyTemplateService';
 import { SongService } from '../services/SongService';
 import logger from '../config/logger';
+import { handleError } from '../utils/helpers';
 
 const templateService = new RoyaltyTemplateService();
 const songService = new SongService();
@@ -78,13 +79,4 @@ export class RoyaltyTemplateController {
       handleError(res, error);
     }
   };
-}
-
-function handleError(res: Response, error: unknown): void {
-  if (error instanceof Error) {
-    const statusCode = (error as any).statusCode || 400;
-    res.status(statusCode).json({ success: false, message: error.message });
-  } else {
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
 }

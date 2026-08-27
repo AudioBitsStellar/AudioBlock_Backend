@@ -4,7 +4,12 @@ import { AppError } from '../errors/AppError';
 import { handleError } from '../utils/helpers';
 import logger from '../config/logger';
 
-export const createSlidingWindowLimiter = (windowMs: number, max: number, prefix: string, keyGenerator?: (req: Request) => string) => {
+export const createSlidingWindowLimiter = (
+  windowMs: number,
+  max: number,
+  prefix: string,
+  keyGenerator?: (req: Request) => string,
+) => {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
       const key = keyGenerator ? keyGenerator(req) : `${prefix}:${req.ip}`;
@@ -37,7 +42,7 @@ export const createSlidingWindowLimiter = (windowMs: number, max: number, prefix
           res as any,
           AppError.rateLimited('Too many requests. Please try again later.', {
             retryAfter: retryAfterSec,
-          })
+          }),
         );
         return;
       }
@@ -53,7 +58,10 @@ export const createSlidingWindowLimiter = (windowMs: number, max: number, prefix
 const API_WINDOW = parseInt(process.env.API_RATE_LIMIT_WINDOW_MS || String(60 * 1000), 10);
 const API_MAX = parseInt(process.env.API_RATE_LIMIT_MAX || '100', 10);
 
-const UPLOAD_WINDOW = parseInt(process.env.UPLOAD_RATE_LIMIT_WINDOW_MS || String(60 * 60 * 1000), 10);
+const UPLOAD_WINDOW = parseInt(
+  process.env.UPLOAD_RATE_LIMIT_WINDOW_MS || String(60 * 60 * 1000),
+  10,
+);
 const UPLOAD_MAX = parseInt(process.env.UPLOAD_RATE_LIMIT_MAX || '10', 10);
 
 const ADMIN_WINDOW = parseInt(process.env.ADMIN_RATE_LIMIT_WINDOW_MS || String(60 * 1000), 10);
@@ -63,20 +71,42 @@ export const apiRateLimiter = createSlidingWindowLimiter(API_WINDOW, API_MAX, 'a
 export const uploadRateLimiter = createSlidingWindowLimiter(UPLOAD_WINDOW, UPLOAD_MAX, 'upload:rl');
 export const adminRateLimiter = createSlidingWindowLimiter(ADMIN_WINDOW, ADMIN_MAX, 'admin:rl');
 
+// Comment creation (issue #328): previously had no rate limiter at all,
+// unlike other user-generated-content routes — an authenticated user could
+// spam-post comments with no throttling. Keyed by the authenticated user
+// (comment creation always requires auth), falling back to IP for safety
+// if that's ever missing.
+const COMMENT_WINDOW = parseInt(process.env.COMMENT_RATE_LIMIT_WINDOW_MS || String(60 * 1000), 10);
+const COMMENT_MAX = parseInt(process.env.COMMENT_RATE_LIMIT_MAX || '10', 10);
+
+export const commentRateLimiter = createSlidingWindowLimiter(
+  COMMENT_WINDOW,
+  COMMENT_MAX,
+  'comment:rl',
+  (req) => {
+    const userId = (req as any).user?.id;
+    return userId ? `comment:rl:${userId}` : `comment:rl:${req.ip}`;
+  },
+);
+
 export const createTieredApiRateLimiter = (
   tierLimits: Record<string, { windowMs: number; max: number }>,
-  defaultTier: string = 'standard'
+  defaultTier: string = 'standard',
 ) => {
   return async (req: Request, res: Response, next: NextFunction) => {
     const apiKey = (req as any).apiKey;
-    const tier = apiKey?.rateLimitTier && tierLimits[apiKey.rateLimitTier] ? apiKey.rateLimitTier : defaultTier;
-    const config = tierLimits[tier] || tierLimits[defaultTier] || { windowMs: API_WINDOW, max: API_MAX };
-    
+    const tier =
+      apiKey?.rateLimitTier && tierLimits[apiKey.rateLimitTier]
+        ? apiKey.rateLimitTier
+        : defaultTier;
+    const config = tierLimits[tier] ||
+      tierLimits[defaultTier] || { windowMs: API_WINDOW, max: API_MAX };
+
     const limiter = createSlidingWindowLimiter(
       config.windowMs,
       config.max,
       `api:tier:${tier}`,
-      (r) => apiKey ? `api:rl:key:${apiKey.id}` : `${'api:rl'}:${r.ip}`
+      (r) => (apiKey ? `api:rl:key:${apiKey.id}` : `${'api:rl'}:${r.ip}`),
     );
     return limiter(req, res, next);
   };

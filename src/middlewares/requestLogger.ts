@@ -93,6 +93,11 @@ export const requestLoggerMiddleware: RequestHandler = (
         durationMs: duration,
         ip: req.ip,
         userId,
+        // Issue #326: user-agent wasn't captured, despite being a standard
+        // field for identifying the client/bot behind a request when
+        // debugging production issues (distinguishing browsers, mobile
+        // clients, and automated scanners hitting the same route).
+        userAgent: req.headers['user-agent'],
         ...(req.headers['content-length']
           ? { requestBodyBytes: Number(req.headers['content-length']) }
           : {}),

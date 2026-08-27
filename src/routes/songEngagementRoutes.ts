@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { SaveController } from '../controllers/SaveController';
 import { CommentController } from '../controllers/CommentController';
 import { requireAuth } from '../middlewares/authMiddleware';
+import { commentRateLimiter } from '../middlewares/rateLimiter';
 import { validateDTO } from '../middlewares/validate';
 import { SaveSongDTO } from '../dtos/SaveSongDTO';
 import { CreateCommentDTO } from '../dtos/CreateCommentDTO';
@@ -24,9 +25,11 @@ router.get('/:id/save', requireAuth, saveController.getSaveStatus);
 
 // Comments (Issue #90) — reading is public, posting requires a token.
 router.get('/:id/comments', commentController.getSongComments);
+// Issue #328: rate-limited per authenticated user — previously unthrottled.
 router.post(
   '/:id/comments',
   requireAuth,
+  commentRateLimiter,
   validateDTO(CreateCommentDTO),
   commentController.createComment,
 );
