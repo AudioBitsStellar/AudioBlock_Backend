@@ -24,6 +24,10 @@ logs/
 # Database migrations (auto-generated)
 src/migrations/
 
+# App entrypoint: intentionally uses double-quoted strings; keep lint-staged
+# from reformatting it on every change (see PR for playlist features).
+src/app.ts
+
 # Lock files
 package-lock.json
 yarn.lock

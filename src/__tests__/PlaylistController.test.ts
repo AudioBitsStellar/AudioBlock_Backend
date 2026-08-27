@@ -10,6 +10,10 @@ const mockRemove = jest.fn();
 const mockAddSong = jest.fn();
 const mockRemoveSong = jest.fn();
 const mockReorder = jest.fn();
+const mockListCollaborators = jest.fn();
+const mockAddCollaborator = jest.fn();
+const mockUpdateCollaboratorRole = jest.fn();
+const mockRemoveCollaborator = jest.fn();
 
 jest.mock('../services/PlaylistService', () => ({
   PlaylistService: jest.fn().mockImplementation(() => ({
@@ -21,6 +25,10 @@ jest.mock('../services/PlaylistService', () => ({
     addSong: mockAddSong,
     removeSong: mockRemoveSong,
     reorder: mockReorder,
+    listCollaborators: mockListCollaborators,
+    addCollaborator: mockAddCollaborator,
+    updateCollaboratorRole: mockUpdateCollaboratorRole,
+    removeCollaborator: mockRemoveCollaborator,
   })),
 }));
 
@@ -52,6 +60,10 @@ beforeEach(() => {
   mockAddSong.mockReset();
   mockRemoveSong.mockReset();
   mockReorder.mockReset();
+  mockListCollaborators.mockReset();
+  mockAddCollaborator.mockReset();
+  mockUpdateCollaboratorRole.mockReset();
+  mockRemoveCollaborator.mockReset();
 });
 
 describe('PlaylistController.create', () => {
@@ -69,6 +81,8 @@ describe('PlaylistController.create', () => {
       description: undefined,
       isPublic: false,
       coverImageUrl: undefined,
+      isRuleBased: undefined,
+      rule: undefined,
     });
     expect(status).toHaveBeenCalledWith(201);
     expect(json).toHaveBeenCalledWith({ success: true, data: playlist });
@@ -130,6 +144,8 @@ describe('PlaylistController.update', () => {
       description: undefined,
       isPublic: undefined,
       coverImageUrl: undefined,
+      isRuleBased: undefined,
+      rule: undefined,
     });
     expect(json).toHaveBeenCalledWith({ success: true, data: playlist });
   });
@@ -220,5 +236,90 @@ describe('PlaylistController.reorder', () => {
 
     expect(mockReorder).not.toHaveBeenCalled();
     expect(status).toHaveBeenCalledWith(400);
+  });
+});
+
+describe('PlaylistController.create (rule-based, Issue #407)', () => {
+  it('passes rule criteria through to the service', async () => {
+    const playlist = { id: 'pl-1', name: 'Lo-fi Favorites', isRuleBased: true };
+    mockCreate.mockResolvedValue(playlist);
+
+    const rule = { tags: ['lo-fi'], savedWithinDays: 30 };
+    const req = mockReq({ body: { name: 'Lo-fi Favorites', isRuleBased: true, rule } });
+    const { res, status } = mockRes();
+
+    await PlaylistController.create(req, res);
+
+    expect(mockCreate).toHaveBeenCalledWith('user-1', {
+      name: 'Lo-fi Favorites',
+      description: undefined,
+      isPublic: undefined,
+      coverImageUrl: undefined,
+      isRuleBased: true,
+      rule,
+    });
+    expect(status).toHaveBeenCalledWith(201);
+  });
+});
+
+describe('PlaylistController collaborators (Issue #406)', () => {
+  it('lists collaborators for the viewer', async () => {
+    mockListCollaborators.mockResolvedValue([{ id: 'pc-1', userId: 'user-2' }]);
+
+    const req = mockReq({ params: { id: 'pl-1' } });
+    const { res, json } = mockRes();
+
+    await PlaylistController.listCollaborators(req, res);
+
+    expect(mockListCollaborators).toHaveBeenCalledWith('pl-1', 'user-1');
+    expect(json).toHaveBeenCalledWith({
+      success: true,
+      data: [{ id: 'pc-1', userId: 'user-2' }],
+    });
+  });
+
+  it('invites a collaborator with a default editor role', async () => {
+    mockAddCollaborator.mockResolvedValue({ id: 'pc-1', userId: 'user-2', role: 'editor' });
+
+    const req = mockReq({ params: { id: 'pl-1' }, body: { userId: 'user-2' } });
+    const { res, json, status } = mockRes();
+
+    await PlaylistController.addCollaborator(req, res);
+
+    expect(mockAddCollaborator).toHaveBeenCalledWith('pl-1', 'user-1', {
+      userId: 'user-2',
+      role: 'editor',
+    });
+    expect(status).toHaveBeenCalledWith(201);
+  });
+
+  it('updates a collaborator role', async () => {
+    mockUpdateCollaboratorRole.mockResolvedValue({ id: 'pc-1', userId: 'user-2', role: 'viewer' });
+
+    const req = mockReq({
+      params: { id: 'pl-1', userId: 'user-2' },
+      body: { role: 'viewer' },
+    });
+    const { res, json } = mockRes();
+
+    await PlaylistController.updateCollaboratorRole(req, res);
+
+    expect(mockUpdateCollaboratorRole).toHaveBeenCalledWith('pl-1', 'user-1', 'user-2', 'viewer');
+    expect(json).toHaveBeenCalledWith({
+      success: true,
+      data: { id: 'pc-1', userId: 'user-2', role: 'viewer' },
+    });
+  });
+
+  it('removes a collaborator', async () => {
+    mockRemoveCollaborator.mockResolvedValue(undefined);
+
+    const req = mockReq({ params: { id: 'pl-1', userId: 'user-2' } });
+    const { res, json } = mockRes();
+
+    await PlaylistController.removeCollaborator(req, res);
+
+    expect(mockRemoveCollaborator).toHaveBeenCalledWith('pl-1', 'user-1', 'user-2');
+    expect(json).toHaveBeenCalledWith({ success: true, message: 'Collaborator removed' });
   });
 });
