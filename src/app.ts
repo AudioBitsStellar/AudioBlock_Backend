@@ -7,8 +7,8 @@ import express, {
 } from "express";
 import logger from "./config/logger";
 import { requestLoggerMiddleware } from "./middlewares/requestLogger";
+import { sanitizeInput } from "./middlewares/sanitizeInput";
 import cors from "cors";
-import redis from "./config/redis";
 import authRoutes from "./routes/authRoutes";
 import artistRoutes from "./routes/artistRoutes";
 import twitterRoutes from "./routes/twitterRoutes";
@@ -63,6 +63,15 @@ app.use(
 
 app.use(express.json());
 
+// Sanitize free-text fields in every JSON request body (issue #327).
+// sanitizeInput itself already no-ops for multipart/binary uploads and
+// non-object bodies, so applying it globally — after express.json() parses
+// the body, before any route sees it — is safe and is the only way to
+// guarantee every current and future free-text route (comments, bios,
+// report reasons, playlist names, ...) is covered without relying on each
+// route file to remember to wire it in individually. It was previously
+// defined but applied to zero routes.
+app.use(sanitizeInput);
 
 // Add timeout configurations
 app.use((req, res, next) => {
@@ -130,33 +139,37 @@ const customErrorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   // Multer file-size limit exceeded
   if (err.name === "MulterError" && err.code === "LIMIT_FILE_SIZE") {
     return res.status(413).json({
-      error: "Payload Too Large",
+      success: false,
       message: "Uploaded file exceeds the maximum allowed size.",
+      type: "VALIDATION_FAILED",
     });
   }
 
   // Other multer errors (file filter rejections, unexpected fields, etc.)
   if (err.name === "MulterError") {
     return res.status(400).json({
-      error: "Bad Request",
+      success: false,
       message: err.message,
+      type: "VALIDATION_FAILED",
     });
   }
 
   // File filter rejection errors are passed as plain Error through Express
   if (err instanceof Error && /Invalid file type|allowed/i.test(err.message)) {
     return res.status(400).json({
-      error: "Bad Request",
+      success: false,
       message: err.message,
+      type: "VALIDATION_FAILED",
     });
   }
 
   res.status(500).json({
-    error: "Internal Server Error",
+    success: false,
     message:
       process.env.NODE_ENV === "development"
         ? err.message
         : "Something went wrong",
+    type: "INTERNAL_ERROR",
   });
 };
 
@@ -166,8 +179,9 @@ app.use(customErrorHandler);
 app.use(((req: Request, res: Response) => {
   logger.warn({ reqId: (req as any).id, route: req.originalUrl }, "404 - Route not found");
   res.status(404).json({
-    error: "error",
+    success: false,
     message: `Route ${req.originalUrl} not found`,
+    type: "NOT_FOUND",
   });
 }) as RequestHandler);
 
