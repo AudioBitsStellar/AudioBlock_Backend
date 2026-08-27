@@ -1,79 +1,95 @@
-import AppDataSource from '../config/db';
-import { ApiKey } from '../entities/ApiKey';
+import { getRepository } from 'typeorm';
+import { ApiKey, ApiKeyScope } from '../entities/ApiKey';
 import { User } from '../entities/User';
-import { Permission } from '../types/Permissions';
 import { AppError } from '../errors/AppError';
-import crypto from 'crypto';
+import * as crypto from 'crypto';
 
 export class ApiKeyService {
-  private apiKeyRepository = AppDataSource.getRepository(ApiKey);
-  private userRepository = AppDataSource.getRepository(User);
+  private apiKeyRepo = getRepository(ApiKey);
+  private userRepo = getRepository(User);
 
-  async createApiKey(userId: string, name: string, permissions: string[] = [], scopes: string[] = []): Promise<{ apiKey: ApiKey; rawKey: string }> {
-    const user = await this.userRepository.findOneBy({ id: userId });
+  async createApiKey(
+    userId: string,
+    name: string,
+    scopes: ApiKeyScope[] = [],
+    permissions: string[] = [],
+  ): Promise<{ apiKey: ApiKey; rawKey: string }> {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
     if (!user) {
       throw AppError.notFound('User not found');
     }
 
-    const rawKey = 'ab_' + crypto.randomBytes(32).toString('hex');
+    const rawKey = `ab_${crypto.randomBytes(32).toString('hex')}`;
     const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
-    const keyPrefix = rawKey.slice(0, 8);
 
-    const apiKey = this.apiKeyRepository.create({
+    const apiKey = this.apiKeyRepo.create({
       userId,
       name,
       keyHash,
-      keyPrefix,
+      scopes: scopes.length > 0 ? scopes : [ApiKeyScope.READ_ONLY],
       permissions,
-      scopes,
       isRevoked: false,
     });
 
-    const saved = await this.apiKeyRepository.save(apiKey);
-    return { apiKey: saved, rawKey };
+    await this.apiKeyRepo.save(apiKey);
+
+    return { apiKey, rawKey };
   }
 
   async validateApiKey(rawKey: string): Promise<{ apiKey: ApiKey; user: User }> {
     const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
-    const apiKey = await this.apiKeyRepository.findOne({ where: { keyHash }, relations: ['user'] });
 
-    if (!apiKey || apiKey.isRevoked) {
+    const apiKey = await this.apiKeyRepo.findOne({
+      where: { keyHash, isRevoked: false },
+      relations: ['user'],
+    });
+
+    if (!apiKey) {
       throw AppError.authentication('Invalid or revoked API key');
     }
 
     apiKey.lastUsedAt = new Date();
-    await this.apiKeyRepository.save(apiKey);
+    await this.apiKeyRepo.save(apiKey);
 
     return { apiKey, user: apiKey.user };
   }
 
-  keyHasPermission(apiKey: ApiKey, user: User, permission: Permission): boolean {
+  keyHasScope(apiKey: ApiKey, requiredScope: ApiKeyScope): boolean {
+    if (!apiKey.scopes) {
+      return false;
+    }
+    if (apiKey.scopes.includes(ApiKeyScope.ADMIN)) {
+      return true;
+    }
+    return apiKey.scopes.includes(requiredScope);
+  }
+
+  keyHasPermission(apiKey: ApiKey, user: User, permission: string): boolean {
+    if (apiKey.scopes && apiKey.scopes.includes(ApiKeyScope.ADMIN)) {
+      return true;
+    }
     if (apiKey.permissions && apiKey.permissions.includes(permission)) {
-      return true;
-    }
-    if (apiKey.scopes && apiKey.scopes.includes(permission)) {
-      return true;
-    }
-    if (user.role === 'admin' || user.role === 'super_admin') {
       return true;
     }
     return false;
   }
 
   async listApiKeys(userId: string, includeRevoked = false): Promise<ApiKey[]> {
-    const where: any = { userId };
+    const query: any = { userId };
     if (!includeRevoked) {
-      where.isRevoked = false;
+      query.isRevoked = false;
     }
-    return this.apiKeyRepository.find({ where, order: { createdAt: 'DESC' } });
+    return this.apiKeyRepo.find({ where: query, order: { createdAt: 'DESC' } });
   }
 
-  async revokeApiKey(userId: string, keyId: string): Promise<ApiKey> {
-    const apiKey = await this.apiKeyRepository.findOneBy({ id: keyId, userId });
+  async revokeApiKey(userId: string, id: string): Promise<ApiKey> {
+    const apiKey = await this.apiKeyRepo.findOne({ where: { id, userId } });
     if (!apiKey) {
       throw AppError.notFound('API key not found');
     }
+
     apiKey.isRevoked = true;
-    return this.apiKeyRepository.save(apiKey);
+    await this.apiKeyRepo.save(apiKey);
+    return apiKey;
   }
 }
