@@ -24,4 +24,21 @@ router.post(
   MarketplaceController.submitBuy,
 );
 
+// Auction routes
+router.post('/prepare-auction', authArtistMiddleware, MarketplaceController.prepareAuction);
+router.post(
+  '/submit-auction',
+  authArtistMiddleware,
+  validateDTO(SubmitSignedXdrDTO),
+  MarketplaceController.submitAuction,
+);
+
+router.post('/prepare-bid', authListenerMiddleware, MarketplaceController.prepareBid);
+router.post(
+  '/submit-bid',
+  authListenerMiddleware,
+  validateDTO(SubmitSignedXdrDTO),
+  MarketplaceController.submitBid,
+);
+
 export default router;

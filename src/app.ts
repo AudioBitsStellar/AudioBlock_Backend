@@ -19,7 +19,8 @@ import adminRoutes from "./routes/adminRoutes";
 import webhookRoutes from "./routes/webhookRoutes";
 import takedownRoutes from "./routes/takedownRoutes";
 import embedRoutes from "./routes/embedRoutes";
-
+import royaltyPayoutRoutes from "./routes/royaltyPayoutRoutes";
+import playlistRoutes from "./routes/playlistRoutes";
 
 // Route imports
 
@@ -91,6 +92,9 @@ app.use("/api/song", SongRoutes);
 // Marketplace Soroban relay (list + buy)
 app.use("/api/marketplace", marketplaceRoutes);
 
+// Royalty payouts
+app.use("/api/royalty-payouts", royaltyPayoutRoutes);
+
 // Admin moderation routes
 app.use("/api/admin", adminRoutes);
 
@@ -102,6 +106,10 @@ app.use("/api/takedown", takedownRoutes);
 
 // Embeddable player (public, no auth)
 app.use("/api/embed", embedRoutes);
+
+
+// Playlists (Issue #77) + collaborative editing (#406) + smart playlists (#407)
+app.use("/api/playlists", playlistRoutes);
 
 
 //TWITTER CALLBACK ROUTE

@@ -19,7 +19,7 @@ export interface CreateRoyaltyPayoutInput {
   sellerPublicKey?: string;
   artistId?: string;
   currency?: string;
-  grossAmountStroops: string;
+  grossAmount: string;
   expectedSplits: RoyaltySplit[];
 }
 
@@ -52,7 +52,7 @@ export class RoyaltyPayoutService {
    */
   async buildSplitsFromCollaborators(
     songId: string,
-    grossAmountStroops: string,
+    grossAmount: string,
   ): Promise<RoyaltySplit[]> {
     const collaboratorRepo = AppDataSource.getRepository(SongCollaborator);
     const userRepo = AppDataSource.getRepository(User);
@@ -64,17 +64,17 @@ export class RoyaltyPayoutService {
 
     const users = await userRepo.findBy({ id: In(collaborators.map((c) => c.userId)) });
     const userById = new Map(users.map((u) => [u.id, u]));
-    const gross = BigInt(grossAmountStroops);
+    const gross = BigInt(grossAmount);
 
     return collaborators
       .filter((c) => userById.get(c.userId)?.stellarPublicKey)
       .map((c) => {
         const shareBps = Math.round(c.royaltyShare * 100);
-        const expectedAmountStroops = (gross * BigInt(shareBps)) / BigInt(10000);
+        const expectedAmount = (gross * BigInt(shareBps)) / BigInt(10000);
         return {
           recipientPublicKey: userById.get(c.userId)!.stellarPublicKey!,
           shareBps,
-          expectedAmountStroops: expectedAmountStroops.toString(),
+          expectedAmount: expectedAmount.toString(),
         };
       });
   }
@@ -96,7 +96,7 @@ export class RoyaltyPayoutService {
       sellerPublicKey: input.sellerPublicKey,
       artist_id: input.artistId,
       currency: input.currency || 'stroops',
-      grossAmountStroops: input.grossAmountStroops,
+      grossAmount: input.grossAmount,
       expectedSplits: input.expectedSplits,
       status: RoyaltyPayoutStatus.PENDING,
     });
@@ -112,7 +112,7 @@ export class RoyaltyPayoutService {
           userId: input.artistId,
           type: 'royalty_payout',
           title: 'Royalty payout recorded',
-          message: `A royalty payout of ${input.grossAmountStroops} ${
+          message: `A royalty payout of ${input.grossAmount} ${
             input.currency || 'stroops'
           } was recorded for your music.`,
           data: { saleEventId: input.saleEventId, songId: input.songId },
@@ -176,11 +176,11 @@ export class RoyaltyPayoutService {
 
       const splitResults = payout.expectedSplits.map((split) => ({
         ...split,
-        actualAmountStroops: actualByRecipient.get(split.recipientPublicKey),
+        actualAmount: actualByRecipient.get(split.recipientPublicKey),
       }));
 
       const missingOrMismatched = splitResults.filter(
-        (split) => split.actualAmountStroops !== split.expectedAmountStroops,
+        (split) => split.actualAmount !== split.expectedAmount,
       );
 
       payout.expectedSplits = splitResults;
@@ -191,8 +191,8 @@ export class RoyaltyPayoutService {
         payout.status = RoyaltyPayoutStatus.DISCREPANCY;
         payout.discrepancyReason = missingOrMismatched
           .map((split) => {
-            const actual = split.actualAmountStroops || 'missing';
-            return `${split.recipientPublicKey} expected ${split.expectedAmountStroops}, actual ${actual}`;
+            const actual = split.actualAmount || 'missing';
+            return `${split.recipientPublicKey} expected ${split.expectedAmount}, actual ${actual}`;
           })
           .join('; ');
         discrepancies.push(await this.royaltyPayoutRepo.save(payout));
@@ -217,5 +217,34 @@ export class RoyaltyPayoutService {
 
   private async fetchRoyaltyContractEvents(saleEventIds: string[]): Promise<RoyaltyPayoutEvent[]> {
     return this.soroban.getRoyaltyPayoutEvents(SorobanContracts.royalty, saleEventIds);
+  }
+
+  /**
+   * Export royalty payout history for a specific artist to CSV format.
+   *
+   * @param artistId - The UUID of the artist.
+   * @returns A CSV formatted string.
+   */
+  async exportHistory(artistId: string): Promise<string> {
+    const payouts = await this.royaltyPayoutRepo.find({
+      where: { artist_id: artistId },
+      order: { createdAt: 'DESC' },
+    });
+
+    if (payouts.length === 0) {
+      return "ID,SaleEventId,Status,Currency,GrossAmount,CreatedAt\n";
+    }
+
+    const headers = ["ID", "SaleEventId", "Status", "Currency", "GrossAmount", "CreatedAt"];
+    const rows = payouts.map((p) => [
+      p.id,
+      p.saleEventId,
+      p.status,
+      p.currency,
+      p.grossAmount,
+      p.createdAt.toISOString()
+    ].join(","));
+
+    return [headers.join(","), ...rows].join("\n");
   }
 }

@@ -4,6 +4,7 @@ import { ApiKey, ApiKeyScope } from '../entities/ApiKey';
 import { Permission } from '../types/Permissions';
 import { AppError } from '../errors/AppError';
 import { handleError } from '../utils/helpers';
+import { createTieredApiRateLimiter } from './rateLimiter';
 
 export const API_KEY_HEADER = 'x-api-key';
 
@@ -34,6 +35,19 @@ function extractRawKey(req: Request): string | undefined {
   return undefined;
 }
 
+const tieredApiKeyLimiter = createTieredApiRateLimiter({
+  standard: { windowMs: 60 * 1000, max: 100 },
+  high: { windowMs: 60 * 1000, max: 500 },
+  unlimited: { windowMs: 60 * 1000, max: 10000 },
+});
+
+/**
+ * Authenticates a request with an API key (Issue #89).
+ *
+ * On success the key's owner is attached to `req.user` in the same shape
+ * `requireAuth` uses, so downstream handlers work unchanged regardless of which
+ * credential authenticated the caller.
+ */
 export const requireApiKey = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const rawKey = extractRawKey(req);
@@ -54,7 +68,9 @@ export const requireApiKey = async (req: Request, res: Response, next: NextFunct
       emailVerified: user.emailVerified,
     };
 
-    next();
+    tieredApiKeyLimiter(req, res, () => {
+      next();
+    });
   } catch (error) {
     return handleError(req, res, error);
   }
