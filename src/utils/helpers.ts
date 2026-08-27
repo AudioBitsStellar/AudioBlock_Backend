@@ -33,6 +33,19 @@ export function formatValidationErrors(errors: ValidationError[]): IValidationFo
   };
 }
 
+/**
+ * Sends the standard error-response shape documented in
+ * docs/conventions.md — `{ success: false, message, type, details? }` —
+ * for every error case, not just `AppError` (issue #325).
+ *
+ * Previously, non-`AppError` branches sent a differently-shaped
+ * `{ message }` payload *and then fell through* to an unconditional
+ * `res.status(500).json({ error: { code, message } })` at the end of the
+ * function with no `return` in between — every non-`AppError` call sent
+ * two responses on the same `res`, which throws
+ * `ERR_HTTP_HEADERS_SENT` on the second `.json()` call. Each branch below
+ * now returns immediately after sending its one response.
+ */
 export function handleError(arg1: any, arg2: any, arg3?: any): void {
   let req: any = null;
   let res: Response;
@@ -59,31 +72,30 @@ export function handleError(arg1: any, arg2: any, arg3?: any): void {
     return;
   }
 
+  const isDev = process.env.NODE_ENV === 'development';
+
   if (error instanceof Error) {
     logRequestError(req, error, 400);
-    res.status(400).json({ message: error.message });
-  } else if (typeof error === 'string') {
-    logRequestError(req, error, 400);
-    res.status(400).json({ message: error });
-  } else {
-    logRequestError(req, error, 500);
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(400).json({
+      success: false,
+      message: isDev ? error.message : 'Bad request',
+      type: 'BAD_REQUEST',
+    });
+    return;
   }
 
-  const isDev = process.env.NODE_ENV === 'development';
-  const rawMessage =
-    error instanceof Error ? error.message : typeof error === 'string' ? error : 'Unknown error';
-  console.error(
-    'Unhandled error in handleError:',
-    rawMessage,
-    error instanceof Error ? error.stack : '',
-  );
+  if (typeof error === 'string') {
+    logRequestError(req, error, 400);
+    res.status(400).json({ success: false, message: error, type: 'BAD_REQUEST' });
+    return;
+  }
 
+  logRequestError(req, error, 500);
+  console.error('Unhandled error in handleError:', error);
   res.status(500).json({
-    error: {
-      code: 'INTERNAL_ERROR',
-      message: isDev ? rawMessage : 'Something went wrong',
-    },
+    success: false,
+    message: isDev ? 'Internal server error' : 'Something went wrong',
+    type: 'INTERNAL_ERROR',
   });
 }
 
