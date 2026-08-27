@@ -20,13 +20,6 @@ The following functions and files have been identified by our automated complexi
    - **Metrics:** Cyclomatic complexity of 16 (limit: 15), 100 lines (limit: 50).
    - **Reason:** Mixes API requests, database queries, and session management. Extract Twitter API calls and user linking logic to a dedicated service.
 
-5. **`startWorker`** in `src/workers/transcode.worker.ts`
-   - **Metrics:** 88 lines (limit: 50).
-   - **Reason:** Consumes messages and handles heavy transcoding logic inline. Should delegate to smaller specialized functions.
-
-6. **`createUser`** in `src/services/UserService.ts`
-   - **Metrics:** 63 lines (limit: 50).
-   - **Reason:** Validations and DB logic mixed. Refactoring to smaller steps will help maintainability.
-
 ---
-*Note: This list is intended to guide future tech debt sprints. New code should adhere to the complexity limits enforced by CI.*
+
+_Note: This list is intended to guide future tech debt sprints. New code should adhere to the complexity limits enforced by CI._

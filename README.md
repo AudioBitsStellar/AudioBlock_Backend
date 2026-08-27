@@ -50,21 +50,21 @@ the API still serves requests, just without background song processing.
 
 ## Tech Stack
 
-| Concern | Library |
-|---|---|
-| Runtime / language | Node.js 20, TypeScript 5 |
-| Web framework | Express 5 |
-| ORM / database | TypeORM 0.3 + PostgreSQL (`pg`) |
-| Validation | `class-validator` + `class-transformer` (DTO pattern) |
-| Auth | `jsonwebtoken`, `bcrypt` (email/password), `ethers` (EVM wallet-signature verification) |
-| File upload | `multer` (chunked audio upload, profile images, cover art) |
-| Media processing | `fluent-ffmpeg` (HLS transcoding; requires the system `ffmpeg` binary) |
-| Object storage | AWS S3 (`@aws-sdk/client-s3`) |
-| Decentralized storage | Pinata (IPFS pinning for NFT metadata) |
-| Queueing | RabbitMQ (`amqplib`) — async song-processing jobs |
-| Caching | Redis (`ioredis`) — login nonces, signed-manifest cache, OAuth state |
-| On-chain (Stellar/Soroban) | `@stellar/stellar-sdk` — transaction building, simulation, and relay |
-| On-chain (EVM, legacy) | `ethers`, Dynamic Labs MPC wallet service |
+| Concern                    | Library                                                                                 |
+| -------------------------- | --------------------------------------------------------------------------------------- |
+| Runtime / language         | Node.js 20, TypeScript 5                                                                |
+| Web framework              | Express 5                                                                               |
+| ORM / database             | TypeORM 0.3 + PostgreSQL (`pg`)                                                         |
+| Validation                 | `class-validator` + `class-transformer` (DTO pattern)                                   |
+| Auth                       | `jsonwebtoken`, `bcrypt` (email/password), `ethers` (EVM wallet-signature verification) |
+| File upload                | `multer` (chunked audio upload, profile images, cover art)                              |
+| Media processing           | `fluent-ffmpeg` (HLS transcoding; requires the system `ffmpeg` binary)                  |
+| Object storage             | AWS S3 (`@aws-sdk/client-s3`)                                                           |
+| Decentralized storage      | Pinata (IPFS pinning for NFT metadata)                                                  |
+| Queueing                   | RabbitMQ (`amqplib`) — async song-processing jobs                                       |
+| Caching                    | Redis (`ioredis`) — login nonces, signed-manifest cache, OAuth state                    |
+| On-chain (Stellar/Soroban) | `@stellar/stellar-sdk` — transaction building, simulation, and relay                    |
+| On-chain (EVM, legacy)     | `ethers`, Dynamic Labs MPC wallet service                                               |
 
 ## Project Structure
 
@@ -92,13 +92,13 @@ src/
 
 ## Data Model
 
-| Entity | Purpose | Notable fields |
-|---|---|---|
-| **User** | Account record, supports two auth methods | `walletAddress?` (wallet auth), `passwordHash?` (email/password auth), `stellarPublicKey?` / `stellarArtistId?` / `stellarArtistTokenId?` (Soroban identity once an artist connects a wallet and registers on-chain), `role` (`listener` \| `artist` \| `admin`) |
-| **Song** | One row per uploaded track | `status` (`processing` \| `ready` \| `failed`) gates streaming; **`mintStatus`** (`not_minted` \| `pending` \| `minted` \| `failed`) is tracked independently — minting is a separate, artist-initiated action, decoupled from whether the song is streamable; `metadataCid`, `onChainSongId`, `onChainTokenId` |
-| **Album** | One row per published album | `songs: string[]` (song UUIDs) |
-| **Genre** | Lookup table, seeded on boot | — |
-| **TransactionLog** | Audit trail of significant actions | `action` (e.g. `CREATE_USER`, `SONG_PROCESSED`), `txHash` |
+| Entity             | Purpose                                   | Notable fields                                                                                                                                                                                                                                                                                                  |
+| ------------------ | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **User**           | Account record, supports two auth methods | `walletAddress?` (wallet auth), `passwordHash?` (email/password auth), `stellarPublicKey?` / `stellarArtistId?` / `stellarArtistTokenId?` (Soroban identity once an artist connects a wallet and registers on-chain), `role` (`listener` \| `artist` \| `admin`)                                                |
+| **Song**           | One row per uploaded track                | `status` (`processing` \| `ready` \| `failed`) gates streaming; **`mintStatus`** (`not_minted` \| `pending` \| `minted` \| `failed`) is tracked independently — minting is a separate, artist-initiated action, decoupled from whether the song is streamable; `metadataCid`, `onChainSongId`, `onChainTokenId` |
+| **Album**          | One row per published album               | `songs: string[]` (song UUIDs)                                                                                                                                                                                                                                                                                  |
+| **Genre**          | Lookup table, seeded on boot              | —                                                                                                                                                                                                                                                                                                               |
+| **TransactionLog** | Audit trail of significant actions        | `action` (e.g. `CREATE_USER`, `SONG_PROCESSED`), `txHash`                                                                                                                                                                                                                                                       |
 
 ## API Reference
 
@@ -107,97 +107,102 @@ appropriate role (`authArtistMiddleware` for artist-only routes).
 
 ### Auth — `/api/auth`
 
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| GET | `/nonce/:email` | — | Generates a login nonce (5 min TTL in Redis) for wallet-signature auth |
-| POST | `/register` | — | Wallet-signature signup (`role`, `walletAddress`, `signature`, `message`, `email`, `username`) |
-| POST | `/register-listener` | — | Same as above, listener-oriented, no `username` required |
-| POST | `/login` | — | Wallet-signature login |
-| POST | `/register-email` | — | Email + password signup |
-| POST | `/login-email` | — | Email + password login |
-| POST | `/2fa/enable` | any authenticated email/password account | Enables TOTP 2FA and returns QR/secret plus backup codes |
+| Method | Path                 | Auth                                     | Description                                                                                    |
+| ------ | -------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| GET    | `/nonce/:email`      | —                                        | Generates a login nonce (5 min TTL in Redis) for wallet-signature auth                         |
+| POST   | `/register`          | —                                        | Wallet-signature signup (`role`, `walletAddress`, `signature`, `message`, `email`, `username`) |
+| POST   | `/register-listener` | —                                        | Same as above, listener-oriented, no `username` required                                       |
+| POST   | `/login`             | —                                        | Wallet-signature login                                                                         |
+| POST   | `/register-email`    | —                                        | Email + password signup                                                                        |
+| POST   | `/login-email`       | —                                        | Email + password login                                                                         |
+| POST   | `/2fa/enable`        | any authenticated email/password account | Enables TOTP 2FA and returns QR/secret plus backup codes                                       |
 
 ### Artist — `/api/artist`
 
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| GET | `/:id/metadata` | — | **Public artist metadata** — returns `{ openGraph: { title, description, image, url, type }, jsonLd: { "@context","@type","name",... }, profile: { id, username, name, bio, profileImage, pageCover, website, twitterUsername } }` for OG tags / link previews and search indexing. No private fields (email, walletAddress, stellarPublicKey) are ever exposed. Append `?format=html` for an HTML fragment with `<meta property="og:*">` + `<script type="application/ld+json">`. |
-| PATCH | `/update-profile` | artist | Updates bio/website/etc., accepts `profileImage`/`pageCover` uploads |
-| POST | `/onchain/connect-wallet` | artist | Records the artist's Stellar public key |
-| POST | `/onchain/prepare-setup` | artist | Builds an unsigned `setup_artist_profile` Soroban transaction |
-| POST | `/onchain/submit-setup` | artist | Submits the wallet-signed transaction, persists the resulting artist/token IDs |
+| Method | Path                      | Auth   | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ------ | ------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/:id/metadata`           | —      | **Public artist metadata** — returns `{ openGraph: { title, description, image, url, type }, jsonLd: { "@context","@type","name",... }, profile: { id, username, name, bio, profileImage, pageCover, website, twitterUsername } }` for OG tags / link previews and search indexing. No private fields (email, walletAddress, stellarPublicKey) are ever exposed. Append `?format=html` for an HTML fragment with `<meta property="og:*">` + `<script type="application/ld+json">`. |
+| PATCH  | `/update-profile`         | artist | Updates bio/website/etc., accepts `profileImage`/`pageCover` uploads                                                                                                                                                                                                                                                                                                                                                                                                               |
+| POST   | `/onchain/connect-wallet` | artist | Records the artist's Stellar public key                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| POST   | `/onchain/prepare-setup`  | artist | Builds an unsigned `setup_artist_profile` Soroban transaction                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| POST   | `/onchain/submit-setup`   | artist | Submits the wallet-signed transaction, persists the resulting artist/token IDs                                                                                                                                                                                                                                                                                                                                                                                                     |
 
 ### Song — `/api/song`
 
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| POST | `/upload/chunk` | artist | Uploads one chunk of a large audio file |
-| POST | `/upload/cover` | artist | Uploads cover art, pushes to S3 |
-| POST | `/upload/finalize` | artist | Merges chunks, creates the `Song` row, queues background processing |
-| GET | `/stream/:id` | — | Returns the song's HLS manifest (presigned S3 URLs), cached in Redis |
-| GET | `/embed/:id` | — | **Embeddable player** — returns `{ title, coverArtPath, artist: { name, username, profileImage }, streamUrl, hlsMasterUrl, duration }` for public/ready songs without auth; rate-limited via Redis (`30s` per IP per song, same bucket as streaming). Use as `GET /api/song/embed/:id` or `GET /api/embed/song/:id`. For playlists: `GET /api/embed/album/:id`. No private data exposed. |
-| POST | `/:id/onchain/prepare-mint` | artist | Builds an unsigned `upload_and_mint_song` Soroban transaction |
-| POST | `/:id/onchain/submit-mint` | artist | Submits the wallet-signed mint transaction (triggers `song.minted` webhook) |
+| Method | Path                        | Auth   | Description                                                                                                                                                                                                                                                                                                                                                                              |
+| ------ | --------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST   | `/upload/chunk`             | artist | Uploads one chunk of a large audio file                                                                                                                                                                                                                                                                                                                                                  |
+| POST   | `/upload/cover`             | artist | Uploads cover art, pushes to S3                                                                                                                                                                                                                                                                                                                                                          |
+| POST   | `/upload/finalize`          | artist | Merges chunks, creates the `Song` row, queues background processing                                                                                                                                                                                                                                                                                                                      |
+| GET    | `/stream/:id`               | —      | Returns the song's HLS manifest (presigned S3 URLs), cached in Redis                                                                                                                                                                                                                                                                                                                     |
+| GET    | `/embed/:id`                | —      | **Embeddable player** — returns `{ title, coverArtPath, artist: { name, username, profileImage }, streamUrl, hlsMasterUrl, duration }` for public/ready songs without auth; rate-limited via Redis (`30s` per IP per song, same bucket as streaming). Use as `GET /api/song/embed/:id` or `GET /api/embed/song/:id`. For playlists: `GET /api/embed/album/:id`. No private data exposed. |
+| POST   | `/:id/onchain/prepare-mint` | artist | Builds an unsigned `upload_and_mint_song` Soroban transaction                                                                                                                                                                                                                                                                                                                            |
+| POST   | `/:id/onchain/submit-mint`  | artist | Submits the wallet-signed mint transaction (triggers `song.minted` webhook)                                                                                                                                                                                                                                                                                                              |
 
 ### Wallet — `/api/wallet` (EVM, Dynamic Labs)
 
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| POST | `/evm/create` | — | Creates an MPC-backed EVM wallet via Dynamic Labs |
-| POST | `/evm/signMessage` | — | Signs a message with a Dynamic-managed wallet |
+| Method | Path               | Auth | Description                                       |
+| ------ | ------------------ | ---- | ------------------------------------------------- |
+| POST   | `/evm/create`      | —    | Creates an MPC-backed EVM wallet via Dynamic Labs |
+| POST   | `/evm/signMessage` | —    | Signs a message with a Dynamic-managed wallet     |
 
 ### Webhooks — `/api/webhooks`
 
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| POST | `/register` | any authenticated | Registers a webhook subscription: `{ endpoint: "https://example.com/hook", eventTypes: ["song.minted","sale.completed"], secret?: "optional-hmac-secret" }`. Returns the created subscription with `id` + generated `secret` (store it — used to verify `X-Webhook-Signature`). |
-| GET | `/` | any authenticated | Lists your webhook subscriptions |
-| DELETE | `/:id` | any authenticated | Deletes your webhook subscription |
-| POST | `/:id/test` | any authenticated | Sends a test `test.event` payload to verify the endpoint |
+| Method | Path        | Auth              | Description                                                                                                                                                                                                                                                                     |
+| ------ | ----------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST   | `/register` | any authenticated | Registers a webhook subscription: `{ endpoint: "https://example.com/hook", eventTypes: ["song.minted","sale.completed"], secret?: "optional-hmac-secret" }`. Returns the created subscription with `id` + generated `secret` (store it — used to verify `X-Webhook-Signature`). |
+| GET    | `/`         | any authenticated | Lists your webhook subscriptions                                                                                                                                                                                                                                                |
+| DELETE | `/:id`      | any authenticated | Deletes your webhook subscription                                                                                                                                                                                                                                               |
+| POST   | `/:id/test` | any authenticated | Sends a test `test.event` payload to verify the endpoint                                                                                                                                                                                                                        |
 
 Events: `song.minted` (also `mint_status_changed` legacy), `sale.completed` (also `sale_completed`). Each delivery sends `POST` with `Content-Type: application/json`, `X-Webhook-Signature: <hmac-sha256 hex of JSON body>`, body `{ eventId, eventType, timestamp, ...eventData }`. Failed deliveries retry **3× with exponential backoff** (`1s, 2s, 4s`) before being dead-lettered. Hook is emitted in `SongService.submitSongMintTx` (after mint) and `MarketplaceService.submitBuy` (after sale).
 
 Signature verification (recipient):
+
 ```js
 const sig = req.headers['x-webhook-signature'];
 const expected = crypto.createHmac('sha256', secret).update(JSON.stringify(req.body)).digest('hex');
-if (!crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(sig))) throw new Error('invalid signature');
+if (!crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(sig)))
+  throw new Error('invalid signature');
 ```
 
 ### Takedown — `/api/takedown` (copyright workflow)
 
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| POST | `/request` | any authenticated | Creates a **dedicated `TakedownRequest`** (distinct from generic `ContentReport`/flag): `{ songId, reason: "copyright" | "trademark" | "other", description?, evidenceUrl? }`. Status `pending`. |
-| GET | `/` | admin | Lists takedown requests (filter `?status=pending&songId=...`) |
-| GET | `/:id` | admin | Gets single takedown request |
-| PATCH | `/:id/review` | admin | Reviews takedown: `{ action: "approve" | "reject" | "reverse", reviewNotes? }`. `approve` temporarily unpublishes the song (`song.flagged=true`, `flagReason=takedown:...`, streaming returns 404) — **reversible**; `reverse` republishes if the claim is resolved in the artist's favor (restores `previousFlagged` state). |
+| Method | Path          | Auth              | Description                                                                                                            |
+| ------ | ------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST   | `/request`    | any authenticated | Creates a **dedicated `TakedownRequest`** (distinct from generic `ContentReport`/flag): `{ songId, reason: "copyright" | "trademark" | "other", description?, evidenceUrl? }`. Status `pending`.                                                                                                                                                                                                               |
+| GET    | `/`           | admin             | Lists takedown requests (filter `?status=pending&songId=...`)                                                          |
+| GET    | `/:id`        | admin             | Gets single takedown request                                                                                           |
+| PATCH  | `/:id/review` | admin             | Reviews takedown: `{ action: "approve"                                                                                 | "reject"    | "reverse", reviewNotes? }`. `approve` temporarily unpublishes the song (`song.flagged=true`, `flagReason=takedown:...`, streaming returns 404) — **reversible**; `reverse`republishes if the claim is resolved in the artist's favor (restores`previousFlagged` state). |
 
 This workflow is **separate from general moderation** (`PATCH /api/admin/song/:id/flag`) and uses its own `takedown_requests` table, supporting audit and reversibility.
 
 ### Embed — `/api/embed`
 
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| GET | `/song/:id` | — | Lightweight embed data for third-party sites: `{ title, coverArtPath, artist:{name,username,profileImage}, streamUrl, hlsMasterUrl, duration, genre }`. Works for `status="ready"` and not-flagged songs **without authentication**, CORS-open, Redis-throttled `30s` per IP per song (same limit as `GET /api/song/stream/:id`). Also available as `GET /api/song/embed/:id`. |
-| GET | `/album/:id` | — | Playlist embed: `{ title, coverArtPath, artist, songs: [SongEmbedData] }` — skips unavailable songs. Same rate limiting. |
+| Method | Path         | Auth | Description                                                                                                                                                                                                                                                                                                                                                                    |
+| ------ | ------------ | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| GET    | `/song/:id`  | —    | Lightweight embed data for third-party sites: `{ title, coverArtPath, artist:{name,username,profileImage}, streamUrl, hlsMasterUrl, duration, genre }`. Works for `status="ready"` and not-flagged songs **without authentication**, CORS-open, Redis-throttled `30s` per IP per song (same limit as `GET /api/song/stream/:id`). Also available as `GET /api/song/embed/:id`. |
+| GET    | `/album/:id` | —    | Playlist embed: `{ title, coverArtPath, artist, songs: [SongEmbedData] }` — skips unavailable songs. Same rate limiting.                                                                                                                                                                                                                                                       |
 
 Example embed usage:
+
 ```html
 <iframe src="https://api.audioblock.com/api/embed/song/<songId>" width="320" height="120"></iframe>
 <script>
-fetch('https://api.audioblock.com/api/song/embed/<songId>').then(r=>r.json()).then(({data})=>{
-  // data.streamUrl -> fetch HLS manifest, data.coverArtPath -> <img>, data.artist.name
-});
+  fetch('https://api.audioblock.com/api/song/embed/<songId>')
+    .then((r) => r.json())
+    .then(({ data }) => {
+      // data.streamUrl -> fetch HLS manifest, data.coverArtPath -> <img>, data.artist.name
+    });
 </script>
 ```
 
 ### Twitter OAuth — `/api/auth/twitter`
 
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| GET | `/init` | artist | Starts the OAuth2 PKCE flow, redirects to Twitter |
-| GET | `/callback` | — | Twitter's redirect target; links the account to the authenticated user |
+| Method | Path        | Auth   | Description                                                            |
+| ------ | ----------- | ------ | ---------------------------------------------------------------------- |
+| GET    | `/init`     | artist | Starts the OAuth2 PKCE flow, redirects to Twitter                      |
+| GET    | `/callback` | —      | Twitter's redirect target; links the account to the authenticated user |
 
 ## The Song Processing Pipeline
 
@@ -233,7 +238,7 @@ The backend **never holds an artist's Stellar secret key**. Every on-chain
 write follows the same three-step relay pattern, implemented once in
 `SorobanService` and reused for both artist setup and song minting:
 
-1. **Prepare** (`prepareInvocation`) — given the artist's *public* key, the
+1. **Prepare** (`prepareInvocation`) — given the artist's _public_ key, the
    target contract, and the method/args, the backend fetches the artist's
    on-chain account, builds the contract-call operation, and asks Soroban
    to simulate/assemble the transaction. Returns the **unsigned transaction
@@ -433,10 +438,12 @@ Alternatively, delete the raw file explicitly in the background worker
 completes and is uploaded:
 
 ```typescript
-await s3.deleteObject({
-  Bucket: process.env.AWS_BUCKET_NAME,
-  Key: `uploads/raw/${song.id}.mp3`,
-}).promise();
+await s3
+  .deleteObject({
+    Bucket: process.env.AWS_BUCKET_NAME,
+    Key: `uploads/raw/${song.id}.mp3`,
+  })
+  .promise();
 ```
 
 This is more precise (no 7-day lag) and easier to test locally.
@@ -473,6 +480,7 @@ The validation is performed in `src/config/env.ts` and called at the top of
   flags. Never bake secrets into the image.
 
 In all cases, ensure that:
+
 - `.env` is in `.gitignore` (it is).
 - No real secrets exist in git history or public container registries.
 - The startup validation catches any missing secrets before the server listens.
@@ -494,6 +502,7 @@ In production, `NODE_ENV=production` disables auto-synchronize. Schema changes
 are applied explicitly via migrations:
 
 1. **Generate a new migration** after editing entities:
+
    ```bash
    npm run migration:generate -- -n DescribeYourChange
    # This creates a new file in src/migrations/ capturing the detected
@@ -504,6 +513,7 @@ are applied explicitly via migrations:
    needed (e.g., if the tool misses a constraint or index).
 
 3. **Test** in a staging database:
+
    ```bash
    NODE_ENV=production npm run build
    npm run migration:run
@@ -584,29 +594,24 @@ npm run dev
 
 ## Scripts
 
-| Command | Description |
-|---|---|
-| `npm run dev` | Hot-reload dev server (`ts-node-dev`) |
-| `npm run build` | Compiles TypeScript to `dist/` |
-| `npm start` | Runs the compiled build (`dist/index.js`) |
-| `npm run worker` | Runs the song-processing worker as a standalone process, independent of the API process — useful for scaling workers separately |
-| `npm run seed:genres` | Manually re-runs the genre seeder (also runs automatically on every boot) |
-| `npm run migration:generate -- -n DescribeYourChange` | Generates a new migration file based on entity changes |
-| `npm run migration:run` | Applies pending migrations to the database |
-| `npm run migration:revert` | Reverts the last applied migration |
-| `npm test` | Runs the full Jest suite (`src/__tests__/**/*.test.ts`) |
-| `npm test -- src/__tests__/health.test.ts` | Runs a single test file (swap in any path under `src/__tests__`) |
-| `npm run test:watch` | Runs Jest in watch mode |
-| `npm run compose:check` | Validates that all docker-compose files are mutually consistent (Issue #404) |
+| Command                                               | Description                                                                                                                     |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run dev`                                         | Hot-reload dev server (`ts-node-dev`)                                                                                           |
+| `npm run build`                                       | Compiles TypeScript to `dist/`                                                                                                  |
+| `npm start`                                           | Runs the compiled build (`dist/index.js`)                                                                                       |
+| `npm run worker`                                      | Runs the song-processing worker as a standalone process, independent of the API process — useful for scaling workers separately |
+| `npm run seed:genres`                                 | Manually re-runs the genre seeder (also runs automatically on every boot)                                                       |
+| `npm run migration:generate -- -n DescribeYourChange` | Generates a new migration file based on entity changes                                                                          |
+| `npm run migration:run`                               | Applies pending migrations to the database                                                                                      |
+| `npm run migration:revert`                            | Reverts the last applied migration                                                                                              |
+| `npm test`                                            | Runs the full Jest suite (`src/__tests__/**/*.test.ts`)                                                                         |
+| `npm test -- src/__tests__/health.test.ts`            | Runs a single test file (swap in any path under `src/__tests__`)                                                                |
+| `npm run test:watch`                                  | Runs Jest in watch mode                                                                                                         |
+| `npm run compose:check`                               | Validates that all docker-compose files are mutually consistent (Issue #404)                                                    |
 
 ## Known Issues / Cleanup Backlog
 
-- `src/routes/twitterRoutesOld.ts` and `src/workers/transcode.worker.ts` are
-  unused/superseded code paths still present in the repo.
-- `GET /redis-test` in `src/app.ts` is a debug-only endpoint with no auth —
-  should be removed before production use.
-- `UserController.ts` exists with several methods (`getAllUsers`,
-  `getUserById`, etc.) but has no route file wiring it up.
+- `src/routes/twitterRoutesOld.ts` is an unused/superseded code path still present in the repo.
 - A handful of variables in `.env.example` (`REDIS_URL`, `JWT_EXPIRER_AT`,
   `PRIVATE_KEY`, `PRIVATE_KEY_2`, several OAuth1-style Twitter vars) are not
   currently read by any code.

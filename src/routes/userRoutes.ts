@@ -5,6 +5,10 @@ import { requireAuth } from '../middlewares/authMiddleware';
 const userController = new UserController();
 const router = Router();
 
+// Profile settings (Issue #83) - must come before /:id routes
+router.put('/profile', requireAuth, userController.updateProfile);
+router.get('/profile', requireAuth, userController.getOwnProfile);
+
 // Public routes
 router.get('/wallet/:walletAddress', userController.getUserByWalletAddress);
 router.get('/:id/public', userController.getPublicProfile);
@@ -14,9 +18,5 @@ router.get('/:id', userController.getUserById);
 router.get('/', requireAuth, userController.getAllUsers);
 router.put('/:id', requireAuth, userController.updateUser);
 router.delete('/:id', requireAuth, userController.deleteUser);
-
-// Profile settings (Issue #83)
-router.put('/profile', requireAuth, userController.updateProfile);
-router.get('/profile', requireAuth, userController.getOwnProfile);
 
 export default router;

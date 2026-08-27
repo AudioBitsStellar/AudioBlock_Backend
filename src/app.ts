@@ -21,6 +21,7 @@ import takedownRoutes from "./routes/takedownRoutes";
 import embedRoutes from "./routes/embedRoutes";
 import royaltyPayoutRoutes from "./routes/royaltyPayoutRoutes";
 import playlistRoutes from "./routes/playlistRoutes";
+import userRoutes from "./routes/userRoutes";
 
 // Route imports
 
@@ -111,16 +112,12 @@ app.use("/api/embed", embedRoutes);
 // Playlists (Issue #77) + collaborative editing (#406) + smart playlists (#407)
 app.use("/api/playlists", playlistRoutes);
 
+// User routes
+app.use("/api/users", userRoutes);
+
 
 //TWITTER CALLBACK ROUTE
 app.use("/api/auth/twitter", twitterRoutes);
-
-
-app.get('/redis-test', async (req, res) => {
-  await redis.set('greeting', 'hello world');
-  const value = await redis.get('greeting');
-  res.send({ value });
-});
 
 
 // Error handling middleware
