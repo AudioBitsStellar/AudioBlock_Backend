@@ -76,4 +76,42 @@ export class MarketplaceService {
 
     return { txHash: hash };
   }
+  async prepareAuction(
+    sellerPublicKey: string,
+    tokenId: number,
+    startingPriceInStroops: number,
+    durationSeconds: number
+  ): Promise<PreparedTransaction> {
+    const xdr = await this.soroban.prepareInvocation(
+      sellerPublicKey,
+      SorobanContracts.marketplace,
+      "create_auction",
+      [addressArg(sellerPublicKey), u64Arg(tokenId), u64Arg(startingPriceInStroops), u64Arg(durationSeconds)]
+    );
+    return { xdr, networkPassphrase: process.env.SOROBAN_NETWORK_PASSPHRASE || "" };
+  }
+
+  async submitAuction(signedXdr: string): Promise<{ txHash: string }> {
+    const { hash } = await this.soroban.submitSignedTransaction(signedXdr);
+    return { txHash: hash };
+  }
+
+  async prepareBid(
+    bidderPublicKey: string,
+    tokenId: number,
+    bidAmountInStroops: number
+  ): Promise<PreparedTransaction> {
+    const xdr = await this.soroban.prepareInvocation(
+      bidderPublicKey,
+      SorobanContracts.marketplace,
+      "place_bid",
+      [addressArg(bidderPublicKey), u64Arg(tokenId), u64Arg(bidAmountInStroops)]
+    );
+    return { xdr, networkPassphrase: process.env.SOROBAN_NETWORK_PASSPHRASE || "" };
+  }
+
+  async submitBid(signedXdr: string): Promise<{ txHash: string }> {
+    const { hash } = await this.soroban.submitSignedTransaction(signedXdr);
+    return { txHash: hash };
+  }
 }

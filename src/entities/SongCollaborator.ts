@@ -25,6 +25,12 @@ export enum CollaboratorStatus {
   REMOVED = 'removed',
 }
 
+export enum DisputeStatus {
+  NONE = 'none',
+  DISPUTED = 'disputed',
+  RESOLVED = 'resolved',
+}
+
 @Entity('song_collaborators')
 @Unique(['songId', 'userId'])
 export class SongCollaborator {
@@ -53,6 +59,9 @@ export class SongCollaborator {
 
   @Column({ type: 'varchar', default: CollaboratorStatus.ACTIVE })
   status!: CollaboratorStatus;
+
+  @Column({ type: 'varchar', default: DisputeStatus.NONE })
+  disputeStatus!: DisputeStatus;
 
   @CreateDateColumn()
   createdAt!: Date;
