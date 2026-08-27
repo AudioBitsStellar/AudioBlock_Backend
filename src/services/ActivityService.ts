@@ -4,13 +4,6 @@ import { ActivityFeed } from '../entities/ActivityFeed';
 import { UserFollow } from '../entities/UserFollow';
 import { AppError } from '../errors/AppError';
 
-export interface GetActivityFeedOptions {
-  userId: string;
-  mode?: 'all' | 'following';
-  limit?: number;
-  offset?: number;
-}
-
 export class ActivityService {
   private activityRepo: Repository<ActivityFeed>;
   private userFollowRepo: Repository<UserFollow>;
@@ -20,11 +13,17 @@ export class ActivityService {
     this.userFollowRepo = AppDataSource.getRepository(UserFollow);
   }
 
-  async getActivityFeed(options: GetActivityFeedOptions): Promise<ActivityFeed[]> {
-    const { userId, mode = 'all', limit = 20, offset = 0 } = options;
+  /**
+   * Retrieve activity feed items. Supports an optional 'followingOnly' mode
+   * which scopes results to accounts followed by the specified user.
+   */
+  async getActivityFeed(userId?: string, followingOnly?: boolean, limit: number = 20, offset: number = 0): Promise<{ items: ActivityFeed[]; total: number }> {
+    if (followingOnly) {
+      if (!userId) {
+        throw AppError.authentication('Authentication required for following-only activity feed');
+      }
 
-    if (mode === 'following') {
-      // Find all users that the given user follows
+      // Retrieve IDs of users that the current user follows
       const follows = await this.userFollowRepo.find({
         where: { followerId: userId },
         select: ['followingId'],
@@ -33,22 +32,27 @@ export class ActivityService {
       const followingIds = follows.map((f) => f.followingId);
 
       if (followingIds.length === 0) {
-        return [];
+        return { items: [], total: 0 };
       }
 
-      return await this.activityRepo.find({
+      const [items, total] = await this.activityRepo.findAndCount({
         where: { userId: In(followingIds) },
         order: { createdAt: 'DESC' },
         take: limit,
         skip: offset,
+        relations: ['user'],
       });
+
+      return { items, total };
     }
 
-    // Default mode: platform-wide or user specific
-    return await this.activityRepo.find({
+    const [items, total] = await this.activityRepo.findAndCount({
       order: { createdAt: 'DESC' },
       take: limit,
       skip: offset,
+      relations: ['user'],
     });
+
+    return { items, total };
   }
 }
