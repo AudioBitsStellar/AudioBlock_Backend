@@ -1,6 +1,7 @@
+import { Repository, In } from 'typeorm';
 import AppDataSource from '../config/db';
 import { ActivityFeed } from '../entities/ActivityFeed';
-import { User } from '../entities/User';
+import { UserFollow } from '../entities/UserFollow';
 import { AppError } from '../errors/AppError';
 
 export const KNOWN_ACTIVITY_TYPES = [
@@ -14,8 +15,8 @@ export const KNOWN_ACTIVITY_TYPES = [
 export type ActivityType = (typeof KNOWN_ACTIVITY_TYPES)[number];
 
 export class ActivityService {
-  private activityRepo = AppDataSource.getRepository(ActivityFeed);
-  private userRepo = AppDataSource.getRepository(User);
+  private activityRepo: Repository<ActivityFeed>;
+  private userFollowRepo: Repository<UserFollow>;
 
   async recordActivity(
     userId: string,
@@ -74,16 +75,19 @@ export class ActivityService {
       .limit(limit)
       .getMany();
 
-    return activities;
-  }
+      const followingIds = follows.map((f) => f.followingId);
 
   async getUserActivities(userId: string, cursor?: string, limit = 20, typeFilter?: string | string[]) {
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
-    let query = this.activityRepo.createQueryBuilder('activity')
-      .where('activity.userId = :userId', { userId })
-      .andWhere('activity.createdAt > :ninetyDaysAgo', { ninetyDaysAgo });
+      const [items, total] = await this.activityRepo.findAndCount({
+        where: { userId: In(followingIds) },
+        order: { createdAt: 'DESC' },
+        take: limit,
+        skip: offset,
+        relations: ['user'],
+      });
 
     if (typeFilter) {
       const types = Array.isArray(typeFilter) ? typeFilter : typeFilter.split(',').map(s => s.trim()).filter(Boolean);
@@ -97,11 +101,13 @@ export class ActivityService {
       query = query.andWhere('activity.id < :cursor', { cursor });
     }
 
-    const activities = await query
-      .orderBy('activity.createdAt', 'DESC')
-      .limit(limit)
-      .getMany();
+    const [items, total] = await this.activityRepo.findAndCount({
+      order: { createdAt: 'DESC' },
+      take: limit,
+      skip: offset,
+      relations: ['user'],
+    });
 
-    return activities;
+    return { items, total };
   }
 }

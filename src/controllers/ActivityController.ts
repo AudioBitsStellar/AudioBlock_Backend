@@ -1,8 +1,6 @@
 import { Request, Response } from 'express';
 import { ActivityService } from '../services/ActivityService';
-import { handleError } from '../utils/helpers';
-
-const activityService = new ActivityService();
+import { HTTP_STATUS } from '../config/constants';
 
 export class ActivityController {
   static getMyFeed = async (req: Request, res: Response) => {
