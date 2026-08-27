@@ -17,8 +17,8 @@
  *   router.get("/popular", etagCache({ visibility: "public", maxAge: 60 }), handler);
  *   router.get("/me",      etagCache({ visibility: "private" }), handler);
  */
-import { Request, Response, NextFunction, RequestHandler } from "express";
-import { createHash } from "crypto";
+import { Request, Response, NextFunction, RequestHandler } from 'express';
+import { createHash } from 'crypto';
 
 export interface EtagCacheOptions {
   /**
@@ -26,7 +26,7 @@ export interface EtagCacheOptions {
    * restricts to the end client, `no-cache` forces revalidation every time
    * (still benefits from 304s). Default: `public`.
    */
-  visibility?: "public" | "private" | "no-cache";
+  visibility?: 'public' | 'private' | 'no-cache';
   /** max-age in seconds for `public`/`private` responses. Default: 60. */
   maxAge?: number;
   /**
@@ -42,11 +42,11 @@ function buildCacheControl(opts: EtagCacheOptions): string {
 
   const maxAge = opts.maxAge ?? 60;
   switch (opts.visibility) {
-    case "no-cache":
-      return "no-cache";
-    case "private":
+    case 'no-cache':
+      return 'no-cache';
+    case 'private':
       return `private, max-age=${maxAge}`;
-    case "public":
+    case 'public':
     default:
       return `public, max-age=${maxAge}`;
   }
@@ -54,7 +54,7 @@ function buildCacheControl(opts: EtagCacheOptions): string {
 
 /** Strong ETag: quoted SHA-1 of the payload. */
 function generateEtag(payload: string): string {
-  const hash = createHash("sha1").update(payload).digest("base64");
+  const hash = createHash('sha1').update(payload).digest('base64');
   return `"${hash}"`;
 }
 
@@ -65,11 +65,11 @@ function generateEtag(payload: string): string {
  */
 function ifNoneMatchSatisfied(header: string | undefined, etag: string): boolean {
   if (!header) return false;
-  if (header.trim() === "*") return true;
+  if (header.trim() === '*') return true;
 
-  const normalize = (tag: string) => tag.trim().replace(/^W\//, "");
+  const normalize = (tag: string) => tag.trim().replace(/^W\//, '');
   const target = normalize(etag);
-  return header.split(",").some((tag) => normalize(tag) === target);
+  return header.split(',').some((tag) => normalize(tag) === target);
 }
 
 export function etagCache(options: EtagCacheOptions = {}): RequestHandler {
@@ -77,7 +77,7 @@ export function etagCache(options: EtagCacheOptions = {}): RequestHandler {
 
   return (req: Request, res: Response, next: NextFunction) => {
     // Conditional caching only makes sense for safe, cacheable reads.
-    if (req.method !== "GET" && req.method !== "HEAD") return next();
+    if (req.method !== 'GET' && req.method !== 'HEAD') return next();
 
     const originalJson = res.json.bind(res);
 
@@ -88,14 +88,14 @@ export function etagCache(options: EtagCacheOptions = {}): RequestHandler {
           const payload = JSON.stringify(body ?? null);
           const etag = generateEtag(payload);
 
-          res.setHeader("ETag", etag);
-          res.setHeader("Cache-Control", cacheControl);
+          res.setHeader('ETag', etag);
+          res.setHeader('Cache-Control', cacheControl);
 
-          if (ifNoneMatchSatisfied(req.headers["if-none-match"], etag)) {
+          if (ifNoneMatchSatisfied(req.headers['if-none-match'], etag)) {
             // 304 responses MUST NOT carry a body (bandwidth savings).
             res.status(304);
-            res.removeHeader("Content-Type");
-            res.removeHeader("Content-Length");
+            res.removeHeader('Content-Type');
+            res.removeHeader('Content-Length');
             return res.end() as unknown as Response;
           }
         }
@@ -105,7 +105,7 @@ export function etagCache(options: EtagCacheOptions = {}): RequestHandler {
       }
 
       return originalJson(body);
-    }) as Response["json"];
+    }) as Response['json'];
 
     next();
   };

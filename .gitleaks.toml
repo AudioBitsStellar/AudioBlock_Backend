@@ -1,0 +1,16 @@
+# gitleaks configuration — false-positive suppression
+# See: https://github.com/gitleaks/gitleaks#configuration
+
+[allowlist]
+  description = "Global allowlist"
+  paths = [
+    '''knip\.config\.ts$''',
+    '''package-lock\.json$''',
+  ]
+  # Test fixtures and example values that look like secrets
+  regexes = [
+    '''(?i)test[_-]?secret''',
+    '''(?i)example\.com''',
+    '''(?i)0x[a-fA-F0-9]{8,}SECRET''',
+    '''(?i)GSECRET''',
+  ]

@@ -16,9 +16,12 @@ import walletRoutes from "./routes/walletRoutes";
 import SongRoutes from "./routes/SongRoutes";
 import marketplaceRoutes from "./routes/marketplaceRoutes";
 import adminRoutes from "./routes/adminRoutes";
-import AppDataSource from "./config/db";
-import { getPoolStats, checkDbHealth } from "./services/DbPoolMonitor";
-
+import webhookRoutes from "./routes/webhookRoutes";
+import takedownRoutes from "./routes/takedownRoutes";
+import embedRoutes from "./routes/embedRoutes";
+import royaltyPayoutRoutes from "./routes/royaltyPayoutRoutes";
+import playlistRoutes from "./routes/playlistRoutes";
+import userRoutes from "./routes/userRoutes";
 
 // Route imports
 
@@ -74,19 +77,8 @@ app.use((req, res, next) => {
 
 
 // Define routes
-app.get("/health", (req, res) => {
+app.use("/health", (req, res) => {
   res.json({ status: "ok" });
-});
-
-// Database connection-pool status (Issue #134). Reports live pool metrics and
-// runs a health-check query; returns 503 when the pool can't serve a query.
-app.get("/health/db", async (req, res) => {
-  const healthy = await checkDbHealth(AppDataSource);
-  const pool = getPoolStats(AppDataSource);
-  res.status(healthy ? 200 : 503).json({
-    status: healthy ? "ok" : "unhealthy",
-    pool,
-  });
 });
 
 app.use("/api/auth", authRoutes);
@@ -101,19 +93,31 @@ app.use("/api/song", SongRoutes);
 // Marketplace Soroban relay (list + buy)
 app.use("/api/marketplace", marketplaceRoutes);
 
+// Royalty payouts
+app.use("/api/royalty-payouts", royaltyPayoutRoutes);
+
 // Admin moderation routes
 app.use("/api/admin", adminRoutes);
+
+// Webhook subscriptions (third-party event delivery)
+app.use("/api/webhooks", webhookRoutes);
+
+// Copyright takedown workflow (distinct from general moderation)
+app.use("/api/takedown", takedownRoutes);
+
+// Embeddable player (public, no auth)
+app.use("/api/embed", embedRoutes);
+
+
+// Playlists (Issue #77) + collaborative editing (#406) + smart playlists (#407)
+app.use("/api/playlists", playlistRoutes);
+
+// User routes
+app.use("/api/users", userRoutes);
 
 
 //TWITTER CALLBACK ROUTE
 app.use("/api/auth/twitter", twitterRoutes);
-
-
-app.get('/redis-test', async (req, res) => {
-  await redis.set('greeting', 'hello world');
-  const value = await redis.get('greeting');
-  res.send({ value });
-});
 
 
 // Error handling middleware

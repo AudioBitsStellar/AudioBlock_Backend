@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/AudioBitsStellar/AudioBlock_Backend/blob/main/docs/SECURITY_POLICY.md
+    about: Please report security vulnerabilities via the security policy — do not open a public issue.
+  - name: Questions & discussions
+    url: https://github.com/AudioBitsStellar/AudioBlock_Backend/discussions
+    about: For general questions, use GitHub Discussions rather than issues.

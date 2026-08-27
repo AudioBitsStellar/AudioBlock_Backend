@@ -14,9 +14,9 @@
  *   DB_POOL_METRICS_INTERVAL_MS – how often to log metrics / run the health
  *                                 check on idle connections (default 30000).
  */
-import type { DataSource } from "typeorm";
-import logger from "../config/logger";
-import { dbPoolConfig } from "../config/db";
+import type { DataSource } from 'typeorm';
+import logger from '../config/logger';
+import { dbPoolConfig } from '../config/db';
 
 export interface PoolStats {
   /** Configured maximum pool size. */
@@ -33,9 +33,7 @@ export interface PoolStats {
   waiting: number;
 }
 
-const METRICS_INTERVAL_MS = Number(
-  process.env.DB_POOL_METRICS_INTERVAL_MS || 30000
-);
+const METRICS_INTERVAL_MS = Number(process.env.DB_POOL_METRICS_INTERVAL_MS || 30000);
 
 let metricsTimer: NodeJS.Timeout | null = null;
 
@@ -46,7 +44,7 @@ let metricsTimer: NodeJS.Timeout | null = null;
  */
 function getPgPool(dataSource: DataSource): any | null {
   const master = (dataSource?.driver as any)?.master;
-  if (master && typeof master.totalCount === "number") return master;
+  if (master && typeof master.totalCount === 'number') return master;
   return null;
 }
 
@@ -74,10 +72,10 @@ export function getPoolStats(dataSource: DataSource): PoolStats {
  */
 export async function checkDbHealth(dataSource: DataSource): Promise<boolean> {
   try {
-    await dataSource.query("SELECT 1");
+    await dataSource.query('SELECT 1');
     return true;
   } catch (err) {
-    logger.error({ err }, "Database health check query failed");
+    logger.error({ err }, 'Database health check query failed');
     return false;
   }
 }
@@ -98,10 +96,10 @@ export function startDbPoolMonitor(dataSource: DataSource): () => void {
     if (stats.waiting > 0 && stats.active >= stats.max) {
       logger.warn(
         stats,
-        `DB pool exhausted: ${stats.active}/${stats.max} connections in use, ${stats.waiting} request(s) waiting`
+        `DB pool exhausted: ${stats.active}/${stats.max} connections in use, ${stats.waiting} request(s) waiting`,
       );
     } else {
-      logger.info(stats, "DB pool metrics");
+      logger.info(stats, 'DB pool metrics');
     }
 
     // Health-check the pool so a broken/stale connection surfaces in logs
@@ -114,12 +112,9 @@ export function startDbPoolMonitor(dataSource: DataSource): () => void {
   }, METRICS_INTERVAL_MS);
 
   // Don't keep the process alive solely for the metrics timer.
-  if (typeof metricsTimer.unref === "function") metricsTimer.unref();
+  if (typeof metricsTimer.unref === 'function') metricsTimer.unref();
 
-  logger.info(
-    { intervalMs: METRICS_INTERVAL_MS, ...dbPoolConfig },
-    "DB pool monitor started"
-  );
+  logger.info({ intervalMs: METRICS_INTERVAL_MS, ...dbPoolConfig }, 'DB pool monitor started');
 
   return stopDbPoolMonitor;
 }

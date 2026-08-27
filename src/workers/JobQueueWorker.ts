@@ -13,9 +13,9 @@
  *   registerJobHandler("transcode", async (job) => { ... });
  *   startJobQueueWorker();
  */
-import redis from "../config/redis";
-import logger from "../config/logger";
-import { Job, JobQueueService } from "../services/JobQueueService";
+import redis from '../config/redis';
+import logger from '../config/logger';
+import { Job, JobQueueService } from '../services/JobQueueService';
 
 type JobHandler = (job: Job) => Promise<void>;
 
@@ -29,7 +29,7 @@ const MONITOR_INTERVAL_MS = Number(process.env.JOB_MONITOR_INTERVAL_MS || 30000)
 /** Register a handler for a given job type. */
 export function registerJobHandler(type: string, handler: JobHandler): void {
   handlers.set(type, handler);
-  logger.info({ type }, "Registered job handler");
+  logger.info({ type }, 'Registered job handler');
 }
 
 /**
@@ -41,12 +41,10 @@ export function startJobQueueWorker(): void {
   running = true;
 
   const blockingClient = redis.duplicate();
-  blockingClient.on("error", (err) =>
-    logger.error({ err }, "Job queue blocking client error")
-  );
+  blockingClient.on('error', (err) => logger.error({ err }, 'Job queue blocking client error'));
 
   const loop = async () => {
-    logger.info("⚙️  Job queue worker started");
+    logger.info('⚙️  Job queue worker started');
     while (running) {
       try {
         const job = await JobQueueService.reserve(blockingClient, 5);
@@ -58,7 +56,7 @@ export function startJobQueueWorker(): void {
           // dead-letters rather than silently vanishing.
           await JobQueueService.fail(
             job,
-            new Error(`No handler registered for job type "${job.type}"`)
+            new Error(`No handler registered for job type "${job.type}"`),
           );
           continue;
         }
@@ -70,7 +68,7 @@ export function startJobQueueWorker(): void {
           await JobQueueService.fail(job, err);
         }
       } catch (err) {
-        logger.error({ err }, "Job queue worker loop error");
+        logger.error({ err }, 'Job queue worker loop error');
         // Brief pause so a persistent error (e.g. Redis down) doesn't hot-loop.
         await new Promise((r) => setTimeout(r, 1000));
       }
@@ -100,16 +98,16 @@ export function startJobQueueMonitor(): () => void {
         if (stats.totalQueued > JobQueueService.warnThreshold) {
           logger.warn(
             stats,
-            `Job queue depth ${stats.totalQueued} exceeds threshold ${JobQueueService.warnThreshold}`
+            `Job queue depth ${stats.totalQueued} exceeds threshold ${JobQueueService.warnThreshold}`,
           );
         } else {
-          logger.info(stats, "Job queue stats");
+          logger.info(stats, 'Job queue stats');
         }
       })
-      .catch((err) => logger.error({ err }, "Job queue monitor failed"));
+      .catch((err) => logger.error({ err }, 'Job queue monitor failed'));
   }, MONITOR_INTERVAL_MS);
 
-  if (typeof monitorTimer.unref === "function") monitorTimer.unref();
+  if (typeof monitorTimer.unref === 'function') monitorTimer.unref();
   return stopJobQueueMonitor;
 }
 

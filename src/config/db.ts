@@ -7,32 +7,12 @@ import { TransactionLog } from "../entities/TransactionLog";
 import { Genre } from "../entities/Genre";
 import { Album } from "../entities/Album";
 import { RoyaltyPayout } from "../entities/RoyaltyPayout";
+import { WebhookSubscription } from "../entities/WebhookSubscription";
+import { TakedownRequest } from "../entities/TakedownRequest";
 
 
 
 dotenv.config();
-
-/**
- * Connection pool configuration (Issue #134)
- * ───────────────────────────────────────────
- * All values are configurable via environment variables so pool sizing can be
- * tuned per-deployment without code changes. Defaults follow the acceptance
- * criteria: min 5, max 20, 30s connection timeout, 300s idle timeout.
- *
- *   DB_POOL_MAX                – max connections in the pool        (default 20)
- *   DB_POOL_MIN                – min connections kept warm          (default 5)
- *   DB_CONNECTION_TIMEOUT_MS   – wait time to acquire a connection  (default 30000)
- *   DB_IDLE_TIMEOUT_MS         – idle connection lifetime           (default 300000)
- *
- * The pg driver ignores keys it doesn't recognise, so passing these through
- * `extra` (node-postgres Pool options) is safe.
- */
-export const dbPoolConfig = {
-  max: Number(process.env.DB_POOL_MAX || 20),
-  min: Number(process.env.DB_POOL_MIN || 5),
-  connectionTimeoutMillis: Number(process.env.DB_CONNECTION_TIMEOUT_MS || 30000),
-  idleTimeoutMillis: Number(process.env.DB_IDLE_TIMEOUT_MS || 300000),
-};
 
 const AppDataSource = new DataSource({
   type: "postgres",
@@ -45,22 +25,15 @@ const AppDataSource = new DataSource({
   dropSchema: false,
   ssl: false,
   logging: true,
-  // Cap the pool at the configured maximum. `extra` carries the full set of
-  // node-postgres Pool options (min/max sizing + timeouts).
-  poolSize: dbPoolConfig.max,
-  extra: {
-    max: dbPoolConfig.max,
-    min: dbPoolConfig.min,
-    connectionTimeoutMillis: dbPoolConfig.connectionTimeoutMillis,
-    idleTimeoutMillis: dbPoolConfig.idleTimeoutMillis,
-  },
   entities: [
     User,
     Song,
     TransactionLog,
     Genre,
     Album,
-    RoyaltyPayout
+    RoyaltyPayout,
+    WebhookSubscription,
+    TakedownRequest
   ],
   migrations: ["src/migrations/*.ts", "dist/migrations/*.js"],
   migrationsTableName: "migrations",

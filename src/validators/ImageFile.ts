@@ -1,13 +1,9 @@
-import {
-  registerDecorator,
-  ValidationOptions,
-  ValidationArguments,
-} from "class-validator";
+import { registerDecorator, ValidationOptions, ValidationArguments } from 'class-validator';
 
 export function MaxFileSize(maxSizeInBytes: number, validationOptions?: ValidationOptions) {
-  return function (object: Object, propertyName: string) {
+  return function (object: object, propertyName: string) {
     registerDecorator({
-      name: "MaxFileSize",
+      name: 'MaxFileSize',
       target: object.constructor,
       propertyName,
       constraints: [maxSizeInBytes],
@@ -18,7 +14,7 @@ export function MaxFileSize(maxSizeInBytes: number, validationOptions?: Validati
           if (!value) return true;
 
           // If the value is an object (e.g. Multer file)
-          if (typeof value === "object" && "size" in value) {
+          if (typeof value === 'object' && 'size' in value) {
             return value.size <= args.constraints[0];
           }
 
@@ -35,20 +31,20 @@ export function MaxFileSize(maxSizeInBytes: number, validationOptions?: Validati
 }
 
 export function IsImageFile(validationOptions?: ValidationOptions) {
-  return function (object: Object, propertyName: string) {
+  return function (object: object, propertyName: string) {
     registerDecorator({
-      name: "IsImageFile",
+      name: 'IsImageFile',
       target: object.constructor,
       propertyName,
       options: validationOptions,
       validator: {
         validate(value: any) {
           if (!value) return true;
-          const allowed = ["image/jpeg", "image/png", "image/jpg"];
+          const allowed = ['image/jpeg', 'image/png', 'image/jpg'];
           return allowed.includes(value.mimetype);
         },
         defaultMessage() {
-          return "File must be an image (jpg or png)";
+          return 'File must be an image (jpg or png)';
         },
       },
     });

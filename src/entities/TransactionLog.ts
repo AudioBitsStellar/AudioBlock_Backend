@@ -21,7 +21,10 @@ export class TransactionLog {
   @Column()
   user_id!: string; 
 
-  @Column()
+  @Column({ nullable: true })
+  userId!: string;
+
+  @Column({ nullable: true })
   txHash!: string; 
 
   @Column()
@@ -29,6 +32,9 @@ export class TransactionLog {
 
   @Column({ nullable: true })
   description?: string;
+
+  @Column({ type: "json", nullable: true })
+  details?: any;
 
   @CreateDateColumn()
   createdAt!: Date;

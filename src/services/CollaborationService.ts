@@ -1,0 +1,172 @@
+import { Repository } from 'typeorm';
+import AppDataSource from '../config/db';
+import { Song } from '../entities/Song';
+import {
+  SongCollaborator,
+  CollaboratorRole,
+  CollaboratorStatus,
+} from '../entities/SongCollaborator';
+import { AppError } from '../errors/AppError';
+
+export interface AddCollaboratorInput {
+  userId: string;
+  role: CollaboratorRole;
+  royaltyShare: number;
+}
+
+const SHARE_TOTAL_TOLERANCE = 0.01;
+
+/**
+ * Manages per-song collaborator credits and royalty splits. The primary
+ * artist (song.artistId) is the only one authorized to add/update/remove
+ * collaborators; total royalty shares across active collaborators must
+ * always sum to 100.
+ */
+export class CollaborationService {
+  private songRepo: Repository<Song>;
+  private collaboratorRepo: Repository<SongCollaborator>;
+
+  constructor() {
+    this.songRepo = AppDataSource.getRepository(Song);
+    this.collaboratorRepo = AppDataSource.getRepository(SongCollaborator);
+  }
+
+  private async getSongOrThrow(songId: string): Promise<Song> {
+    const song = await this.songRepo.findOneBy({ id: songId });
+    if (!song) throw AppError.notFound('Song not found');
+    return song;
+  }
+
+  private assertIsPrimaryArtist(song: Song, userId: string): void {
+    if (song.artistId !== userId) {
+      throw AppError.authorization('Only the primary artist can manage collaborators');
+    }
+  }
+
+  async listCollaborators(songId: string): Promise<SongCollaborator[]> {
+    await this.getSongOrThrow(songId);
+    return this.collaboratorRepo.find({
+      where: { songId, status: CollaboratorStatus.ACTIVE },
+      order: { createdAt: 'ASC' },
+    });
+  }
+
+  async addCollaborator(
+    songId: string,
+    requesterId: string,
+    input: AddCollaboratorInput,
+  ): Promise<SongCollaborator> {
+    const song = await this.getSongOrThrow(songId);
+    this.assertIsPrimaryArtist(song, requesterId);
+
+    if (!Object.values(CollaboratorRole).includes(input.role)) {
+      throw AppError.validation(
+        `role must be one of: ${Object.values(CollaboratorRole).join(', ')}`,
+      );
+    }
+
+    const existing = await this.collaboratorRepo.findOneBy({ songId, userId: input.userId });
+    if (existing && existing.status === CollaboratorStatus.ACTIVE) {
+      throw AppError.conflict('This user is already a collaborator on this song');
+    }
+
+    const others = await this.listCollaborators(songId);
+    await this.assertSharesSumTo100([...others.map((c) => c.royaltyShare), input.royaltyShare]);
+
+    const collaborator =
+      existing ??
+      this.collaboratorRepo.create({
+        songId,
+        userId: input.userId,
+      });
+
+    collaborator.role = input.role;
+    collaborator.royaltyShare = input.royaltyShare;
+    collaborator.status = CollaboratorStatus.ACTIVE;
+
+    return this.collaboratorRepo.save(collaborator);
+  }
+
+  async updateCollaborator(
+    songId: string,
+    targetUserId: string,
+    requesterId: string,
+    updates: Partial<Pick<AddCollaboratorInput, 'role' | 'royaltyShare'>>,
+  ): Promise<SongCollaborator> {
+    const song = await this.getSongOrThrow(songId);
+    this.assertIsPrimaryArtist(song, requesterId);
+
+    const collaborator = await this.collaboratorRepo.findOneBy({
+      songId,
+      userId: targetUserId,
+      status: CollaboratorStatus.ACTIVE,
+    });
+    if (!collaborator) throw AppError.notFound('Collaborator not found on this song');
+
+    if (updates.role !== undefined) {
+      if (!Object.values(CollaboratorRole).includes(updates.role)) {
+        throw AppError.validation(
+          `role must be one of: ${Object.values(CollaboratorRole).join(', ')}`,
+        );
+      }
+      collaborator.role = updates.role;
+    }
+
+    if (updates.royaltyShare !== undefined) {
+      const others = await this.listCollaborators(songId);
+      const shares = others
+        .filter((c) => c.userId !== targetUserId)
+        .map((c) => c.royaltyShare)
+        .concat(updates.royaltyShare);
+      await this.assertSharesSumTo100(shares);
+      collaborator.royaltyShare = updates.royaltyShare;
+    }
+
+    return this.collaboratorRepo.save(collaborator);
+  }
+
+  private async assertSharesSumTo100(shares: number[]): Promise<void> {
+    const total = shares.reduce((sum, share) => sum + share, 0);
+    if (Math.abs(total - 100) > SHARE_TOTAL_TOLERANCE) {
+      throw AppError.validation(`Total royalty shares must equal 100% (got ${total}%)`);
+    }
+  }
+
+  async disputeSplit(songId: string, requesterId: string): Promise<SongCollaborator> {
+    const song = await this.getSongOrThrow(songId);
+    
+    // Any collaborator can dispute
+    const collaborator = await this.collaboratorRepo.findOneBy({
+      songId,
+      userId: requesterId,
+      status: CollaboratorStatus.ACTIVE,
+    });
+    
+    if (!collaborator) {
+      throw AppError.authorization('Only active collaborators can dispute splits');
+    }
+
+    collaborator.disputeStatus = (await import('../entities/SongCollaborator')).DisputeStatus.DISPUTED;
+    return this.collaboratorRepo.save(collaborator);
+  }
+
+  async resolveDispute(songId: string, targetUserId: string, requesterId: string): Promise<SongCollaborator> {
+    const song = await this.getSongOrThrow(songId);
+    
+    // Only primary artist can resolve for now
+    this.assertIsPrimaryArtist(song, requesterId);
+
+    const collaborator = await this.collaboratorRepo.findOneBy({
+      songId,
+      userId: targetUserId,
+      status: CollaboratorStatus.ACTIVE,
+    });
+    
+    if (!collaborator) {
+      throw AppError.notFound('Collaborator not found');
+    }
+
+    collaborator.disputeStatus = (await import('../entities/SongCollaborator')).DisputeStatus.RESOLVED;
+    return this.collaboratorRepo.save(collaborator);
+  }
+}

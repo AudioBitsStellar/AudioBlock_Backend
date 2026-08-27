@@ -1,10 +1,9 @@
-import { DynamicEvmWalletClient } from "@dynamic-labs-wallet/node-evm";
+import { DynamicEvmWalletClient } from '@dynamic-labs-wallet/node-evm';
 import { ThresholdSignatureScheme } from '@dynamic-labs-wallet/core';
 
-import { baseSepolia, liskSepolia } from 'viem/chains';
-import { parseEther } from 'viem/utils';
-import { createWalletClient, http } from "viem";
-import dotenv from "dotenv";
+import { liskSepolia } from 'viem/chains';
+import { createWalletClient, http } from 'viem';
+import dotenv from 'dotenv';
 
 dotenv.config();
 
@@ -19,7 +18,7 @@ export const authenticatedEvmClient = async () => {
 
 export const createEvmWallet = async ({
   thresholdSignatureScheme = ThresholdSignatureScheme.TWO_OF_TWO,
-  password
+  password,
 }: {
   thresholdSignatureScheme?: ThresholdSignatureScheme;
   password?: string;
@@ -48,11 +47,11 @@ export const keyShare = async (walletAddress: string) => {
   });
 
   return keyShares;
-}
+};
 
 export const accountWalletClient = async (fromAddress: string) =>
   createWalletClient({
     chain: liskSepolia,
     transport: http(process.env.LISK_SEPOLIA_RPC_URL!),
     account: fromAddress as `0x${string}`,
-});
+  });

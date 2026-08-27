@@ -8,8 +8,8 @@ import multer from "multer";
 import { CreateCoverDTO } from "../dtos/CreateCoverDTO";
 import fs from "fs";
 import { SongController } from "../controllers/SongController";
+import { EmbedController } from "../controllers/EmbedController";
 import { SubmitSignedXdrDTO } from "../dtos/SubmitSignedXdrDTO";
-import { etagCache } from "../middlewares/etag";
 
 const uploadController = new UploadController();
 const router = Router();
@@ -108,19 +108,10 @@ router.post("/upload/finalize", authArtistMiddleware, validateDTO(FinalizeUpload
 
 // Stream Songs
 router.get("/stream/:id", SongController.streamSong);
+router.get("/popular", SongController.getPopularSongs);
 
-// Public, read-heavy catalog endpoints get ETag + Cache-Control so clients can
-// revalidate cheaply and skip re-downloading unchanged lists (Issue #133).
-router.get(
-  "/popular",
-  etagCache({ visibility: "public", maxAge: 60 }),
-  SongController.getPopularSongs
-);
-router.get(
-  "/search",
-  etagCache({ visibility: "public", maxAge: 30 }),
-  SongController.searchSongs
-);
+// Embeddable player endpoint — public, no auth, same rate limiting as streaming (Redis throttle)
+router.get("/embed/:id", EmbedController.getSongEmbed);
 
 // Soroban on-chain song minting: the artist's wallet signs, the backend
 // only builds and relays the transaction.
@@ -131,5 +122,9 @@ router.post(
   validateDTO(SubmitSignedXdrDTO),
   SongController.submitMint
 );
+
+// Collaborator dispute endpoints
+router.post("/:id/collaborators/dispute", authArtistMiddleware, SongController.disputeSplit);
+router.post("/:id/collaborators/:userId/resolve-dispute", authArtistMiddleware, SongController.resolveDispute);
 
 export default router;

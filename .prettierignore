@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Generated files
+coverage/
+*.min.js
+*.min.css
+
+# Uploads and media
+uploads/
+
+# Logs
+*.log
+logs/
+
+# Environment
+.env
+.env.*
+
+# Database migrations (auto-generated)
+src/migrations/
+
+# App entrypoint: intentionally uses double-quoted strings; keep lint-staged
+# from reformatting it on every change (see PR for playlist features).
+src/app.ts
+
+# Lock files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Docs
+docs/openapi.yaml

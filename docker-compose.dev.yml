@@ -1,0 +1,14 @@
+version: '3.9'
+services:
+  backend:
+    command: sh -c "npm run dev"
+    env_file: .env.docker.dev
+    volumes:
+      - .:/app
+      - /app/node_modules
+    ports:
+      - "4000:4000"
+    depends_on:
+      - db
+      - redis
+      - rabbitmq

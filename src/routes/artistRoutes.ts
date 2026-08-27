@@ -8,6 +8,7 @@ import {
 } from "express";
 import { ArtistProfileController } from "../controllers/ArtistProfileController";
 import { ArtistOnChainController } from "../controllers/ArtistOnChainController";
+import { ArtistMetadataController } from "../controllers/ArtistMetadataController";
 import { validateDTO } from "../middlewares/validate";
 import { authArtistMiddleware, requireArtistAndVerified } from "../middlewares/authMiddleware";
 import { UpdateArtistProfileDTO } from "../dtos/UpdateArtistProfileDTO";
@@ -19,6 +20,9 @@ import { upload } from "../middlewares/upload";
 const artistProfileController = new ArtistProfileController();
 const artistOnChainController = new ArtistOnChainController();
 const router = Router();
+
+// Public metadata endpoint for OG tags / JSON-LD (no auth, no private data)
+router.get("/:id/metadata", ArtistMetadataController.getMetadata);
 
 router.patch("/update-profile", authArtistMiddleware, upload.fields([
   { name: "profileImage", maxCount: 1 },

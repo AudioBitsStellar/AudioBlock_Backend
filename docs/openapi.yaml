@@ -1,0 +1,34 @@
+openapi: 3.0.3
+info:
+  title: AudioBlocks Backend API Reference
+  version: 1.0.0
+  description: API reference for AudioBlocks music NFT platform on Stellar/Soroban.
+paths:
+  /api/api-keys:
+    post:
+      summary: Create an API key
+      description: Issues a new API key with explicit scopes (read-only, upload, admin).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                scopes:
+                  type: array
+                  items:
+                    type: string
+                    enum: [read-only, upload, admin]
+      responses:
+        '201':
+          description: API key created successfully.
+    get:
+      summary: List API keys
+      description: Returns the list of API keys for the authenticated user.
+  /api/api-keys/{id}:
+    delete:
+      summary: Revoke an API key
+      description: Revokes an active API key.

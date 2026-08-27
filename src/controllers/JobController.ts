@@ -1,6 +1,7 @@
-import { Request, Response } from "express";
-import { JobQueueService } from "../services/JobQueueService";
-import { handleError } from "../utils/helpers";
+import { Request, Response } from 'express';
+import { JobQueueService } from '../services/JobQueueService';
+import { handleError } from '../utils/helpers';
+import { AppError } from '../errors/AppError';
 
 /**
  * Admin-facing visibility into the background job queue (Issue #132).
@@ -21,7 +22,7 @@ export class JobController {
         },
       });
     } catch (error) {
-      handleError(res, error);
+      handleError(req, res, error);
     }
   };
 
@@ -30,11 +31,11 @@ export class JobController {
     try {
       const job = await JobQueueService.getJob(req.params.id as string);
       if (!job) {
-        return res.status(404).json({ success: false, message: "Job not found" });
+        throw AppError.notFound('Job not found');
       }
       return res.status(200).json({ success: true, data: job });
     } catch (error) {
-      handleError(res, error);
+      handleError(req, res, error);
     }
   };
 }

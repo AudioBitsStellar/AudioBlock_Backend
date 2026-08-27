@@ -6,23 +6,23 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
-} from "typeorm";
-import { User } from "./User";
+} from 'typeorm';
+import { User } from './User';
 
-@Entity("albums") // pluralize for convention
+@Entity('albums') // pluralize for convention
 export class Album {
-  @PrimaryGeneratedColumn("uuid")
+  @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @ManyToOne(() => User, (user) => user.songs, { onDelete: "CASCADE" })
-  @JoinColumn({ name: "artistId" }) // foreign key column
+  @ManyToOne(() => User, (user) => user.songs, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'artistId' }) // foreign key column
   user!: User;
 
   @Column()
-  artistId!: string; 
+  artistId!: string;
 
   @Column()
-  coverArtPath!: string; 
+  coverArtPath!: string;
 
   @Column()
   title!: string;
@@ -33,8 +33,8 @@ export class Album {
   @Column({ nullable: true })
   genre?: string;
 
-  @Column({ nullable: false, type: "simple-array" })
-  songs! : string[]; // array of song IDs
+  @Column({ nullable: false, type: 'simple-array' })
+  songs!: string[]; // array of song IDs
 
   @Column({ nullable: true })
   artistAddress!: string;
@@ -42,7 +42,7 @@ export class Album {
   @Column({ nullable: true })
   metadataCid!: string;
 
-  @Column({ type: "json", nullable: true })
+  @Column({ type: 'simple-json', nullable: true })
   metadata: any;
 
   @Column({ nullable: true })
