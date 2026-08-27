@@ -31,6 +31,7 @@ export interface SeededTestData {
  * Seeds the database with representative users, genres, albums, and songs for local integration testing.
  * This function is idempotent: running it multiple times will not create duplicates or fail constraint checks.
  */
+// eslint-disable-next-line complexity -- existing seeder tracked in docs/refactoring_priority.md
 export async function seedTestDatabase(dataSource = AppDataSource): Promise<SeededTestData> {
   assertTestEnvironmentSafety();
 

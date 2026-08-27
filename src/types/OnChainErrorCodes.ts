@@ -41,6 +41,7 @@ export interface OnChainErrorResponse {
  * Frontends can use errorCode for branching logic and retryable flag
  * to determine UX (show retry button vs. fatal error).
  */
+// eslint-disable-next-line complexity -- existing function tracked in docs/refactoring_priority.md
 export function mapToOnChainError(error: unknown): OnChainErrorResponse {
   const errorMessage = error instanceof Error ? error.message : String(error);
   const lowerMessage = errorMessage.toLowerCase();

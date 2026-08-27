@@ -1,9 +1,9 @@
-import { Repository } from "typeorm";
-import AppDataSource from "../config/db";
-import { TakedownRequest, TakedownStatus, TakedownReason } from "../entities/TakedownRequest";
-import { Song } from "../entities/Song";
-import { TransactionLog } from "../entities/TransactionLog";
-import logger from "../config/logger";
+import { Repository } from 'typeorm';
+import AppDataSource from '../config/db';
+import { TakedownRequest, TakedownStatus, TakedownReason } from '../entities/TakedownRequest';
+import { Song } from '../entities/Song';
+import { TransactionLog } from '../entities/TransactionLog';
+import logger from '../config/logger';
 
 export class TakedownService {
   private takedownRepo: Repository<TakedownRequest>;
@@ -21,10 +21,10 @@ export class TakedownService {
     songId: string,
     reason: TakedownReason = TakedownReason.COPYRIGHT,
     description?: string,
-    evidenceUrl?: string
+    evidenceUrl?: string,
   ): Promise<TakedownRequest> {
     const song = await this.songRepo.findOneBy({ id: songId });
-    if (!song) throw Object.assign(new Error("Song not found"), { statusCode: 404 });
+    if (!song) throw Object.assign(new Error('Song not found'), { statusCode: 404 });
 
     // Prevent duplicate pending requests for same song by same requester?
     // Allow but warn if already pending
@@ -33,7 +33,7 @@ export class TakedownService {
     });
     if (existingPending) {
       // Allow multiple but could also throw; we allow and log
-      logger.warn({ songId, requestedBy }, "Duplicate pending takedown request exists");
+      logger.warn({ songId, requestedBy }, 'Duplicate pending takedown request exists');
     }
 
     const takedown = this.takedownRepo.create({
@@ -50,24 +50,31 @@ export class TakedownService {
 
     await this.logRepo.save({
       userId: requestedBy,
-      action: "takedown_request_created",
+      action: 'takedown_request_created',
       details: { takedownId: saved.id, songId, reason },
     } as any);
 
-    logger.info({ takedownId: saved.id, songId, requestedBy }, "Takedown request created");
+    logger.info({ takedownId: saved.id, songId, requestedBy }, 'Takedown request created');
     return saved;
   }
 
-  async listRequests(filter?: { status?: TakedownStatus; songId?: string }): Promise<TakedownRequest[]> {
+  async listRequests(filter?: {
+    status?: TakedownStatus;
+    songId?: string;
+  }): Promise<TakedownRequest[]> {
     const where: any = {};
     if (filter?.status) where.status = filter.status;
     if (filter?.songId) where.songId = filter.songId;
-    return this.takedownRepo.find({ where, order: { createdAt: "DESC" }, relations: ["song", "requester"] });
+    return this.takedownRepo.find({
+      where,
+      order: { createdAt: 'DESC' },
+      relations: ['song', 'requester'],
+    });
   }
 
   async getRequest(id: string): Promise<TakedownRequest> {
-    const req = await this.takedownRepo.findOne({ where: { id }, relations: ["song"] });
-    if (!req) throw Object.assign(new Error("Takedown request not found"), { statusCode: 404 });
+    const req = await this.takedownRepo.findOne({ where: { id }, relations: ['song'] });
+    if (!req) throw Object.assign(new Error('Takedown request not found'), { statusCode: 404 });
     return req;
   }
 
@@ -77,20 +84,22 @@ export class TakedownService {
    * - reject: deny claim, keep song published
    * - reverse: if previously approved and claim resolved in artist's favor, republish
    */
+  // eslint-disable-next-line complexity -- existing method tracked in docs/refactoring_priority.md
   async reviewRequest(
     takedownId: string,
     adminId: string,
-    action: "approve" | "reject" | "reverse",
-    reviewNotes?: string
+    action: 'approve' | 'reject' | 'reverse',
+    reviewNotes?: string,
   ): Promise<TakedownRequest> {
     const takedown = await this.takedownRepo.findOne({ where: { id: takedownId } });
-    if (!takedown) throw Object.assign(new Error("Takedown request not found"), { statusCode: 404 });
+    if (!takedown)
+      throw Object.assign(new Error('Takedown request not found'), { statusCode: 404 });
 
     const song = await this.songRepo.findOneBy({ id: takedown.songId });
-    if (!song) throw Object.assign(new Error("Song not found for takedown"), { statusCode: 404 });
+    if (!song) throw Object.assign(new Error('Song not found for takedown'), { statusCode: 404 });
 
-    if (action === "approve") {
-      if (takedown.status === TakedownStatus.APPROVED) throw new Error("Takedown already approved");
+    if (action === 'approve') {
+      if (takedown.status === TakedownStatus.APPROVED) throw new Error('Takedown already approved');
       // Snapshot previous flagged state before unpublishing
       takedown.previousFlagged = song.flagged;
       takedown.status = TakedownStatus.APPROVED;
@@ -102,29 +111,34 @@ export class TakedownService {
       song.flagged = true;
       song.flaggedAt = new Date();
       song.flaggedBy = adminId;
-      song.flagReason = `takedown:${takedown.id}:${takedown.reason}:${reviewNotes || ""}`.slice(0, 500);
+      song.flagReason = `takedown:${takedown.id}:${takedown.reason}:${reviewNotes || ''}`.slice(
+        0,
+        500,
+      );
 
       await this.songRepo.save(song);
       await this.logRepo.save({
         userId: adminId,
-        action: "takedown_approved",
+        action: 'takedown_approved',
         details: { takedownId, songId: song.id },
       } as any);
-      logger.info({ takedownId, songId: song.id, adminId }, "Takedown approved — song unpublished");
-    } else if (action === "reject") {
-      if (takedown.status !== TakedownStatus.PENDING) throw new Error("Only pending takedowns can be rejected");
+      logger.info({ takedownId, songId: song.id, adminId }, 'Takedown approved — song unpublished');
+    } else if (action === 'reject') {
+      if (takedown.status !== TakedownStatus.PENDING)
+        throw new Error('Only pending takedowns can be rejected');
       takedown.status = TakedownStatus.REJECTED;
       takedown.reviewedBy = adminId;
       takedown.reviewNotes = reviewNotes || null;
       takedown.resolvedAt = new Date();
       await this.logRepo.save({
         userId: adminId,
-        action: "takedown_rejected",
+        action: 'takedown_rejected',
         details: { takedownId, songId: song.id },
       } as any);
-      logger.info({ takedownId, songId: song.id, adminId }, "Takedown rejected");
-    } else if (action === "reverse") {
-      if (takedown.status !== TakedownStatus.APPROVED) throw new Error("Only approved takedowns can be reversed");
+      logger.info({ takedownId, songId: song.id, adminId }, 'Takedown rejected');
+    } else if (action === 'reverse') {
+      if (takedown.status !== TakedownStatus.APPROVED)
+        throw new Error('Only approved takedowns can be reversed');
       takedown.status = TakedownStatus.REVERSED;
       takedown.reviewedBy = adminId;
       takedown.reviewNotes = reviewNotes || null;
@@ -143,19 +157,19 @@ export class TakedownService {
         if (song.flagReason?.includes(`takedown:${takedown.id}`)) {
           // If previous was flagged, we need to restore previous flag metadata — but we only stored boolean.
           // Keep flagged true but reset flagReason to generic
-          song.flagReason = "previously_flagged";
+          song.flagReason = 'previously_flagged';
         }
       }
 
       await this.songRepo.save(song);
       await this.logRepo.save({
         userId: adminId,
-        action: "takedown_reversed",
+        action: 'takedown_reversed',
         details: { takedownId, songId: song.id },
       } as any);
-      logger.info({ takedownId, songId: song.id, adminId }, "Takedown reversed — song republished");
+      logger.info({ takedownId, songId: song.id, adminId }, 'Takedown reversed — song republished');
     } else {
-      throw new Error("Invalid action");
+      throw new Error('Invalid action');
     }
 
     return this.takedownRepo.save(takedown);
