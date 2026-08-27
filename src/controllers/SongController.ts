@@ -300,6 +300,29 @@ export class SongController {
     }
   };
 
+  static disputeSplit = async (req: Request, res: Response) => {
+    try {
+      const songId = req.params.id as string;
+      const requesterId = (req as any).user.id as string;
+      const collaborator = await collaborationService.disputeSplit(songId, requesterId);
+      return res.status(200).json({ success: true, data: collaborator });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  static resolveDispute = async (req: Request, res: Response) => {
+    try {
+      const songId = req.params.id as string;
+      const targetUserId = req.params.userId as string;
+      const requesterId = (req as any).user.id as string;
+      const collaborator = await collaborationService.resolveDispute(songId, targetUserId, requesterId);
+      return res.status(200).json({ success: true, data: collaborator });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
   static addTags = async (req: Request, res: Response) => {
     try {
       const songId = req.params.id as string;

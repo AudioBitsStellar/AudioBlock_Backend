@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "jest",
+    "test:coverage": "jest --coverage",
     "test:integration": "jest --runInBand tests/integration/**/*.test.ts",
     "test:watch": "jest --watch",
     "test:dynamic": "ts-node-esm src/scripts/dynamic.ts",
@@ -24,7 +25,8 @@
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\"",
     "deadcode": "knip",
-    "deadcode:production": "knip --production"
+    "deadcode:production": "knip --production",
+    "compose:check": "node scripts/check-compose-consistency.js"
   },
   "lint-staged": {
     "*.ts": [

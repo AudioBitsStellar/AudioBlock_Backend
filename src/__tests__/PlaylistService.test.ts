@@ -9,6 +9,7 @@ import AppDataSource from '../config/db';
 import { PlaylistService } from '../services/PlaylistService';
 import { Playlist } from '../entities/Playlist';
 import { PlaylistSong } from '../entities/PlaylistSong';
+import { PlaylistCollaborator, PlaylistCollaboratorRole } from '../entities/PlaylistCollaborator';
 import { Song } from '../entities/Song';
 
 const mockPlaylistRepo = {
@@ -27,8 +28,16 @@ const mockPlaylistSongRepo = {
   delete: jest.fn(),
   maximum: jest.fn(),
 };
+const mockCollaboratorRepo = {
+  findOneBy: jest.fn(),
+  find: jest.fn(),
+  create: jest.fn(),
+  save: jest.fn(),
+  delete: jest.fn(),
+};
 const mockSongRepo = {
   findOneBy: jest.fn(),
+  createQueryBuilder: jest.fn(),
 };
 
 beforeEach(() => {
@@ -36,6 +45,7 @@ beforeEach(() => {
   (AppDataSource.getRepository as jest.Mock).mockImplementation((entity: unknown) => {
     if (entity === Playlist) return mockPlaylistRepo;
     if (entity === PlaylistSong) return mockPlaylistSongRepo;
+    if (entity === PlaylistCollaborator) return mockCollaboratorRepo;
     if (entity === Song) return mockSongRepo;
     throw new Error(`Unexpected entity: ${(entity as { name?: string })?.name}`);
   });
@@ -53,6 +63,8 @@ const ownedPlaylist = (overrides: Partial<Playlist> = {}): Playlist =>
     description: '',
     isPublic: true,
     coverImageUrl: '',
+    isRuleBased: false,
+    rule: null,
     songs: [],
     ...overrides,
   }) as Playlist;
@@ -112,7 +124,7 @@ describe('PlaylistService.getById', () => {
 
     expect(mockPlaylistRepo.findOne).toHaveBeenCalledWith(
       expect.objectContaining({
-        relations: { songs: { song: true } },
+        relations: { songs: { song: true }, collaborators: true },
         order: { songs: { position: 'ASC' } },
       }),
     );
@@ -278,5 +290,150 @@ describe('PlaylistService.reorder', () => {
     await expect(svc.reorder('pl-1', 'user-1', ['song-1', 'ghost'])).rejects.toMatchObject({
       statusCode: 400,
     });
+  });
+});
+
+describe('PlaylistService collaborative editing (Issue #406)', () => {
+  it('allows the owner to invite a collaborator', async () => {
+    mockPlaylistRepo.findOneBy.mockResolvedValue(ownedPlaylist());
+    mockCollaboratorRepo.findOneBy.mockResolvedValue(null);
+    mockCollaboratorRepo.create.mockImplementation((input: unknown) => input);
+    mockCollaboratorRepo.save.mockImplementation(async (c: PlaylistCollaborator) => c);
+
+    const svc = makeSvc();
+    const result = await svc.addCollaborator('pl-1', 'user-1', {
+      userId: 'user-2',
+      role: PlaylistCollaboratorRole.EDITOR,
+    });
+
+    expect(result.userId).toBe('user-2');
+    expect(result.role).toBe(PlaylistCollaboratorRole.EDITOR);
+  });
+
+  it('rejects an invite from a non-owner', async () => {
+    mockPlaylistRepo.findOneBy.mockResolvedValue(ownedPlaylist());
+
+    const svc = makeSvc();
+    await expect(
+      svc.addCollaborator('pl-1', 'intruder', {
+        userId: 'user-2',
+        role: PlaylistCollaboratorRole.EDITOR,
+      }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+    expect(mockCollaboratorRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('lets an editor collaborator add a song', async () => {
+    const playlist = ownedPlaylist({ userId: 'user-1' });
+    mockPlaylistRepo.findOneBy.mockResolvedValue(playlist);
+    mockCollaboratorRepo.findOneBy.mockResolvedValue({
+      id: 'pc-1',
+      playlistId: 'pl-1',
+      userId: 'user-2',
+      role: 'editor',
+    });
+    mockSongRepo.findOneBy.mockResolvedValue({ id: 'song-1' });
+    mockPlaylistSongRepo.findOne.mockResolvedValue(null);
+    mockPlaylistSongRepo.maximum.mockResolvedValue(0);
+    mockPlaylistSongRepo.create.mockImplementation((input: unknown) => input);
+    mockPlaylistSongRepo.save.mockImplementation(async (e: PlaylistSong) => e);
+
+    const svc = makeSvc();
+    const entry = await svc.addSong('pl-1', 'user-2', 'song-1');
+
+    expect(entry.playlistId).toBe('pl-1');
+    expect(entry.songId).toBe('song-1');
+  });
+
+  it('rejects an edit from a user who is not a collaborator (unauthorized)', async () => {
+    const playlist = ownedPlaylist({ userId: 'user-1' });
+    mockPlaylistRepo.findOneBy.mockResolvedValue(playlist);
+    mockCollaboratorRepo.findOneBy.mockResolvedValue(null);
+
+    const svc = makeSvc();
+    await expect(svc.addSong('pl-1', 'stranger', 'song-1')).rejects.toMatchObject({
+      statusCode: 403,
+    });
+    expect(mockPlaylistSongRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('rejects an edit from a viewer collaborator (no edit permission)', async () => {
+    const playlist = ownedPlaylist({ userId: 'user-1' });
+    mockPlaylistRepo.findOneBy.mockResolvedValue(playlist);
+    mockCollaboratorRepo.findOneBy.mockImplementation(
+      (query: { playlistId: string; userId: string; role?: string }) =>
+        query.role === 'editor'
+          ? null
+          : { id: 'pc-1', playlistId: 'pl-1', userId: 'user-2', role: 'viewer' },
+    );
+
+    const svc = makeSvc();
+    await expect(svc.addSong('pl-1', 'user-2', 'song-1')).rejects.toMatchObject({
+      statusCode: 403,
+    });
+  });
+});
+
+describe('PlaylistService rule-based playlists (Issue #407)', () => {
+  it('rejects a rule-based playlist with no criteria', async () => {
+    const svc = makeSvc();
+    await expect(
+      svc.create('user-1', { name: 'Empty rule', isRuleBased: true, rule: {} }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+    expect(mockPlaylistRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('creates a rule-based playlist with valid criteria', async () => {
+    mockPlaylistRepo.create.mockImplementation((input: unknown) => input);
+    mockPlaylistRepo.save.mockImplementation(async (p: Playlist) => p);
+
+    const rule = { tags: ['lo-fi'], genres: ['chill'], savedWithinDays: 30 };
+    const svc = makeSvc();
+    const result = await svc.create('user-1', { name: 'Smart', isRuleBased: true, rule });
+
+    expect(mockPlaylistRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ isRuleBased: true, rule }),
+    );
+    expect(result.isRuleBased).toBe(true);
+  });
+
+  it('rejects manually adding a song to a rule-based playlist', async () => {
+    mockPlaylistRepo.findOneBy.mockResolvedValue(ownedPlaylist({ isRuleBased: true }));
+
+    const svc = makeSvc();
+    await expect(svc.addSong('pl-1', 'user-1', 'song-1')).rejects.toMatchObject({
+      statusCode: 400,
+    });
+  });
+
+  it('resolves matching songs at read time for a rule-based playlist', async () => {
+    const playlist = ownedPlaylist({
+      isRuleBased: true,
+      rule: { tags: ['lo-fi'], savedWithinDays: 30 },
+    });
+    mockPlaylistRepo.findOne.mockResolvedValue(playlist);
+    mockCollaboratorRepo.findOneBy.mockResolvedValue(null);
+
+    const getMany = jest.fn().mockResolvedValue([
+      { id: 'song-a', createdAt: new Date(), status: 'ready', flagged: false },
+      { id: 'song-b', createdAt: new Date(), status: 'ready', flagged: false },
+    ]);
+    const qb = {
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      innerJoin: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      distinct: jest.fn().mockReturnThis(),
+      getMany,
+    };
+    mockSongRepo.createQueryBuilder.mockReturnValue(qb);
+    mockPlaylistSongRepo.create.mockImplementation((input: unknown) => input);
+
+    const svc = makeSvc();
+    const result = await svc.getById('pl-1', 'user-1');
+
+    expect(getMany).toHaveBeenCalled();
+    expect(result.songs).toHaveLength(2);
+    expect(result.songs[0].songId).toBe('song-a');
   });
 });
