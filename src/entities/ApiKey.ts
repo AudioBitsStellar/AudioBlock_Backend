@@ -2,12 +2,18 @@ import {
   Entity,
   PrimaryGeneratedColumn,
   Column,
-  CreateDateColumn,
-  UpdateDateColumn,
   ManyToOne,
   JoinColumn,
+  CreateDateColumn,
+  UpdateDateColumn,
 } from 'typeorm';
 import { User } from './User';
+
+export enum ApiKeyScope {
+  READ_ONLY = 'read-only',
+  UPLOAD = 'upload',
+  ADMIN = 'admin',
+}
 
 @Entity('api_keys')
 export class ApiKey {
@@ -24,22 +30,19 @@ export class ApiKey {
   @Column()
   name!: string;
 
-  @Column()
+  @Column({ unique: true })
   keyHash!: string;
 
-  @Column()
-  keyPrefix!: string;
+  @Column({ type: 'simple-array', default: '' })
+  scopes!: ApiKeyScope[];
 
-  @Column('simple-array', { default: '' })
+  @Column({ type: 'simple-array', default: '' })
   permissions!: string[];
-
-  @Column('simple-array', { default: '' })
-  scopes!: string[];
 
   @Column({ default: false })
   isRevoked!: boolean;
 
-  @Column({ nullable: true, type: 'timestamp' })
+  @Column({ type: 'timestamp', nullable: true })
   lastUsedAt?: Date;
 
   @CreateDateColumn()
