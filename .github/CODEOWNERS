@@ -1,21 +1,89 @@
-# Each line is a file pattern followed by one or more owners.
-# Order matters: the last matching pattern takes precedence.
+# CODEOWNERS — AudioBlock Backend
+#
+# GitHub uses this file to automatically request reviews from the right people
+# when a PR touches a mapped path. Rules are evaluated top-to-bottom; the LAST
+# matching rule wins for a given file.
+#
+# Syntax: <pattern>  <@owner> [<@owner2> ...]
+# Docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+#
+# ──────────────────────────────────────────────────────────────────────────────
+# IMPORTANT: Replace placeholder handles with real GitHub usernames before
+# merging. Every listed owner must have at least Read access to the repo.
+# ──────────────────────────────────────────────────────────────────────────────
 
-# Default owner for any unmatched paths
-* @Darkvader-ship-it
+# ---------------------------------------------------------------------------
+# Global fallback — catches anything not matched by a more specific rule
+# ---------------------------------------------------------------------------
+*                                   @Darkvader-ship-it
 
-# Core backend logic
-/src/controllers/ @Darkvader-ship-it
-/src/services/  @Darkvader-ship-it
-/src/entities/  @Darkvader-ship-it
+# ---------------------------------------------------------------------------
+# Blockchain / Soroban / Stellar
+# High-risk area: on-chain logic, contract ABIs, Stellar SDK usage
+# ---------------------------------------------------------------------------
+/src/services/Soroban/              @Darkvader-ship-it
+/src/abis/                          @Darkvader-ship-it
+/src/controllers/ArtistOnChainController.ts  @Darkvader-ship-it
+/src/config/soroban.ts              @Darkvader-ship-it
+/docs/ON_CHAIN_INTEGRATION.md       @Darkvader-ship-it
 
-# Infrastructure & data
-/src/workers/    @Darkvader-ship-it
-/src/migrations/ @Darkvader-ship-it
-/Dockerfile      @Darkvader-ship-it
-/docker-compose*.yml @Darkvader-ship-it
+# ---------------------------------------------------------------------------
+# Background workers & job queue
+# Changes here affect async processing reliability
+# ---------------------------------------------------------------------------
+/src/workers/                       @Darkvader-ship-it
+/src/jobs/                          @Darkvader-ship-it
+/src/config/rabbitmq.ts             @Darkvader-ship-it
 
-# Quality & documentation
-/tests/ @Darkvader-ship-it
-/docs/  @Darkvader-ship-it
-/.github/ @Darkvader-ship-it
+# ---------------------------------------------------------------------------
+# Authentication & security middleware
+# ---------------------------------------------------------------------------
+/src/middlewares/authMiddleware.ts  @Darkvader-ship-it
+/src/middlewares/authRateLimiter.ts @Darkvader-ship-it
+/src/controllers/AuthController.ts  @Darkvader-ship-it
+/src/services/AuthService.ts        @Darkvader-ship-it
+/src/config/dynamic.ts              @Darkvader-ship-it
+
+# ---------------------------------------------------------------------------
+# Marketplace
+# ---------------------------------------------------------------------------
+/src/services/Marketplace/          @Darkvader-ship-it
+/src/controllers/MarketplaceController.ts  @Darkvader-ship-it
+
+# ---------------------------------------------------------------------------
+# Song upload & processing pipeline
+# ---------------------------------------------------------------------------
+/src/services/Song/                 @Darkvader-ship-it
+/src/controllers/UploadController.ts  @Darkvader-ship-it
+/src/controllers/SongController.ts  @Darkvader-ship-it
+
+# ---------------------------------------------------------------------------
+# Infrastructure — Docker, CI, environment config
+# ---------------------------------------------------------------------------
+/Dockerfile                         @Darkvader-ship-it
+/docker-compose.yml                 @Darkvader-ship-it
+/docker-compose.override.yml        @Darkvader-ship-it
+/.github/workflows/                 @Darkvader-ship-it
+/src/config/                        @Darkvader-ship-it
+
+# ---------------------------------------------------------------------------
+# Database — migrations and entity definitions
+# Schema changes require careful review
+# ---------------------------------------------------------------------------
+/src/migrations/                    @Darkvader-ship-it
+/src/entities/                      @Darkvader-ship-it
+/src/config/db.ts                   @Darkvader-ship-it
+
+# ---------------------------------------------------------------------------
+# ADRs and key documentation
+# ---------------------------------------------------------------------------
+/docs/                              @Darkvader-ship-it
+
+# ---------------------------------------------------------------------------
+# Release & contribution process files
+# Changes here affect how the whole team works
+# ---------------------------------------------------------------------------
+/RELEASING.md                       @Darkvader-ship-it
+/CONTRIBUTING.md                    @Darkvader-ship-it
+/.github/CODEOWNERS                 @Darkvader-ship-it
+/.github/release-drafter.yml        @Darkvader-ship-it

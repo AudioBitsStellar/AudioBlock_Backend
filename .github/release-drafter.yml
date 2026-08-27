@@ -1,0 +1,76 @@
+name-template: 'v$RESOLVED_VERSION'
+tag-template: 'v$RESOLVED_VERSION'
+
+# Map PR labels to changelog categories
+categories:
+  - title: '🚀 Features'
+    labels:
+      - 'feature'
+      - 'enhancement'
+  - title: '🐛 Bug Fixes'
+    labels:
+      - 'bug'
+      - 'fix'
+  - title: '⚡ Performance'
+    labels:
+      - 'performance'
+  - title: '🔒 Security'
+    labels:
+      - 'security'
+  - title: '🔗 Blockchain / On-Chain'
+    labels:
+      - 'blockchain'
+      - 'soroban'
+      - 'stellar'
+  - title: '🏗 Infrastructure'
+    labels:
+      - 'infrastructure'
+      - 'docker'
+      - 'ci'
+  - title: '📝 Documentation'
+    labels:
+      - 'documentation'
+      - 'docs'
+  - title: '🧹 Chores & Maintenance'
+    labels:
+      - 'chore'
+      - 'dependencies'
+      - 'refactor'
+
+# PRs with these labels are excluded from the draft
+exclude-labels:
+  - 'skip-changelog'
+  - 'wip'
+
+# Semver bump rules driven by labels
+version-resolver:
+  major:
+    labels:
+      - 'breaking-change'
+      - 'major'
+  minor:
+    labels:
+      - 'feature'
+      - 'enhancement'
+  patch:
+    labels:
+      - 'bug'
+      - 'fix'
+      - 'performance'
+      - 'security'
+      - 'chore'
+      - 'documentation'
+      - 'docs'
+      - 'dependencies'
+      - 'refactor'
+  default: patch
+
+# Body template for the GitHub Release draft
+template: |
+  ## What's Changed
+
+  $CHANGES
+
+  ---
+
+  **Full Changelog**: https://github.com/Darkvader-ship-it/AudioBlock_Backend/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
