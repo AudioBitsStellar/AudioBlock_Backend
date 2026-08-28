@@ -1,4 +1,4 @@
-/* eslint-disable max-lines-per-function */
+/* eslint-disable max-lines-per-function, max-lines */
 import { Repository } from 'typeorm';
 import { SubscriptionService } from '../services/SubscriptionService';
 import { Subscription, SubscriptionTier, SubscriptionStatus } from '../entities/Subscription';
@@ -264,6 +264,140 @@ describe('SubscriptionService', () => {
       mockSubscriptionRepo.findOne.mockResolvedValue(mockSubscription as Subscription);
 
       const result = await subscriptionService.hasTierAccess(userId, SubscriptionTier.LABEL);
+
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('trial', () => {
+    const userId = 'user-123';
+
+    it('should start a trial with a trialEndsAt in the future and no billing endDate', async () => {
+      mockSubscriptionRepo.findOne.mockResolvedValue(null);
+      const now = Date.now();
+      mockSubscriptionRepo.create.mockImplementation((data: any) => {
+        const trialEndsAt = data.trialEndsAt as Date;
+        return {
+          id: 'sub-trial',
+          userId,
+          tier: data.tier,
+          status: SubscriptionStatus.ACTIVE,
+          startDate: data.startDate,
+          endDate: data.endDate,
+          trialEndsAt,
+        } as Subscription;
+      });
+      mockSubscriptionRepo.save.mockResolvedValue({
+        id: 'sub-trial',
+        userId,
+        tier: SubscriptionTier.ARTIST_PRO,
+        status: SubscriptionStatus.ACTIVE,
+        startDate: new Date(now),
+        trialEndsAt: new Date(now + 14 * 24 * 60 * 60 * 1000),
+      } as Subscription);
+
+      const result = await subscriptionService.startTrial(userId, SubscriptionTier.ARTIST_PRO, 14);
+
+      expect(result.tier).toBe(SubscriptionTier.ARTIST_PRO);
+      expect(result.status).toBe(SubscriptionStatus.ACTIVE);
+      expect(result.trialEndsAt).toBeDefined();
+      // Not billed during the trial -> no endDate set.
+      expect(result.endDate).toBeUndefined();
+      expect(result.trialEndsAt!.getTime()).toBeGreaterThan(now);
+    });
+
+    it('should not start a trial when the user already has an active subscription', async () => {
+      mockSubscriptionRepo.findOne.mockResolvedValue({
+        id: 'sub-123',
+        userId,
+        tier: SubscriptionTier.ARTIST_PRO,
+        status: SubscriptionStatus.ACTIVE,
+        startDate: new Date('2026-01-01'),
+        endDate: new Date('2027-01-01'),
+      } as Subscription);
+
+      await expect(
+        subscriptionService.startTrial(userId, SubscriptionTier.ARTIST_PRO, 14),
+      ).rejects.toThrow(AppError);
+    });
+
+    it('should reject an invalid trial duration', async () => {
+      mockSubscriptionRepo.findOne.mockResolvedValue(null);
+
+      await expect(
+        subscriptionService.startTrial(userId, SubscriptionTier.ARTIST_PRO, 0),
+      ).rejects.toThrow(AppError);
+    });
+
+    it('should grant gated features to a subscriber inside their trial without billing', async () => {
+      const inTrial = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      const mockSubscription: Partial<Subscription> = {
+        id: 'sub-trial',
+        userId,
+        tier: SubscriptionTier.ARTIST_PRO,
+        status: SubscriptionStatus.ACTIVE,
+        startDate: new Date(),
+        trialEndsAt: inTrial,
+      };
+
+      mockSubscriptionRepo.findOne.mockResolvedValue(mockSubscription as Subscription);
+      mockSubscriptionRepo.save.mockResolvedValue(mockSubscription as Subscription);
+
+      // getUserSubscription must return the trial as active (no expiry branch hit).
+      const sub = await subscriptionService.getUserSubscription(userId);
+      expect(sub).toEqual(mockSubscription);
+      expect(sub!.trialEndsAt).toBe(inTrial);
+
+      // Tier gating: the trialist has ARTIST_PRO features.
+      const access = await subscriptionService.hasTierAccess(userId, SubscriptionTier.ARTIST_PRO);
+      expect(access).toBe(true);
+
+      // isInTrial reflects the active trial.
+      expect(await subscriptionService.isInTrial(userId)).toBe(true);
+    });
+
+    it('should finalise the trial on expiry into a billed subscription', async () => {
+      const trialEnded = new Date(Date.now() - 1000);
+      const mockSubscription: Partial<Subscription> = {
+        id: 'sub-trial',
+        userId,
+        tier: SubscriptionTier.ARTIST_PRO,
+        status: SubscriptionStatus.ACTIVE,
+        startDate: new Date(),
+        trialEndsAt: trialEnded,
+      };
+
+      mockSubscriptionRepo.findOne.mockResolvedValue(mockSubscription as Subscription);
+      mockSubscriptionRepo.save.mockResolvedValue(mockSubscription as Subscription);
+
+      const sub = await subscriptionService.getUserSubscription(userId);
+
+      // The trial marker is cleared and a billed period end is assigned.
+      expect(sub).toBeDefined();
+      expect(sub!.trialEndsAt).toBeUndefined();
+      expect(sub!.endDate).toBeDefined();
+      expect(mockSubscriptionRepo.save).toHaveBeenCalled();
+      // No longer a trial.
+      expect(await subscriptionService.isInTrial(userId)).toBe(false);
+    });
+
+    it('should lose gated features when a subscription fully expires (endDate passed)', async () => {
+      const mockSubscription: Partial<Subscription> = {
+        id: 'sub-123',
+        userId,
+        tier: SubscriptionTier.ARTIST_PRO,
+        status: SubscriptionStatus.ACTIVE,
+        startDate: new Date('2024-01-01'),
+        endDate: new Date('2025-01-01'),
+      };
+
+      mockSubscriptionRepo.findOne.mockResolvedValue(mockSubscription as Subscription);
+      mockSubscriptionRepo.save.mockResolvedValue({
+        ...mockSubscription,
+        status: SubscriptionStatus.EXPIRED,
+      } as Subscription);
+
+      const result = await subscriptionService.hasTierAccess(userId, SubscriptionTier.ARTIST_PRO);
 
       expect(result).toBe(false);
     });
