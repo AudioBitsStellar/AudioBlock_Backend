@@ -90,7 +90,8 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: admin
       GF_INSTALL_PLUGINS: ""
     volumes:
-      - ./monitoring/grafana:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/provisioning.yml:/etc/grafana/provisioning/provisioning.yml:ro
+      - ./monitoring/dashboards:/etc/grafana/provisioning/dashboards:ro
       - grafana_data:/var/lib/grafana
     depends_on:
       - prometheus
