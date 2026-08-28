@@ -1,7 +1,7 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-export class AddEntities1715000000000 implements MigrationInterface {
-    name = 'AddEntities1715000000000'
+export class AddEntities1719619200002 implements MigrationInterface {
+    name = 'AddEntities1719619200002'
 
     public async up(queryRunner: QueryRunner): Promise<void> {
         await queryRunner.query(`CREATE TABLE "refresh_tokens" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "token" character varying NOT NULL, "userId" uuid NOT NULL, "expiresAt" TIMESTAMP NOT NULL, "revoked" boolean NOT NULL DEFAULT false, "createdAt" TIMESTAMP NOT NULL DEFAULT now(), "familyId" character varying, CONSTRAINT "UQ_7190d6eefb40fa978ce22efd8ea" UNIQUE ("token"), CONSTRAINT "PK_5d69134bc2e316a3a40994a329d" PRIMARY KEY ("id"))`);

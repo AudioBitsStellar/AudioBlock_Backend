@@ -5,7 +5,7 @@ import { MigrationInterface, QueryRunner, Table, TableForeignKey, TableIndex } f
  * song, with a unique `(songId, versionNumber)` pair and one active row per
  * song. Previous revisions keep their own IPFS CID and S3 URL.
  */
-export class AddSongVersion1753200000000 implements MigrationInterface {
+export class AddSongVersion1753200000008 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.createTable(
       new Table({
