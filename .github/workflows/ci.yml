@@ -26,6 +26,8 @@ jobs:
         run: npm run lint
       - name: Validate docker-compose consistency (Issue #404)
         run: node scripts/check-compose-consistency.js
+      - name: Validate .env.example vs required env (Issue # env-sync)
+        run: node scripts/check-env-example.js
 
   deadcode:
     runs-on: ubuntu-latest

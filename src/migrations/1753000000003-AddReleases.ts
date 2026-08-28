@@ -16,7 +16,7 @@ export class AddReleases1753000000003 implements MigrationInterface {
           { name: 'title', type: 'varchar' },
           { name: 'artistId', type: 'uuid' },
           { name: 'releaseDate', type: 'timestamp' },
-          { name: 'type', type: 'varchar', default: `'album'` },
+          { name: 'type', type: 'varchar', default: `'albums'` },
           { name: 'coverArt', type: 'varchar', isNullable: true },
           { name: 'createdAt', type: 'timestamp', default: 'CURRENT_TIMESTAMP' },
           { name: 'updatedAt', type: 'timestamp', default: 'CURRENT_TIMESTAMP' },
@@ -49,7 +49,7 @@ export class AddReleases1753000000003 implements MigrationInterface {
       new TableForeignKey({
         name: 'FK_release_artist',
         columnNames: ['artistId'],
-        referencedTableName: 'user',
+        referencedTableName: 'users',
         referencedColumnNames: ['id'],
         onDelete: 'CASCADE',
       }),

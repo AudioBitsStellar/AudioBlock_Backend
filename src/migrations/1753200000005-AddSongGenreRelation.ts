@@ -9,45 +9,62 @@ import { MigrationInterface, QueryRunner, TableColumn, TableForeignKey, TableInd
  */
 export class AddSongGenreRelation1753200000005 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.addColumn(
-      'songs',
-      new TableColumn({
-        name: 'genreId',
-        type: 'uuid',
-        isNullable: true,
-      }),
-    );
+    const hasColumn = await queryRunner.hasColumn('songs', 'genreId');
+    if (!hasColumn) {
+      await queryRunner.addColumn(
+        'songs',
+        new TableColumn({
+          name: 'genreId',
+          type: 'uuid',
+          isNullable: true,
+        }),
+      );
+    }
 
-    await queryRunner.createForeignKey(
-      'songs',
-      new TableForeignKey({
-        columnNames: ['genreId'],
-        referencedColumnNames: ['id'],
-        referencedTableName: 'genres',
-        onDelete: 'SET NULL',
-      }),
-    );
+    const table = await queryRunner.getTable('songs');
+    const hasFk = table?.foreignKeys.some((fk) => fk.columnNames.includes('genreId'));
+    if (!hasFk) {
+      // Genre entity uses table 'genre' (singular) via @Entity() default
+      const referencedTable = (await queryRunner.hasTable('genre')) ? 'genre' : 'genres';
+      await queryRunner.createForeignKey(
+        'songs',
+        new TableForeignKey({
+          columnNames: ['genreId'],
+          referencedColumnNames: ['id'],
+          referencedTableName: referencedTable,
+          onDelete: 'SET NULL',
+        }),
+      );
+    }
 
-    await queryRunner.createIndex(
-      'songs',
-      new TableIndex({
-        name: 'IDX_songs_genreId',
-        columnNames: ['genreId'],
-      }),
-    );
+    const hasIndex = table?.indices.some((idx) => idx.name === 'IDX_songs_genreId');
+    if (!hasIndex) {
+      await queryRunner.createIndex(
+        'songs',
+        new TableIndex({
+          name: 'IDX_songs_genreId',
+          columnNames: ['genreId'],
+        }),
+      );
+    }
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.dropIndex('songs', 'IDX_songs_genreId');
-
     const table = await queryRunner.getTable('songs');
-    const foreignKey = table?.foreignKeys.find(
+    if (table?.indices.some((idx) => idx.name === 'IDX_songs_genreId')) {
+      await queryRunner.dropIndex('songs', 'IDX_songs_genreId');
+    }
+
+    const refreshed = await queryRunner.getTable('songs');
+    const foreignKey = refreshed?.foreignKeys.find(
       (fk) => fk.columnNames.indexOf('genreId') !== -1,
     );
     if (foreignKey) {
       await queryRunner.dropForeignKey('songs', foreignKey);
     }
 
-    await queryRunner.dropColumn('songs', 'genreId');
+    // Do not drop genreId column itself — it is part of the baseline
+    // CreateInitialSchema (songs table) for fresh DBs where this migration
+    // was a no-op. Dropping it would remove a column owned by the initial schema.
   }
 }

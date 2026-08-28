@@ -7,7 +7,7 @@ import { MigrationInterface, QueryRunner, Table, TableForeignKey, TableIndex } f
  * several collections but never twice in one — this is what makes the save
  * endpoint idempotent even under concurrent requests.
  */
-export class AddUserSaveEntity1753200000002 implements MigrationInterface {
+export class AddUserSaveEntity1753200000010 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.createTable(
       new Table({

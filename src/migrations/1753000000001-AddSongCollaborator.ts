@@ -41,7 +41,7 @@ export class AddSongCollaborator1753000000001 implements MigrationInterface {
       new TableForeignKey({
         name: 'FK_song_collaborator_user',
         columnNames: ['userId'],
-        referencedTableName: 'user',
+        referencedTableName: 'users',
         referencedColumnNames: ['id'],
         onDelete: 'CASCADE',
       }),

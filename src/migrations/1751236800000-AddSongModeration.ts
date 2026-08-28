@@ -2,7 +2,7 @@ import { MigrationInterface, QueryRunner, TableColumn, TableIndex } from 'typeor
 
 export class AddSongModeration1751236800000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.addColumns('song', [
+    await queryRunner.addColumns('songs', [
       new TableColumn({
         name: 'flagged',
         type: 'boolean',
@@ -26,7 +26,7 @@ export class AddSongModeration1751236800000 implements MigrationInterface {
     ]);
 
     await queryRunner.createIndex(
-      'song',
+      'songs',
       new TableIndex({
         name: 'IDX_song_flagged',
         columnNames: ['flagged'],
@@ -35,7 +35,7 @@ export class AddSongModeration1751236800000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.dropIndex('song', 'IDX_song_flagged');
-    await queryRunner.dropColumns('song', ['flagReason', 'flaggedBy', 'flaggedAt', 'flagged']);
+    await queryRunner.dropIndex('songs', 'IDX_song_flagged');
+    await queryRunner.dropColumns('songs', ['flagReason', 'flaggedBy', 'flaggedAt', 'flagged']);
   }
 }

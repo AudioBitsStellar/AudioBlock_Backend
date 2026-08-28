@@ -12,7 +12,7 @@ import {
  * metric, plus listener identity columns on `song_play_events` so unique
  * listener counts can be derived per time window.
  */
-export class AddSongSaveAndListenerTracking1753200000001 implements MigrationInterface {
+export class AddSongSaveAndListenerTracking1753200000009 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.createTable(
       new Table({

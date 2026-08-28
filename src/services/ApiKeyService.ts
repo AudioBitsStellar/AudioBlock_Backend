@@ -1,8 +1,20 @@
-import { getRepository } from 'typeorm';
-import { ApiKey, ApiKeyScope } from '../entities/ApiKey';
+import { IsNull, Repository } from 'typeorm';
+import { ApiKey } from '../entities/ApiKey';
 import { User } from '../entities/User';
+import AppDataSource from '../config/db';
 import { AppError } from '../errors/AppError';
-import * as crypto from 'crypto';
+import { ERROR_MESSAGES } from '../config/constants';
+import {
+  validateRequired,
+  validateStringLength,
+  validateUUID,
+} from '../validators/ServiceValidator';
+import {
+  generateApiKey,
+  hashApiKey,
+  isApiKeyFormat,
+  timingSafeEqualHex,
+} from '../utils/apiKeyCrypto';
 
 /** Maximum length of the user-supplied key name. */
 const API_KEY_NAME_MAX_LENGTH = 100;
@@ -14,8 +26,8 @@ const MAX_ACTIVE_KEYS_PER_USER = 20;
 export interface ApiKeyView {
   id: string;
   name: string;
-  keyPrefix: string;
-  rateLimitTier: string;
+  keyPrefix?: string;
+  scopes?: string[];
   permissions: string[];
   lastUsedAt?: Date;
   revokedAt?: Date;
@@ -38,8 +50,13 @@ export interface AuthenticatedApiKey {
  * (Issue #89).
  */
 export class ApiKeyService {
-  private apiKeyRepo = getRepository(ApiKey);
-  private userRepo = getRepository(User);
+  private apiKeyRepo: Repository<ApiKey>;
+  private userRepo: Repository<User>;
+
+  constructor() {
+    this.apiKeyRepo = AppDataSource.getRepository(ApiKey);
+    this.userRepo = AppDataSource.getRepository(User);
+  }
 
   /**
    * Issues a new API key for a user.
@@ -49,38 +66,45 @@ export class ApiKeyService {
    *
    * @param userId - Owner of the key
    * @param name - Human-readable label for the key
+   * @param scopes - Requested scope strings
    * @param permissions - Requested permission strings (defaults to none)
-   * @param rateLimitTier - Rate limit tier (defaults to 'standard')
    * @returns The stored key view plus the one-time raw key
-   * @throws {AppError} When the user is missing, the name is invalid, a
-   *   requested permission exceeds the user's role, or the key limit is reached
    */
   async createApiKey(
     userId: string,
     name: string,
-    scopes: ApiKeyScope[] = [],
+    scopes: string[] = [],
     permissions: string[] = [],
-    rateLimitTier: string = 'standard',
   ): Promise<CreatedApiKey> {
     validateUUID(userId, 'userId');
     validateRequired(name, 'name');
     validateStringLength(name, 'name', 1, API_KEY_NAME_MAX_LENGTH);
 
     const user = await this.userRepo.findOne({ where: { id: userId } });
+
     if (!user) {
-      throw AppError.notFound('User not found');
+      throw AppError.notFound(ERROR_MESSAGES.USER_NOT_FOUND);
     }
 
-    const rawKey = `ab_${crypto.randomBytes(32).toString('hex')}`;
-    const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
+    const activeKeyCount = await this.apiKeyRepo.count({
+      where: { userId, revokedAt: IsNull() },
+    });
+
+    if (activeKeyCount >= MAX_ACTIVE_KEYS_PER_USER) {
+      throw AppError.businessLogic(
+        `API key limit reached (${MAX_ACTIVE_KEYS_PER_USER} active keys). Revoke an existing key first.`,
+      );
+    }
+
+    const { rawKey, keyHash, keyPrefix } = generateApiKey();
 
     const apiKey = this.apiKeyRepo.create({
       userId,
       name,
       keyHash,
       keyPrefix,
-      permissions: requestedPermissions,
-      rateLimitTier,
+      scopes,
+      permissions,
     });
 
     const saved = await this.apiKeyRepo.save(apiKey);
@@ -107,13 +131,11 @@ export class ApiKeyService {
   }
 
   /**
-   * Revokes a key the caller owns. Revocation is idempotent: revoking an
-   * already-revoked key returns it unchanged rather than erroring.
+   * Revokes a key the caller owns.
    *
    * @param userId - Caller, who must own the key
    * @param keyId - Key to revoke
    * @returns The revoked key view
-   * @throws {AppError} When the key does not exist or belongs to another user
    */
   async revokeApiKey(userId: string, keyId: string): Promise<ApiKeyView> {
     validateUUID(userId, 'userId');
@@ -121,93 +143,73 @@ export class ApiKeyService {
 
     const apiKey = await this.apiKeyRepo.findOne({ where: { id: keyId } });
 
-    if (!apiKey) {
+    if (!apiKey || apiKey.userId !== userId) {
       throw AppError.notFound('API key not found');
     }
 
-    if (apiKey.userId !== userId) {
-      throw AppError.authorization('Forbidden: You do not own this API key');
+    if (apiKey.revokedAt) {
+      return this.toView(apiKey);
     }
 
-    if (!apiKey.revokedAt) {
-      apiKey.revokedAt = new Date();
-      await this.apiKeyRepo.save(apiKey);
-    }
+    apiKey.revokedAt = new Date();
+    const saved = await this.apiKeyRepo.save(apiKey);
 
-    return this.toView(apiKey);
+    return this.toView(saved);
   }
 
   /**
-   * Validates a raw API key presented in a request.
+   * Validates a raw API key and resolves the user it authenticates.
    *
-   * @param rawKey - The secret key provided by the caller
-   * @returns The resolved ApiKey entity and its owning User
-   * @throws {AppError} When the key is invalid, revoked, or its owner is missing
+   * @param rawKey - The full raw key from the request
+   * @returns The key record and its owner
    */
   async validateApiKey(rawKey: string): Promise<AuthenticatedApiKey> {
     if (!isApiKeyFormat(rawKey)) {
-      throw AppError.authentication('Unauthorized: Invalid API key format');
+      throw AppError.authentication('Invalid API key');
     }
 
-    const keyPrefix = rawKey.slice(0, 12);
-    const candidates = await this.apiKeyRepo.find({
-      where: { keyPrefix, revokedAt: IsNull() },
+    const keyHash = hashApiKey(rawKey);
+
+    const apiKey = await this.apiKeyRepo.findOne({
+      where: { keyHash },
       relations: ['user'],
     });
 
-    const keyHash = hashApiKey(rawKey);
-    let matchedKey: ApiKey | null = null;
-
-    for (const candidate of candidates) {
-      if (timingSafeEqualHex(candidate.keyHash, keyHash)) {
-        matchedKey = candidate;
-        break;
-      }
+    if (!apiKey || !timingSafeEqualHex(apiKey.keyHash, keyHash)) {
+      throw AppError.authentication('Invalid API key');
     }
 
-    if (!matchedKey || !matchedKey.user) {
-      throw AppError.authentication('Unauthorized: Invalid or revoked API key');
+    if (apiKey.revokedAt) {
+      throw AppError.authentication('API key has been revoked');
     }
 
-    matchedKey.lastUsedAt = new Date();
-    await this.apiKeyRepo.save(matchedKey);
+    if (!apiKey.user) {
+      throw AppError.authentication('Associated user not found');
+    }
 
-    return { apiKey: matchedKey, user: matchedKey.user };
+    return { apiKey, user: apiKey.user };
   }
 
-  /**
-   * Checks whether a key has a given permission, and whether its owner's role
-   * still holds that permission.
-   */
-  keyHasPermission(apiKey: ApiKey, user: User, permission: Permission): boolean {
-    if (!apiKey.permissions.includes(permission)) {
-      return false;
+  keyHasScope(apiKey: ApiKey, requiredScope: string): boolean {
+    if (!apiKey.scopes || apiKey.scopes.length === 0) {
+      return true;
     }
-
-    const rolePermissions = ROLE_PERMISSIONS[user.role as keyof typeof ROLE_PERMISSIONS] || [];
-    return rolePermissions.includes(permission);
+    return apiKey.scopes.includes(requiredScope) || apiKey.scopes.includes('admin');
   }
 
-  private normalizePermissions(permissions: string[]): Permission[] {
-    return Array.from(new Set(permissions)) as Permission[];
-  }
-
-  private assertPermissionsWithinRole(permissions: Permission[], user: User): void {
-    const rolePermissions = ROLE_PERMISSIONS[user.role as keyof typeof ROLE_PERMISSIONS] || [];
-    const invalid = permissions.find((p) => !rolePermissions.includes(p));
-
-    if (invalid) {
-      throw AppError.businessLogic(
-        `Permission '${invalid}' exceeds the capabilities of role '${user.role}'`,
-      );
+  keyHasPermission(apiKey: ApiKey, user: User, permission: string): boolean {
+    if (apiKey.permissions && apiKey.permissions.includes(permission)) {
+      return true;
     }
+    return false;
+  }
 
   private toView(apiKey: ApiKey): ApiKeyView {
     return {
       id: apiKey.id,
       name: apiKey.name,
       keyPrefix: apiKey.keyPrefix,
-      rateLimitTier: apiKey.rateLimitTier || 'standard',
+      scopes: apiKey.scopes,
       permissions: apiKey.permissions,
       lastUsedAt: apiKey.lastUsedAt,
       revokedAt: apiKey.revokedAt,

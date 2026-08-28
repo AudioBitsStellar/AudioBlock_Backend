@@ -99,7 +99,7 @@ export class Song {
   @Column({ default: false })
   flagged!: boolean;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ type: 'timestamp', nullable: true })
   flaggedAt?: Date | null;
 
   @Column({ type: 'text', nullable: true })

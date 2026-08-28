@@ -11,7 +11,7 @@ import { MigrationInterface, QueryRunner, TableColumn } from 'typeorm';
  * sync with the {@link UserRole} enum.
  */
 export class AddRbacRolesToUser1751600000000 implements MigrationInterface {
-  private readonly table = 'user';
+  private readonly table = 'users';
   private readonly column = 'role';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
