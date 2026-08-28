@@ -26,6 +26,7 @@ export enum SubscriptionStatus {
   ACTIVE = 'active',
   CANCELLED = 'cancelled',
   EXPIRED = 'expired',
+  TRIAL = 'trial',
 }
 
 /**
@@ -65,6 +66,15 @@ export class Subscription {
 
   @Column({ type: 'timestamp', nullable: true })
   endDate?: Date;
+
+  @Column({ type: 'boolean', default: false })
+  isTrial!: boolean;
+
+  @Column({ type: 'int', default: 0 })
+  trialDaysUsed!: number;
+
+  @Column({ type: 'int', nullable: true })
+  trialDurationDays?: number;
 
   @CreateDateColumn()
   createdAt!: Date;
