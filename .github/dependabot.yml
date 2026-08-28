@@ -21,3 +21,23 @@ updates:
           - "eslint*"
           - "prettier*"
           - "@typescript-eslint/*"
+
+  # Keep GitHub Actions up to date (#365)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "ci"
+
+  # Keep Docker base images up to date (#365)
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "docker"

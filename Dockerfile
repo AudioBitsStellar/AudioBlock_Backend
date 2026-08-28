@@ -1,30 +1,36 @@
-# Use node image
-FROM node:20
-
-# Install ffmpeg (required by fluent-ffmpeg)
-RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
-
-# Set working directory
+# Build stage
+FROM node:20-alpine AS builder
 WORKDIR /app
-
-# Copy package.json and install deps
 COPY package*.json ./
-RUN npm install
-
-# Copy rest of the source code
+RUN npm ci
 COPY . .
-
-# Build TypeScript
 RUN npm run build
 
-# Expose port
+# Production stage
+FROM node:20-alpine
+WORKDIR /app
+
+# Install ffmpeg (required by fluent-ffmpeg) with minimal footprint
+RUN apk add --no-cache ffmpeg
+
+# Create non-root user
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+# Copy only production deps
+COPY package*.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+
+# Copy built artifacts from builder
+COPY --from=builder /app/dist ./dist
+
+# Copy any runtime assets (migrations, seeds, etc.) if needed
+COPY --from=builder /app/src ./src 2>/dev/null || true
+
+USER appuser
+
 EXPOSE 4000
 
-# Liveness probe (Issue #146): container is marked unhealthy if the process
-# stops responding on /health/live. Uses Node's http module so no extra
-# packages (curl/wget) are needed in the image.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD node -e "require('http').get('http://localhost:4000/health/live', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
 
-# Start the app
 CMD ["node", "dist/index.js"]
