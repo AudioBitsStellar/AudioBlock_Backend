@@ -22,6 +22,9 @@ import embedRoutes from "./routes/embedRoutes";
 import royaltyPayoutRoutes from "./routes/royaltyPayoutRoutes";
 import playlistRoutes from "./routes/playlistRoutes";
 import userRoutes from "./routes/userRoutes";
+import commentRoutes from "./routes/commentRoutes";
+import commentReactionRoutes from "./routes/commentReactionRoutes";
+import subscriptionRoutes from "./routes/subscriptionRoutes";
 
 // Route imports
 
@@ -127,6 +130,15 @@ app.use("/api/users", userRoutes);
 
 //TWITTER CALLBACK ROUTE
 app.use("/api/auth/twitter", twitterRoutes);
+
+// Song comments + replies (Issue #90)
+app.use("/api/comments", commentRoutes);
+
+// Comment reactions: like, heart, fire (Issue #412)
+app.use("/api/comments", commentReactionRoutes);
+
+// Subscriptions: tiered plans, gifting, trial periods (Issues #413, #414, #415, #416)
+app.use("/api/subscriptions", subscriptionRoutes);
 
 
 // Error handling middleware
