@@ -50,7 +50,6 @@ Complete reference of all environment variables used by the AudioBlocks Backend.
 | `REDIS_PORT` | No | `6379` | Redis port |
 | `REDIS_USERNAME` | No | — | Redis auth username |
 | `REDIS_PASSWORD` | No | — | Redis auth password |
-| `REDIS_URL` | No | — | Full Redis connection URL (overrides host/port) |
 
 **Sensitive:** `REDIS_PASSWORD` — never log or commit.
 
@@ -73,7 +72,6 @@ Complete reference of all environment variables used by the AudioBlocks Backend.
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `JWT_SECRET` | Yes | — | Secret key for signing JWT tokens |
-| `JWT_EXPIRER_AT` | No | `1d` | JWT token expiration duration |
 | `APP_URL` | No | `http://localhost:3000` | Frontend URL for email verification/reset links |
 
 **Sensitive:** `JWT_SECRET` — never log or commit.
@@ -150,12 +148,6 @@ Complete reference of all environment variables used by the AudioBlocks Backend.
 | `TWITTER_CLIENT_SECRET` | No | — | OAuth 2.0 PKCE client secret |
 | `TWITTER_REDIRECT_URI` | No | `http://localhost:4000/api/auth/twitter/callback` | OAuth callback URL (must match Twitter app config) |
 | `TWITTER_SUCCESS_REDIRECT` | Yes | — | Frontend URL to redirect after successful OAuth |
-| `TWITTER_APP_ID` | No | — | Twitter app ID (legacy OAuth1) |
-| `TWITTER_API_KEY` | No | — | Twitter API key (legacy OAuth1) |
-| `TWITTER_API_SECRET_KEY` | No | — | Twitter API secret key (legacy OAuth1) |
-| `TWITTER_AUTH_TOKEN` | No | — | Twitter auth token (legacy OAuth1) |
-| `TWITTER_ACCESS_TOKEN` | No | — | Twitter access token (legacy OAuth1) |
-| `TWITTER_ACCESS_TOKEN_SECRET` | No | — | Twitter access token secret (legacy OAuth1) |
 
 **Sensitive:** `TWITTER_CLIENT_SECRET` — never log or commit.
 
