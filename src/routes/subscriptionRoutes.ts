@@ -3,6 +3,7 @@ import { SubscriptionController } from '../controllers/SubscriptionController';
 import { requireAuth } from '../middlewares/authMiddleware';
 import { validateDTO } from '../middlewares/validate';
 import { CreateSubscriptionDTO } from '../dtos/CreateSubscriptionDTO';
+import { CreateTrialSubscriptionDTO } from '../dtos/CreateTrialSubscriptionDTO';
 
 const router = Router();
 const subscriptionController = new SubscriptionController();
@@ -18,6 +19,19 @@ router.post(
   '/',
   validateDTO(CreateSubscriptionDTO),
   subscriptionController.createOrUpgradeSubscription,
+);
+
+// Create trial subscription
+router.post(
+  '/trial',
+  validateDTO(CreateTrialSubscriptionDTO),
+  subscriptionController.createTrialSubscription,
+);
+
+// Convert trial to paid
+router.post(
+  '/trial/convert',
+  subscriptionController.convertTrialToPaid,
 );
 
 // Cancel subscription

@@ -141,4 +141,84 @@ export class SubscriptionService {
 
     return tierHierarchy[subscription.tier] >= tierHierarchy[requiredTier];
   }
+
+  /**
+   * Create a trial subscription for a user.
+   *
+   * @param userId - The user's UUID
+   * @param tier - The subscription tier for the trial
+   * @param trialDurationDays - Number of days for the trial (default: 14)
+   * @returns The created trial subscription
+   */
+  async createTrialSubscription(
+    userId: string,
+    tier: SubscriptionTier,
+    trialDurationDays: number = 14,
+  ): Promise<Subscription> {
+    validateRequired(userId, 'userId');
+    validateRequired(tier, 'tier');
+
+    // Validate tier
+    if (!Object.values(SubscriptionTier).includes(tier)) {
+      throw AppError.validation(`Invalid tier: ${tier}`, [
+        {
+          field: 'tier',
+          message: `Tier must be one of: ${Object.values(SubscriptionTier).join(', ')}`,
+        },
+      ]);
+    }
+
+    // Check for existing active or trial subscription
+    const existingSubscription = await this.getUserSubscription(userId);
+
+    if (existingSubscription) {
+      throw AppError.conflict('User already has an active subscription');
+    }
+
+    // Calculate trial end date
+    const trialEndDate = new Date();
+    trialEndDate.setDate(trialEndDate.getDate() + trialDurationDays);
+
+    // Create trial subscription
+    const subscription = this.subscriptionRepo.create({
+      userId,
+      tier,
+      status: SubscriptionStatus.TRIAL,
+      startDate: new Date(),
+      endDate: trialEndDate,
+      isTrial: true,
+      trialDaysUsed: 0,
+      trialDurationDays,
+    });
+
+    return await this.subscriptionRepo.save(subscription);
+  }
+
+  /**
+   * Convert a trial subscription to a paid subscription.
+   *
+   * @param userId - The user's UUID
+   * @param endDate - End date for the paid subscription
+   * @returns The updated subscription
+   */
+  async convertTrialToPaid(userId: string, endDate: Date): Promise<Subscription> {
+    validateRequired(userId, 'userId');
+
+    const subscription = await this.subscriptionRepo.findOne({
+      where: {
+        userId,
+        status: SubscriptionStatus.TRIAL,
+      },
+    });
+
+    if (!subscription) {
+      throw AppError.notFound('No active trial subscription found');
+    }
+
+    subscription.status = SubscriptionStatus.ACTIVE;
+    subscription.isTrial = false;
+    subscription.endDate = endDate;
+
+    return await this.subscriptionRepo.save(subscription);
+  }
 }
