@@ -11,6 +11,7 @@ import { WebhookSubscription } from '../entities/WebhookSubscription';
 import { TakedownRequest } from '../entities/TakedownRequest';
 import { ApiKey } from '../entities/ApiKey';
 import { AiGenerationRecord } from '../entities/AiGenerationRecord';
+import { TweetDraft } from '../entities/TweetDraft';
 
 dotenv.config();
 
@@ -36,6 +37,7 @@ const AppDataSource = new DataSource({
     TakedownRequest,
     ApiKey,
     AiGenerationRecord,
+    TweetDraft,
   ],
   migrations: [__dirname + '/../migrations/*.{js,ts}'],
   migrationsTableName: 'migrations',

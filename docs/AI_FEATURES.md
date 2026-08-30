@@ -64,9 +64,23 @@ and run on either the node process or the SQL database.
   `AI_FEATURE_TAGS_ENABLED`, `AI_FEATURE_DESCRIPTIONS_ENABLED`,
   `AI_FEATURE_COVER_ART_ENABLED`, `AI_FEATURE_MODERATION_TRIAGE_ENABLED`,
   `AI_FEATURE_SEARCH_ENABLED`, `AI_FEATURE_PLAYLISTS_ENABLED`,
-  `AI_FEATURE_TWEET_DRAFTS_ENABLED`. All default OFF. Only `coverArt` and
-  `descriptions` have a call site wired up today; the rest are reserved for
-  when those features are built.
+  `AI_FEATURE_TWEET_DRAFTS_ENABLED`. All default OFF. `coverArt`,
+  `descriptions`, and `tweetDrafts` have a call site wired up today; the rest
+  are reserved for when those features are built.
+
+### 6. Release-announcement tweet drafts
+- **Where:** `src/services/TweetDraftService.ts`,
+  `POST /api/auth/twitter/draft`, `GET /api/auth/twitter/drafts`,
+  `POST /api/auth/twitter/draft/:id/approve`,
+  `DELETE /api/auth/twitter/draft/:id`.
+- **What it does:** drafts announcement text for a release via the same
+  `AiProvider` abstraction, stored as a `pending_review` `TweetDraft` for the
+  artist to review. Approving a draft only marks it reviewed — AudioBlock
+  does not post to Twitter on the artist's behalf, because `twitterRoutes.ts`
+  deliberately never persists a Twitter access/refresh token (see the
+  `/callback` handler there); the artist copies the approved text and posts
+  it themselves.
+- **Data sent:** none to third parties; gated by `AI_FEATURE_TWEET_DRAFTS_ENABLED`.
 
 ---
 
