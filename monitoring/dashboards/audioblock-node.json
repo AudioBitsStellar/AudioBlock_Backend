@@ -1,0 +1,122 @@
+{
+  "__inputs": [],
+  "__requires": [],
+  "title": "AudioBlock Backend — Node / System",
+  "uid": "audioblock-node",
+  "version": 1,
+  "timezone": "utc",
+  "editable": true,
+  "refresh": "30s",
+  "schemaVersion": 30,
+  "panels": [
+    {
+      "title": "CPU Usage",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) by (instance) * 100)",
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        }
+      ],
+      "yaxes": [{ "format": "percent", "label": "CPU %" }, { "format": "short" }]
+    },
+    {
+      "title": "Memory Usage",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
+      "targets": [
+        {
+          "expr": "node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes",
+          "legendFormat": "used",
+          "refId": "A"
+        },
+        {
+          "expr": "node_memory_MemTotal_bytes",
+          "legendFormat": "total",
+          "refId": "B"
+        }
+      ],
+      "yaxes": [{ "format": "bytes", "label": "Memory" }, { "format": "short" }]
+    },
+    {
+      "title": "System Load (1m / 5m / 15m)",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
+      "targets": [
+        {
+          "expr": "node_load1",
+          "legendFormat": "1m",
+          "refId": "A"
+        },
+        {
+          "expr": "node_load5",
+          "legendFormat": "5m",
+          "refId": "B"
+        },
+        {
+          "expr": "node_load15",
+          "legendFormat": "15m",
+          "refId": "C"
+        }
+      ],
+      "yaxes": [{ "format": "short", "label": "Load" }, { "format": "short" }]
+    },
+    {
+      "title": "Network I/O (bytes/sec)",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "rate(node_network_receive_bytes_total[5m])",
+          "legendFormat": "rx {{device}}",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(node_network_transmit_bytes_total[5m])",
+          "legendFormat": "tx {{device}}",
+          "refId": "B"
+        }
+      ],
+      "yaxes": [{ "format": "Bps", "label": "Bytes/s" }, { "format": "short" }]
+    },
+    {
+      "title": "Disk Usage (filesystem)",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 },
+      "targets": [
+        {
+          "expr": "100 - ((node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay\"} * 100) / node_filesystem_size_bytes{fstype!~\"tmpfs|overlay\"})",
+          "legendFormat": "{{mountpoint}}",
+          "refId": "A"
+        }
+      ],
+      "yaxes": [{ "format": "percent", "label": "Used %" }, { "format": "short" }]
+    },
+    {
+      "title": "Node Uptime (hours)",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
+      "targets": [
+        {
+          "expr": "time() - node_boot_time_seconds",
+          "legendFormat": "uptime",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": { "values": false, "calcs": ["lastNotNull"] }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {}
+        },
+        "overrides": []
+      }
+    }
+  ]
+}

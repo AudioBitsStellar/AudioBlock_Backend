@@ -1,46 +1,42 @@
 {
   "__inputs": [],
   "__requires": [],
-  "title": "AudioBlock Backend",
-  "uid": "audioblock-backend",
+  "title": "AudioBlock Backend — App",
+  "uid": "audioblock-app",
   "version": 1,
   "timezone": "utc",
   "editable": true,
+  "refresh": "30s",
+  "schemaVersion": 30,
   "panels": [
     {
-      "title": "Request Rate",
+      "title": "Request Rate (rps)",
       "type": "graph",
       "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
       "targets": [
         {
-          "expr": "rate(http_requests_total[5m])",
-          "legendFormat": "{{method}} {{route}}",
+          "expr": "sum(rate(http_requests_total[5m])) by (method)",
+          "legendFormat": "{{method}}",
           "refId": "A"
         }
       ],
-      "yaxes": [
-        { "format": "reqps", "label": "Requests/s" },
-        { "format": "short" }
-      ]
+      "yaxes": [{ "format": "reqps", "label": "Requests/s" }, { "format": "short" }]
     },
     {
-      "title": "Error Rate (5xx)",
+      "title": "Error Rate (5xx) (rps)",
       "type": "graph",
       "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
       "targets": [
         {
-          "expr": "rate(http_requests_total{status=~\"5..\"}[5m])",
-          "legendFormat": "{{method}} {{route}}",
+          "expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m])) by (route)",
+          "legendFormat": "{{route}}",
           "refId": "A"
         }
       ],
-      "yaxes": [
-        { "format": "reqps", "label": "Errors/s" },
-        { "format": "short" }
-      ]
+      "yaxes": [{ "format": "reqps", "label": "Errors/s" }, { "format": "short" }]
     },
     {
-      "title": "P95 Latency",
+      "title": "Latency (p95 / p99)",
       "type": "graph",
       "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
       "targets": [
@@ -55,13 +51,10 @@
           "refId": "B"
         }
       ],
-      "yaxes": [
-        { "format": "s", "label": "Latency" },
-        { "format": "short" }
-      ]
+      "yaxes": [{ "format": "s", "label": "Latency" }, { "format": "short" }]
     },
     {
-      "title": "Active Connections",
+      "title": "Active In-Flight Requests",
       "type": "graph",
       "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
       "targets": [
@@ -71,13 +64,10 @@
           "refId": "A"
         }
       ],
-      "yaxes": [
-        { "format": "short", "label": "Connections" },
-        { "format": "short" }
-      ]
+      "yaxes": [{ "format": "short", "label": "Requests" }, { "format": "short" }]
     },
     {
-      "title": "Database Pool",
+      "title": "Database Connection Pool",
       "type": "graph",
       "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 },
       "targets": [
@@ -97,10 +87,7 @@
           "refId": "C"
         }
       ],
-      "yaxes": [
-        { "format": "short", "label": "Connections" },
-        { "format": "short" }
-      ]
+      "yaxes": [{ "format": "short", "label": "Connections" }, { "format": "short" }]
     },
     {
       "title": "Songs Uploaded",
@@ -113,10 +100,7 @@
           "refId": "A"
         }
       ],
-      "yaxes": [
-        { "format": "short", "label": "Songs/s" },
-        { "format": "short" }
-      ]
+      "yaxes": [{ "format": "short", "label": "Songs/s" }, { "format": "short" }]
     },
     {
       "title": "Cache Efficiency",
@@ -134,13 +118,10 @@
           "refId": "B"
         }
       ],
-      "yaxes": [
-        { "format": "short", "label": "Ops/s" },
-        { "format": "short" }
-      ]
+      "yaxes": [{ "format": "short", "label": "Ops/s" }, { "format": "short" }]
     },
     {
-      "title": "Marketplace Volume",
+      "title": "Marketplace Volume (stroops)",
       "type": "graph",
       "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 },
       "targets": [
@@ -150,10 +131,7 @@
           "refId": "A"
         }
       ],
-      "yaxes": [
-        { "format": "short", "label": "Stroops/s" },
-        { "format": "short" }
-      ]
+      "yaxes": [{ "format": "short", "label": "Stroops/s" }, { "format": "short" }]
     },
     {
       "title": "Royalties Paid",
@@ -166,11 +144,7 @@
           "refId": "A"
         }
       ],
-      "yaxes": [
-        { "format": "short", "label": "Payouts/s" },
-        { "format": "short" }
-      ]
+      "yaxes": [{ "format": "short", "label": "Payouts/s" }, { "format": "short" }]
     }
-  ],
-  "schemaVersion": 30
+  ]
 }
