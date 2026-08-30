@@ -10,6 +10,7 @@ import { RoyaltyPayout } from '../entities/RoyaltyPayout';
 import { WebhookSubscription } from '../entities/WebhookSubscription';
 import { TakedownRequest } from '../entities/TakedownRequest';
 import { ApiKey } from '../entities/ApiKey';
+import { AiGenerationRecord } from '../entities/AiGenerationRecord';
 
 dotenv.config();
 
@@ -34,6 +35,7 @@ const AppDataSource = new DataSource({
     WebhookSubscription,
     TakedownRequest,
     ApiKey,
+    AiGenerationRecord,
   ],
   migrations: [__dirname + '/../migrations/*.{js,ts}'],
   migrationsTableName: 'migrations',
