@@ -30,9 +30,16 @@ export class ApiKeyController {
         return handleError(req, res, AppError.authentication('User not authenticated'));
       }
 
-      const { name, permissions } = req.body;
+      const { name, scopes, permissions } = req.body;
 
-      const created = await this.apiKeyService.createApiKey(userId, name, permissions ?? []);
+      // Rate-limit tier is never taken from client input — self-service keys
+      // always issue at the "standard" tier (see ApiKeyService.createApiKey).
+      const created = await this.apiKeyService.createApiKey(
+        userId,
+        name,
+        scopes ?? [],
+        permissions ?? [],
+      );
 
       res.status(HTTP_STATUS.CREATED).json({
         message: 'API key created. Store it now — it will not be shown again.',
