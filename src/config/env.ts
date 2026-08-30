@@ -19,6 +19,8 @@ export interface ValidatedEnv {
   PINATA_JWT: string;
   PINATA_GATEWAY: string;
   ALLOWED_ORIGINS?: string;
+  LOG_LEVEL: string;
+  ERROR_DEDUP_WINDOW_MS: string;
 }
 
 const requiredVars: (keyof ValidatedEnv)[] = [

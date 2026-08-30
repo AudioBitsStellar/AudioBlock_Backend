@@ -544,6 +544,8 @@ Additional in-repo docs live under [`docs/`](docs/):
   CPU/memory sizing for the API and the ffmpeg-backed worker, how to measure
   it, and how to scale each process (Issue #405)
 - [Architecture](docs/ARCHITECTURE.md) — high-level module layout
+- [AI Feature Set](docs/AI_FEATURES.md) — AI capabilities, what data is sent
+  where, and the per-artist opt-in/opt-out story
 - [Database Schema](docs/database-schema.md) & [Migrations](docs/migrations.md)
 - [Conventions](docs/conventions.md), [ADR catalog](docs/adrs/), and the
   [OpenAPI spec](docs/openapi.yaml)
@@ -556,12 +558,32 @@ Additional in-repo docs live under [`docs/`](docs/):
 git clone <repo-url>
 cd AudioBlock_Backend
 cp .env.example .env.docker   # fill in the values above
-docker compose up --build
+docker compose up --build     # minimal stack: API + Postgres + Redis
 ```
 
-This brings up Postgres, Redis, RabbitMQ, pgAdmin (`localhost:5050`), and the
-API itself (`localhost:4000`) with hot-reload enabled via
-`docker-compose.override.yml`.
+This brings up the **minimal stack** (API `localhost:4000` + Postgres `5432` + Redis `6379`) with hot-reload via `docker-compose.override.yml`. For contributors only touching the API, this is the fastest path and avoids running observability/queue infrastructure.
+
+#### Profiles — minimal vs full
+
+`docker-compose.yml` uses Compose **profiles** so the same file serves both use-cases:
+
+| Command | What it starts |
+|---------|----------------|
+| `docker compose up --build` | `backend` + `db` + `redis` (minimal, no profile) |
+| `docker compose --profile full up --build` | Everything: minimal + `rabbitmq` + `pgadmin` + `prometheus` + `grafana` |
+| `docker compose --profile queue up --build` | Minimal + `rabbitmq` (song-processing queue) |
+| `docker compose --profile tools up --build` | Minimal + `pgadmin` (`localhost:5050`) |
+| `docker compose --profile monitoring up --build` | Minimal + `prometheus` (`9090`) + `grafana` (`3000`) |
+| `docker compose --profile observability up --build` | Same as `monitoring` (alias) |
+
+`backend` no longer `depends_on: rabbitmq` — the API starts without a queue and connects to RabbitMQ lazily when it appears (see `src/index.ts`), so the minimal stack stays self-contained. Any combination of profiles can be stacked, e.g.:
+
+```bash
+docker compose --profile queue --profile monitoring up --build
+# → backend + db + redis + rabbitmq + prometheus + grafana
+```
+
+The full observability stack (`--profile full`) is unchanged from the pre-profile `docker compose up` topology and is what CI and `docker-compose.prod.yml` extend.
 
 #### Docker Compose consistency (Issue #404)
 
@@ -608,6 +630,8 @@ npm run dev
 | `npm test -- src/__tests__/health.test.ts`            | Runs a single test file (swap in any path under `src/__tests__`)                                                                |
 | `npm run test:watch`                                  | Runs Jest in watch mode                                                                                                         |
 | `npm run compose:check`                               | Validates that all docker-compose files are mutually consistent (Issue #404)                                                    |
+| `npm run env:check`                                   | Checks that `.env.example` lists every required var from `src/config/env.ts` (reports both missing and extra keys)            |
+| `npm run env:check:strict`                            | Same as above but fails on any extra key in `.env.example` (exact parity)                                                      |
 
 ## Known Issues / Cleanup Backlog
 

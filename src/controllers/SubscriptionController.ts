@@ -48,6 +48,7 @@ export class SubscriptionController {
           status: subscription.status,
           startDate: subscription.startDate,
           endDate: subscription.endDate,
+          trialEndsAt: subscription.trialEndsAt ?? null,
         },
       });
     } catch (error) {
@@ -86,6 +87,7 @@ export class SubscriptionController {
           status: subscription.status,
           startDate: subscription.startDate,
           endDate: subscription.endDate,
+          trialEndsAt: subscription.trialEndsAt ?? null,
         },
       });
     } catch (error) {
@@ -118,6 +120,7 @@ export class SubscriptionController {
           status: subscription.status,
           startDate: subscription.startDate,
           endDate: subscription.endDate,
+          trialEndsAt: subscription.trialEndsAt ?? null,
         },
       });
     } catch (error) {

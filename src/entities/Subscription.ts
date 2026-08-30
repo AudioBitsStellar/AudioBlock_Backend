@@ -66,6 +66,15 @@ export class Subscription {
   @Column({ type: 'timestamp', nullable: true })
   endDate?: Date;
 
+  /**
+   * Optional end of the free-trial period. While set and in the future the
+   * subscription grants its gated features WITHOUT being billed. When this
+   * date passes the trial is finalised (see SubscriptionService), after which
+   * the subscription is treated as a paid/billed subscription.
+   */
+  @Column({ type: 'timestamp', nullable: true })
+  trialEndsAt?: Date;
+
   @CreateDateColumn()
   createdAt!: Date;
 

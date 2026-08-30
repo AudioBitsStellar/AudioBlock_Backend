@@ -36,7 +36,7 @@ export class CreateInitialSchema1719619200000 implements MigrationInterface {
 
     await queryRunner.createTable(
       new Table({
-        name: 'user',
+        name: 'users',
         columns: [
           {
             name: 'id',
@@ -146,7 +146,7 @@ export class CreateInitialSchema1719619200000 implements MigrationInterface {
 
     await queryRunner.createTable(
       new Table({
-        name: 'album',
+        name: 'albums',
         columns: [
           {
             name: 'id',
@@ -195,7 +195,7 @@ export class CreateInitialSchema1719619200000 implements MigrationInterface {
           {
             name: 'FK_album_artist',
             columnNames: ['artistId'],
-            referencedTableName: 'user',
+            referencedTableName: 'users',
             referencedColumnNames: ['id'],
             onDelete: 'CASCADE',
           },
@@ -206,7 +206,7 @@ export class CreateInitialSchema1719619200000 implements MigrationInterface {
 
     await queryRunner.createTable(
       new Table({
-        name: 'song',
+        name: 'songs',
         columns: [
           {
             name: 'id',
@@ -291,7 +291,7 @@ export class CreateInitialSchema1719619200000 implements MigrationInterface {
           {
             name: 'FK_song_artist',
             columnNames: ['artistId'],
-            referencedTableName: 'user',
+            referencedTableName: 'users',
             referencedColumnNames: ['id'],
             onDelete: 'CASCADE',
           },
@@ -309,7 +309,7 @@ export class CreateInitialSchema1719619200000 implements MigrationInterface {
 
     await queryRunner.createTable(
       new Table({
-        name: 'transaction_log',
+        name: 'transactions_logs',
         columns: [
           {
             name: 'id',
@@ -348,7 +348,7 @@ export class CreateInitialSchema1719619200000 implements MigrationInterface {
           {
             name: 'FK_transaction_log_user',
             columnNames: ['userId'],
-            referencedTableName: 'user',
+            referencedTableName: 'users',
             referencedColumnNames: ['id'],
             onDelete: 'SET NULL',
           },
@@ -359,7 +359,7 @@ export class CreateInitialSchema1719619200000 implements MigrationInterface {
 
     await queryRunner.createTable(
       new Table({
-        name: 'royalty_payout',
+        name: 'royalty_payouts',
         columns: [
           {
             name: 'id',
@@ -397,14 +397,14 @@ export class CreateInitialSchema1719619200000 implements MigrationInterface {
           {
             name: 'FK_royalty_payout_song',
             columnNames: ['songId'],
-            referencedTableName: 'song',
+            referencedTableName: 'songs',
             referencedColumnNames: ['id'],
             onDelete: 'CASCADE',
           },
           {
             name: 'FK_royalty_payout_recipient',
             columnNames: ['recipientId'],
-            referencedTableName: 'user',
+            referencedTableName: 'users',
             referencedColumnNames: ['id'],
             onDelete: 'CASCADE',
           },
@@ -413,8 +413,7 @@ export class CreateInitialSchema1719619200000 implements MigrationInterface {
       true,
     );
 
-    await queryRunner.createIndex(
-      'user',
+    await queryRunner.createIndex('users',
       new TableIndex({
         name: 'IDX_user_email',
         columnNames: ['email'],
@@ -422,8 +421,7 @@ export class CreateInitialSchema1719619200000 implements MigrationInterface {
       }),
     );
 
-    await queryRunner.createIndex(
-      'user',
+    await queryRunner.createIndex('users',
       new TableIndex({
         name: 'IDX_user_walletAddress',
         columnNames: ['walletAddress'],
@@ -431,24 +429,21 @@ export class CreateInitialSchema1719619200000 implements MigrationInterface {
       }),
     );
 
-    await queryRunner.createIndex(
-      'song',
+    await queryRunner.createIndex('songs',
       new TableIndex({
         name: 'IDX_song_artistId',
         columnNames: ['artistId'],
       }),
     );
 
-    await queryRunner.createIndex(
-      'song',
+    await queryRunner.createIndex('songs',
       new TableIndex({
         name: 'IDX_song_status',
         columnNames: ['status'],
       }),
     );
 
-    await queryRunner.createIndex(
-      'album',
+    await queryRunner.createIndex('albums',
       new TableIndex({
         name: 'IDX_album_artistId',
         columnNames: ['artistId'],
@@ -457,11 +452,11 @@ export class CreateInitialSchema1719619200000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.dropTable('royalty_payout');
-    await queryRunner.dropTable('transaction_log');
-    await queryRunner.dropTable('song');
-    await queryRunner.dropTable('album');
-    await queryRunner.dropTable('user');
+    await queryRunner.dropTable('royalty_payouts');
+    await queryRunner.dropTable('transactions_logs');
+    await queryRunner.dropTable('songs');
+    await queryRunner.dropTable('albums');
+    await queryRunner.dropTable('users');
     await queryRunner.dropTable('genre');
   }
 }

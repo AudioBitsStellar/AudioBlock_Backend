@@ -63,7 +63,7 @@ export class AddSubscriptionEntity1753100000000 implements MigrationInterface {
       new TableForeignKey({
         columnNames: ['userId'],
         referencedColumnNames: ['id'],
-        referencedTableName: 'user',
+        referencedTableName: 'users',
         onDelete: 'CASCADE',
       }),
     );

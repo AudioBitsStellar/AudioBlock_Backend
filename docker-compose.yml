@@ -10,12 +10,12 @@ services:
     environment:
       - NODE_ENV=development
     depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
+      - db
+      - redis
+      # RabbitMQ is optional for the minimal stack (API + DB + Redis). The
+      # backend starts without it and connects lazily; `docker compose up`
+      # (no profile) therefore omits rabbitmq. Use `--profile full` or
+      # `--profile queue` to include it.
     volumes:
       - .:/app
       - /app/node_modules
@@ -71,9 +71,10 @@ services:
     volumes:
       - pgadmin_data:/var/lib/pgadmin
     depends_on:
-      db:
-        condition: service_healthy
-
+      - db
+    profiles:
+      - full
+      - tools
   rabbitmq:
     image: rabbitmq:3-management
     container_name: rabbitmq
@@ -86,11 +87,10 @@ services:
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    profiles:
+      - full
+      - queue
+      - messaging
 
   prometheus:
     image: prom/prometheus:latest
@@ -106,6 +106,10 @@ services:
       - "--storage.tsdb.path=/prometheus"
       - "--web.console.libraries=/usr/share/prometheus/console_libraries"
       - "--web.console.templates=/usr/share/prometheus/consoles"
+    profiles:
+      - full
+      - monitoring
+      - observability
 
   grafana:
     image: grafana/grafana:latest
@@ -118,11 +122,15 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: admin
       GF_INSTALL_PLUGINS: ""
     volumes:
-      - ./monitoring/grafana:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/provisioning.yml:/etc/grafana/provisioning/provisioning.yml:ro
+      - ./monitoring/dashboards:/etc/grafana/provisioning/dashboards:ro
       - grafana_data:/var/lib/grafana
     depends_on:
-      prometheus:
-        condition: service_started
+      - prometheus
+    profiles:
+      - full
+      - monitoring
+      - observability
 
 volumes:
   pgdata:

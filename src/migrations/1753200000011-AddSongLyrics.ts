@@ -1,7 +1,7 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class AddSongLyrics1753200000004 implements MigrationInterface {
-  name = 'AddSongLyrics1753200000004';
+export class AddSongLyrics1753200000011 implements MigrationInterface {
+  name = 'AddSongLyrics1753200000011';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`ALTER TABLE "songs" ADD "lyrics" text`);

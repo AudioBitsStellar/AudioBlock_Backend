@@ -49,6 +49,22 @@ Run the test suite before pushing:
 npm test
 ```
 
+### Pre-commit Hooks
+
+Husky pre-commit hooks are installed via `npm run prepare` and run automatically before each commit. The pre-commit hook enforces code quality by running:
+
+- `npm run lint` - ESLint checks for code quality and style issues
+- `npm run format:check` - Prettier checks for formatting consistency
+
+If either check fails, the commit is blocked. To fix linting issues, run:
+
+```bash
+npm run lint:fix
+npm run format
+```
+
+To bypass the hook (not recommended), use `git commit --no-verify`.
+
 ---
 
 ## Branch Naming
