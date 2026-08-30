@@ -40,7 +40,7 @@
   "license": "ISC",
   "description": "The backend API for AudioBlocks, a music NFT platform on Stellar/Soroban",
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.916.0",
+    "@aws-sdk/client-s3": "^3.1119.0",
     "@dynamic-labs-wallet/core": "^0.0.187",
     "@dynamic-labs-wallet/node-evm": "^0.0.187",
     "@stellar/stellar-sdk": "^16.0.0",
