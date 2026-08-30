@@ -6,8 +6,10 @@ import { User } from '../entities/User';
 import { generateCodeVerifier, generateCodeChallenge } from '../utils/helpers';
 import { authArtistMiddleware } from '../middlewares/authMiddleware';
 import redis from '../config/redis';
+import { TweetDraftController } from '../controllers/TweetDraftController';
 
 const router = Router();
+const tweetDraftController = new TweetDraftController();
 
 // TTL for state in seconds (5 minutes)
 const STATE_TTL = 300;
@@ -192,5 +194,15 @@ router.post('/disconnect', authArtistMiddleware, async (req: Request, res: Respo
     return res.status(500).json({ error: 'Twitter disconnect failed' });
   }
 });
+
+// ---------- draft tweet endpoints (authenticated) ----------
+// Drafts a tweet for a new release via the AI provider abstraction. Approving
+// a draft is an explicit artist action; AudioBlock never posts on the
+// artist's behalf, since no Twitter access token is persisted (see the
+// /callback handler above).
+router.post('/draft', authArtistMiddleware, tweetDraftController.createDraft);
+router.get('/drafts', authArtistMiddleware, tweetDraftController.listDrafts);
+router.post('/draft/:id/approve', authArtistMiddleware, tweetDraftController.approveDraft);
+router.delete('/draft/:id', authArtistMiddleware, tweetDraftController.discardDraft);
 
 export default router;

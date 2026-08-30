@@ -1,8 +1,17 @@
 # Webhook & Event System Implementation Plan
 
-## Status: NOT YET IMPLEMENTED ⚠️
+## Status: Phase 3 (HTTP webhook delivery) implemented
 
-This document outlines the planned implementation for asynchronous event delivery to frontends. The webhook/event system is currently **not implemented** - frontends must use polling as a temporary workaround.
+This document originally outlined the planned implementation for asynchronous
+event delivery to frontends. **Phase 3 — HTTP webhook delivery with
+HMAC-SHA256 signing and exponential-backoff retries — is now implemented**:
+see `WebhookService` (`src/services/WebhookService.ts`), its subscription
+routes (`src/routes/webhookRoutes.ts`, `POST /api/webhooks/register`), and
+`src/types/WebhookPayloads.ts` for the current payload shapes (including
+`ai.generation.completed`, emitted by the async AI generation jobs described
+in `docs/AI_FEATURES.md`). Phases 2 (WebSocket server) and 4 (event
+persistence/replay API) below remain **not implemented** — frontends without
+a registered webhook endpoint still need to poll for those event types.
 
 ## Current Workaround (Polling)
 

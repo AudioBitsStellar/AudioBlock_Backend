@@ -9,6 +9,9 @@ import { Album } from '../entities/Album';
 import { RoyaltyPayout } from '../entities/RoyaltyPayout';
 import { WebhookSubscription } from '../entities/WebhookSubscription';
 import { TakedownRequest } from '../entities/TakedownRequest';
+import { ApiKey } from '../entities/ApiKey';
+import { AiGenerationRecord } from '../entities/AiGenerationRecord';
+import { TweetDraft } from '../entities/TweetDraft';
 
 dotenv.config();
 
@@ -32,6 +35,9 @@ const AppDataSource = new DataSource({
     RoyaltyPayout,
     WebhookSubscription,
     TakedownRequest,
+    ApiKey,
+    AiGenerationRecord,
+    TweetDraft,
   ],
   migrations: [__dirname + '/../migrations/*.{js,ts}'],
   migrationsTableName: 'migrations',

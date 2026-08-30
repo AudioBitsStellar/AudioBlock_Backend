@@ -25,6 +25,7 @@ import userRoutes from "./routes/userRoutes";
 import commentRoutes from "./routes/commentRoutes";
 import commentReactionRoutes from "./routes/commentReactionRoutes";
 import subscriptionRoutes from "./routes/subscriptionRoutes";
+import aiRoutes from "./routes/aiRoutes";
 
 // Route imports
 
@@ -139,6 +140,9 @@ app.use("/api/comments", commentReactionRoutes);
 
 // Subscriptions: tiered plans, gifting, trial periods (Issues #413, #414, #415, #416)
 app.use("/api/subscriptions", subscriptionRoutes);
+
+// AI-assisted generation (cover art, descriptions) — async, queued via JobQueueService
+app.use("/api/ai", aiRoutes);
 
 
 // Error handling middleware

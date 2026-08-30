@@ -68,10 +68,32 @@ export interface SongProcessingCompletedPayload {
 }
 
 /**
+ * Fired when an async AI generation job (cover art / description) finishes —
+ * see AiGenerationService and src/workers/AiJobHandlers.ts. `status` is
+ * "failed" only once JobQueueService has exhausted its retries.
+ */
+export interface AiGenerationCompletedPayload {
+  eventId: string;
+  eventType: 'ai.generation.completed';
+  timestamp: string;
+  recordId: string;
+  songId: string;
+  userId: string;
+  feature: 'coverArt' | 'descriptions';
+  status: 'completed' | 'failed';
+  resultText?: string;
+  resultUrl?: string;
+  errorMessage?: string;
+}
+
+/**
  * Union type of all possible webhook payloads for type discrimination.
  */
 export type WebhookPayload =
-  MintStatusChangedPayload | ArtistSetupCompletedPayload | SongProcessingCompletedPayload;
+  | MintStatusChangedPayload
+  | ArtistSetupCompletedPayload
+  | SongProcessingCompletedPayload
+  | AiGenerationCompletedPayload;
 
 /**
  * Delivery method configuration for webhook payloads.

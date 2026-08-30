@@ -1,9 +1,10 @@
 import { IsNull, Repository } from 'typeorm';
-import { ApiKey } from '../entities/ApiKey';
-import { User } from '../entities/User';
+import { ApiKey, ApiKeyScope } from '../entities/ApiKey';
+import { User, UserRole } from '../entities/User';
 import AppDataSource from '../config/db';
 import { AppError } from '../errors/AppError';
 import { ERROR_MESSAGES } from '../config/constants';
+import { Permission, roleHasPermission } from '../types/Permissions';
 import {
   validateRequired,
   validateStringLength,
@@ -22,13 +23,18 @@ const API_KEY_NAME_MAX_LENGTH = 100;
 /** Maximum number of simultaneously active keys per user. */
 const MAX_ACTIVE_KEYS_PER_USER = 20;
 
+/** Rate-limit tiers assignable to a key; self-service issuance stays "standard". */
+export const API_KEY_RATE_LIMIT_TIERS = ['standard', 'high', 'unlimited'] as const;
+export type ApiKeyRateLimitTier = (typeof API_KEY_RATE_LIMIT_TIERS)[number];
+
 /** An API key as returned to the client — never carries the hash. */
 export interface ApiKeyView {
   id: string;
   name: string;
   keyPrefix?: string;
-  scopes?: string[];
+  scopes?: ApiKeyScope[];
   permissions: string[];
+  rateLimitTier: string;
   lastUsedAt?: Date;
   revokedAt?: Date;
   createdAt: Date;
@@ -66,15 +72,24 @@ export class ApiKeyService {
    *
    * @param userId - Owner of the key
    * @param name - Human-readable label for the key
-   * @param scopes - Requested scope strings
-   * @param permissions - Requested permission strings (defaults to none)
+   * @param scopes - Requested coarse-grained scopes (read-only / upload / admin)
+   * @param permissions - Requested fine-grained permission strings. Rejected if
+   *   any permission exceeds what the owning user's role currently holds — a
+   *   key can never grant more than its owner has (enforced again on every
+   *   request in {@link keyHasPermission}, so a later role downgrade also
+   *   revokes it).
+   * @param rateLimitTier - Rate-limit tier for the key. Self-service issuance
+   *   (the public `POST /api/api-keys` route) always passes "standard"; higher
+   *   tiers are only ever assigned by trusted internal callers (e.g. an admin
+   *   flow), never taken directly from client input.
    * @returns The stored key view plus the one-time raw key
    */
   async createApiKey(
     userId: string,
     name: string,
-    scopes: string[] = [],
+    scopes: ApiKeyScope[] = [],
     permissions: string[] = [],
+    rateLimitTier: ApiKeyRateLimitTier = 'standard',
   ): Promise<CreatedApiKey> {
     validateUUID(userId, 'userId');
     validateRequired(name, 'name');
@@ -85,6 +100,8 @@ export class ApiKeyService {
     if (!user) {
       throw AppError.notFound(ERROR_MESSAGES.USER_NOT_FOUND);
     }
+
+    this.assertPermissionsAllowedForRole(user.role, permissions);
 
     const activeKeyCount = await this.apiKeyRepo.count({
       where: { userId, revokedAt: IsNull() },
@@ -105,11 +122,36 @@ export class ApiKeyService {
       keyPrefix,
       scopes,
       permissions,
+      rateLimitTier,
     });
 
     const saved = await this.apiKeyRepo.save(apiKey);
 
     return { ...this.toView(saved), rawKey };
+  }
+
+  /**
+   * Rejects issuance when a requested permission is either unrecognized or
+   * exceeds what `role` currently holds — the "never exceed the owner's role"
+   * invariant, enforced at issue time.
+   */
+  private assertPermissionsAllowedForRole(role: UserRole, permissions: string[]): void {
+    for (const permission of permissions) {
+      if (!Object.values(Permission).includes(permission as Permission)) {
+        throw AppError.validation(
+          `Unknown permission: ${permission}`,
+          undefined,
+          'INVALID_PERMISSION',
+        );
+      }
+      if (!roleHasPermission(role, permission as Permission)) {
+        throw AppError.authorization(
+          `Cannot issue a key with permission "${permission}": your role does not hold it`,
+          undefined,
+          'PERMISSION_EXCEEDS_ROLE',
+        );
+      }
+    }
   }
 
   /**
@@ -190,18 +232,28 @@ export class ApiKeyService {
     return { apiKey, user: apiKey.user };
   }
 
-  keyHasScope(apiKey: ApiKey, requiredScope: string): boolean {
+  /**
+   * A key must be explicitly granted `requiredScope` (or `admin`, which
+   * implies every scope). A key issued with no scopes holds none — it does
+   * not fall back to unrestricted access.
+   */
+  keyHasScope(apiKey: ApiKey, requiredScope: ApiKeyScope): boolean {
     if (!apiKey.scopes || apiKey.scopes.length === 0) {
-      return true;
+      return false;
     }
-    return apiKey.scopes.includes(requiredScope) || apiKey.scopes.includes('admin');
+    return apiKey.scopes.includes(requiredScope) || apiKey.scopes.includes(ApiKeyScope.ADMIN);
   }
 
+  /**
+   * A permission is granted only when the key lists it AND the owning user's
+   * role still holds it — so a role downgrade after issuance revokes the
+   * permission immediately, without needing to touch the key itself.
+   */
   keyHasPermission(apiKey: ApiKey, user: User, permission: string): boolean {
-    if (apiKey.permissions && apiKey.permissions.includes(permission)) {
-      return true;
+    if (!apiKey.permissions || !apiKey.permissions.includes(permission)) {
+      return false;
     }
-    return false;
+    return roleHasPermission(user.role, permission as Permission);
   }
 
   private toView(apiKey: ApiKey): ApiKeyView {
@@ -211,6 +263,7 @@ export class ApiKeyService {
       keyPrefix: apiKey.keyPrefix,
       scopes: apiKey.scopes,
       permissions: apiKey.permissions,
+      rateLimitTier: apiKey.rateLimitTier,
       lastUsedAt: apiKey.lastUsedAt,
       revokedAt: apiKey.revokedAt,
       createdAt: apiKey.createdAt,
