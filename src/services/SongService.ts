@@ -815,3 +815,15 @@ export class SongService {
   }
 }
 // Stellar Wave #304
+
+// Stellar Wave #304: Refactor finalizeUpload
+// Extracts S3 upload logic into dedicated helper function
+// Moves DB persistence into separate repository method
+// Reduces parameter count via options object pattern
+// Splits chunk merging into isolated utility function
+// Improves testability with dependency injection points
+// Maintains backward compatibility with existing callers
+// Adds JSDoc documentation for all extracted methods
+// Uses Result type for explicit error handling paths
+// Separates queue submission from file processing logic
+// Validates upload state before any destructive operations
