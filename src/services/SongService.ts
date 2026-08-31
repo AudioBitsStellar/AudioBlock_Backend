@@ -176,32 +176,39 @@ export class SongService {
   }
 
   /**
+   * Parameters for {@link SongService.finalizeUpload}.
+   */
+  export interface FinalizeUploadOptions {
+    /** Unique identifier for the upload session. */
+    fileId: string;
+    /** Expected number of chunks to merge. */
+    totalChunks: number;
+    /** Song title. */
+    title: string;
+    /** ID of the artist User record. */
+    artistId: string;
+    /** Ethereum wallet address of the artist. */
+    artistAddress: string;
+    /** Song description. */
+    description: string;
+    /** Genre label. */
+    genre: string;
+    /** Path to the cover art image on disk. */
+    coverArtPath: string;
+    /** Comma-separated list of composer names. */
+    composers: string;
+  }
+
+  /**
    * Merge all uploaded chunks, run a malware scan, upload to S3, persist the
    * song record, and enqueue background processing (HLS transcoding + IPFS pinning).
    *
-   * @param fileId - Unique identifier for the upload session.
-   * @param totalChunks - Expected number of chunks to merge.
-   * @param title - Song title.
-   * @param artistId - ID of the artist User record.
-   * @param artistAddress - Ethereum wallet address of the artist.
-   * @param description - Song description.
-   * @param genre - Genre label.
-   * @param coverArtPath - Path to the cover art image on disk.
-   * @param composers - Comma-separated list of composer names.
+   * @param options - Finalize upload options (see {@link FinalizeUploadOptions}).
    * @returns The persisted Song entity with status "processing".
    * @throws {Error} If chunk count mismatch, malware detected, or S3 upload fails.
    */
-  async finalizeUpload(
-    fileId: string,
-    totalChunks: number,
-    title: string,
-    artistId: string,
-    artistAddress: string,
-    description: string,
-    genre: string,
-    coverArtPath: string,
-    composers: string,
-  ): Promise<Song> {
+  async finalizeUpload(options: FinalizeUploadOptions): Promise<Song> {
+    const { fileId, totalChunks, title, artistId, artistAddress, description, genre, coverArtPath, composers } = options;
     const s3Location = await this.mergeScanAndUpload(fileId, totalChunks);
 
     //  Save song record to DB
@@ -807,3 +814,4 @@ export class SongService {
     return result;
   }
 }
+// Stellar Wave #304
