@@ -140,11 +140,10 @@ export class CommentController {
         return handleError(req, res, AppError.authentication('User not authenticated'));
       }
 
-      const report = await this.reportService.submitReport(
-        routeParam(req.params.id),
-        reporterId,
-        { reason: req.body.reason, description: req.body.description },
-      );
+      const report = await this.reportService.submitReport(routeParam(req.params.id), reporterId, {
+        reason: req.body.reason,
+        description: req.body.description,
+      });
 
       res.status(HTTP_STATUS.CREATED).json({
         message: 'Comment reported successfully',

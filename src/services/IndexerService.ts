@@ -5,7 +5,11 @@
 import AppDataSource from '../config/db';
 import { IndexerCursor } from '../entities/IndexerCursor';
 import { BackfillStatus } from '../entities/BackfillStatus';
-import { indexerLagLedgers, indexerEventsProcessedTotal, indexerErrorsTotal } from './MetricsService';
+import {
+  indexerLagLedgers,
+  indexerEventsProcessedTotal,
+  indexerErrorsTotal,
+} from './MetricsService';
 import logger from '../config/logger';
 
 export interface IndexerStatus {
@@ -33,16 +37,46 @@ export interface BackfillInfo {
 }
 
 export class IndexerService {
-  private cursorRepo = AppDataSource.getRepository(IndexerCursor);
-  private backfillRepo = AppDataSource.getRepository(BackfillStatus);
+  private get cursorRepo() {
+    return AppDataSource.getRepository(IndexerCursor);
+  }
+
+  private get backfillRepo() {
+    return AppDataSource.getRepository(BackfillStatus);
+  }
 
   /**
    * Get or create an indexer cursor for a contract + network pair.
    */
   async getCursor(contractId: string, network: string): Promise<IndexerCursor> {
     let cursor = await this.cursorRepo.findOne({
-      where: { contrac
-    eventCount: number = 1,
+      where: { contractId, network },
+    });
+
+    if (!cursor) {
+      cursor = this.cursorRepo.create({
+        contractId,
+        network,
+        lastProcessedLedger: 0,
+        eventsProcessed: 0,
+        errorCount: 0,
+        lastError: null,
+        lastErrorAt: null,
+      });
+      await this.cursorRepo.save(cursor);
+    }
+
+    return cursor;
+  }
+
+  /**
+   * Record progress for an indexer after successfully processing a ledger.
+   */
+  async recordProgress(
+    contractId: string,
+    network: string,
+    ledger: number,
+    eventCount = 1,
   ): Promise<void> {
     const cursor = await this.getCursor(contractId, network);
     cursor.lastProcessedLedger = ledger;
@@ -56,11 +90,7 @@ export class IndexerService {
   /**
    * Record an indexer error and update metrics.
    */
-  async recordError(
-    contractId: string,
-    network: string,
-    error: Error,
-  ): Promise<void> {
+  async recordError(contractId: string, network: string, error: Error): Promise<void> {
     const cursor = await this.getCursor(contractId, network);
     cursor.errorCount += 1;
     cursor.lastError = error.message;
@@ -80,10 +110,7 @@ export class IndexerService {
 
     for (const cursor of cursors) {
       const lag = Math.max(0, currentLedger - cursor.lastProcessedLedger);
-      indexerLagLedgers.set(
-        { network: cursor.network, contract: cursor.contractId },
-        lag,
-      );
+      indexerLagLedgers.set({ network: cursor.network, contract: cursor.contractId }, lag);
     }
   }
 
@@ -93,7 +120,7 @@ export class IndexerService {
   async getAllStatus(currentLedger?: number): Promise<IndexerStatus[]> {
     const cursors = await this.cursorRepo.find();
 
-    return cursors.map(cursor => ({
+    return cursors.map((cursor) => ({
       contractId: cursor.contractId,
       network: cursor.network,
       lastProcessedLedger: cursor.lastProcessedLedger,
@@ -101,9 +128,7 @@ export class IndexerService {
       errorCount: cursor.errorCount,
       lastError: cursor.lastError,
       lastErrorAt: cursor.lastErrorAt,
-      lagLedgers: currentLedger
-        ? Math.max(0, currentLedger - cursor.lastProcessedLedger)
-        : 0,
+      lagLedgers: currentLedger ? Math.max(0, currentLedger - cursor.lastProcessedLedger) : 0,
       updatedAt: cursor.updatedAt,
     }));
   }
@@ -111,7 +136,11 @@ export class IndexerService {
   /**
    * Get status for a specific contract + network.
    */
-  async getStatus(contractId: string, network: string, currentLedger?: number): Promise<IndexerStatus> {
+  async getStatus(
+    contractId: string,
+    network: string,
+    currentLedger?: number,
+  ): Promise<IndexerStatus> {
     const cursor = await this.getCursor(contractId, network);
 
     return {
@@ -122,9 +151,7 @@ export class IndexerService {
       errorCount: cursor.errorCount,
       lastError: cursor.lastError,
       lastErrorAt: cursor.lastErrorAt,
-      lagLedgers: currentLedger
-        ? Math.max(0, currentLedger - cursor.lastProcessedLedger)
-        : 0,
+      lagLedgers: currentLedger ? Math.max(0, currentLedger - cursor.lastProcessedLedger) : 0,
       updatedAt: cursor.updatedAt,
     };
   }
@@ -157,7 +184,7 @@ export class IndexerService {
     if (existing?.completed) {
       throw new Error(
         `Backfill already completed for ${contractId} on ${network}. ` +
-        'Delete the record manually if re-run is intentional.',
+          'Delete the record manually if re-run is intentional.',
       );
     }
 
@@ -209,11 +236,7 @@ export class IndexerService {
   /**
    * Record backfill failure.
    */
-  async failBackfill(
-    contractId: string,
-    network: string,
-    error: Error,
-  ): Promise<void> {
+  async failBackfill(contractId: string, network: string, error: Error): Promise<void> {
     const status = await this.backfillRepo.findOne({
       where: { contractId, network },
     });
@@ -230,7 +253,7 @@ export class IndexerService {
    */
   async getAllBackfillStatus(): Promise<BackfillInfo[]> {
     const statuses = await this.backfillRepo.find();
-    return statuses.map(s => ({
+    return statuses.map((s) => ({
       contractId: s.contractId,
       network: s.network,
       completed: s.completed,

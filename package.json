@@ -16,6 +16,7 @@
     "seed:test": "ts-node src/seeders/test.seeder.ts",
     "db:seed:test": "ts-node src/seeders/test.seeder.ts",
     "reconcile:royalties": "ts-node src/jobs/RoyaltyReconciliationJob.ts",
+    "reconcile:onchain": "ts-node src/jobs/OnChainReconciliationJob.ts",
     "migration:generate": "typeorm migration:generate",
     "migration:run": "typeorm migration:run -d dist/config/db.js",
     "migration:revert": "typeorm migration:revert -d dist/config/db.js",

@@ -1,8 +1,5 @@
 import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
-import {
-  CommentReportAction,
-  CommentReportReason,
-} from '../entities/CommentReport';
+import { CommentReportAction, CommentReportReason } from '../entities/CommentReport';
 
 /** Body for `POST /api/comments/:id/report` (Issue #411). */
 export class ReportCommentDTO {

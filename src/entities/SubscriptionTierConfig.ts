@@ -4,7 +4,6 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
-  Index,
   Unique,
 } from 'typeorm';
 import { SubscriptionTier } from './Subscription';

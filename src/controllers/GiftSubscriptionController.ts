@@ -1,9 +1,9 @@
-import { Request, Response } from "express";
-import { AppDataSource } from "../config/data-source";
-import { GiftSubscription, GiftStatus } from "../entities/GiftSubscription";
-import { Subscription, SubscriptionTier, SubscriptionStatus } from "../entities/Subscription";
-import { handleError } from "../utils/helpers";
-import { AppError } from "../errors/AppError";
+import { Request, Response } from 'express';
+import { AppDataSource } from '../config/data-source';
+import { GiftSubscription, GiftStatus } from '../entities/GiftSubscription';
+import { Subscription, SubscriptionTier, SubscriptionStatus } from '../entities/Subscription';
+import { handleError } from '../utils/helpers';
+import { AppError } from '../errors/AppError';
 
 /**
  * Controller for subscription gifting (Issue #414).
@@ -22,15 +22,15 @@ export class GiftSubscriptionController {
       const { recipientId, tier, durationDays, message } = req.body;
 
       if (!recipientId || !tier) {
-        return handleError(req, res, AppError.badRequest("recipientId and tier are required"));
+        return handleError(req, res, AppError.badRequest('recipientId and tier are required'));
       }
 
       if (!Object.values(SubscriptionTier).includes(tier)) {
-        return handleError(req, res, AppError.badRequest("Invalid subscription tier"));
+        return handleError(req, res, AppError.badRequest('Invalid subscription tier'));
       }
 
       if (senderId === recipientId) {
-        return handleError(req, res, AppError.badRequest("Cannot gift a subscription to yourself"));
+        return handleError(req, res, AppError.badRequest('Cannot gift a subscription to yourself'));
       }
 
       const repo = AppDataSource.getRepository(GiftSubscription);
@@ -40,7 +40,11 @@ export class GiftSubscriptionController {
         where: { senderId, recipientId, status: GiftStatus.PENDING },
       });
       if (existing) {
-        return handleError(req, res, AppError.conflict("A pending gift already exists for this recipient"));
+        return handleError(
+          req,
+          res,
+          AppError.conflict('A pending gift already exists for this recipient'),
+        );
       }
 
       const expiresAt = new Date();
@@ -72,11 +76,8 @@ export class GiftSubscriptionController {
       const repo = AppDataSource.getRepository(GiftSubscription);
 
       const gifts = await repo.find({
-        where: [
-          { senderId: userId },
-          { recipientId: userId },
-        ],
-        order: { createdAt: "DESC" },
+        where: [{ senderId: userId }, { recipientId: userId }],
+        order: { createdAt: 'DESC' },
       });
 
       res.json({ gifts });
@@ -97,21 +98,21 @@ export class GiftSubscriptionController {
 
       const gift = await repo.findOneBy({ id });
       if (!gift) {
-        return handleError(req, res, AppError.notFound("Gift not found"));
+        return handleError(req, res, AppError.notFound('Gift not found'));
       }
 
       if (gift.recipientId !== userId) {
-        return handleError(req, res, AppError.forbidden("Only the recipient can accept a gift"));
+        return handleError(req, res, AppError.forbidden('Only the recipient can accept a gift'));
       }
 
       if (gift.status !== GiftStatus.PENDING) {
-        return handleError(req, res, AppError.badRequest("Gift is no longer pending"));
+        return handleError(req, res, AppError.badRequest('Gift is no longer pending'));
       }
 
       if (gift.expiresAt && new Date() > gift.expiresAt) {
         gift.status = GiftStatus.EXPIRED;
         await repo.save(gift);
-        return handleError(req, res, AppError.badRequest("Gift has expired"));
+        return handleError(req, res, AppError.badRequest('Gift has expired'));
       }
 
       // Activate the subscription for the recipient
@@ -163,15 +164,15 @@ export class GiftSubscriptionController {
 
       const gift = await repo.findOneBy({ id });
       if (!gift) {
-        return handleError(req, res, AppError.notFound("Gift not found"));
+        return handleError(req, res, AppError.notFound('Gift not found'));
       }
 
       if (gift.recipientId !== userId) {
-        return handleError(req, res, AppError.forbidden("Only the recipient can decline a gift"));
+        return handleError(req, res, AppError.forbidden('Only the recipient can decline a gift'));
       }
 
       if (gift.status !== GiftStatus.PENDING) {
-        return handleError(req, res, AppError.badRequest("Gift is no longer pending"));
+        return handleError(req, res, AppError.badRequest('Gift is no longer pending'));
       }
 
       gift.status = GiftStatus.DECLINED;

@@ -176,7 +176,10 @@ export class CommentReportService {
     report.resolutionNote = input.resolutionNote?.trim() || null;
     await this.reportRepo.save(report);
 
-    if (action === CommentReportAction.COMMENT_FLAGGED || action === CommentReportAction.COMMENT_REMOVED) {
+    if (
+      action === CommentReportAction.COMMENT_FLAGGED ||
+      action === CommentReportAction.COMMENT_REMOVED
+    ) {
       const comment = await this.commentRepo.findOneBy({ id: report.commentId });
       if (comment) {
         comment.flagged = true;

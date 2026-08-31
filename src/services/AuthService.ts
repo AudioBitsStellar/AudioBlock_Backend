@@ -416,20 +416,6 @@ export class AuthService {
     return { token, refreshToken };
   }
 
-  private signRefreshToken(user: User): string {
-    const JWT_SECRET = process.env.JWT_SECRET as string;
-    if (!JWT_SECRET) {
-      throw AppError.businessLogic('JWT_SECRET not set in environment variables');
-    }
-
-    const payload = {
-      id: user.id,
-      type: 'refresh',
-    };
-
-    return jwt.sign(payload, JWT_SECRET, { expiresIn: `${REFRESH_TOKEN_EXPIRY_SECONDS}s` });
-  }
-
   private getRefreshTokenKey(userId: string): string {
     return `refresh:${userId}`;
   }

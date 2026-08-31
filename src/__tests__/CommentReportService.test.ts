@@ -138,8 +138,8 @@ describe('CommentReportService.resolveReport', () => {
     });
 
     const svc = makeSvc();
-    await expect(svc.resolveReport('r-1', 'mod-1', { actionTaken: 'dismissed' })).rejects.toMatchObject(
-      { statusCode: 409 },
-    );
+    await expect(
+      svc.resolveReport('r-1', 'mod-1', { actionTaken: 'dismissed' }),
+    ).rejects.toMatchObject({ statusCode: 409 });
   });
 });

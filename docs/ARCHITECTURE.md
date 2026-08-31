@@ -9,7 +9,7 @@ This document provides a high-level architectural overview of the `AudioBlock_Ba
 ```mermaid
 graph TD
     Client[Client App / Artist Dashboard / Web3 Wallet] -->|HTTP / REST API| Express[Express HTTP Server app.ts]
-    
+
     subgraph Express Application Layer
         Express --> MW[Middlewares: Auth, Rate Limit, Validate DTO, Malware Scan]
         MW --> Controllers[Controllers: Auth, Song, Release, Royalty, Wallet]
@@ -41,24 +41,25 @@ graph TD
 
 The `src/` codebase is organized into distinct domain layers, each with strict responsibilities:
 
-| Module Directory | Responsibility | Key Files & Artifacts |
-| :--- | :--- | :--- |
-| `src/app.ts` | Express application setup, global middleware registration, security headers, rate limiting, and main router attachment. | `app.ts`, `index.ts` |
-| `src/config/` | Centralized environment variables, database configuration, Redis client initialization, AWS/IPFS options, and constants. | `config/db.ts`, `config/redis.ts`, `config/constants.ts` |
-| `src/controllers/` | Thin HTTP controllers responsible ONLY for parsing request params/body, invoking services, and returning status codes. | `AuthController.ts`, `SongController.ts`, `ReleaseController.ts`, `RoyaltyTemplateController.ts`, `WalletController.ts` |
-| `src/services/` | Business logic domain layer containing transaction rules, validation, external Web3/S3 integration, and cross-service coordination. | `AuthService.ts`, `SongService.ts`, `SorobanService.ts`, `ScanService.ts`, `MarketplaceService.ts`, `ServiceRegistry.ts` |
-| `src/entities/` | TypeORM database entity definitions mapping TypeScript classes to PostgreSQL tables with column decorators and relations. | `User.ts`, `Song.ts`, `Album.ts`, `RoyaltyPayout.ts`, `SongCollaborator.ts`, `Release.ts`, `Tag.ts` |
-| `src/dtos/` | Data Transfer Objects defining strict request validation schemas using `class-validator` and `class-transformer`. | `RegisterUserDto.ts`, `LoginDto.ts`, `CreateSongDto.ts`, `UpdateProfileDto.ts` |
-| `src/middlewares/` | Express middlewares for JWT authentication, RBAC authorization, DTO validation, rate limiting, malware scanning, request logging, and sanitization. | `authMiddleware.ts`, `validate.ts`, `authRateLimiter.ts`, `sanitizeInput.ts`, `bodySizeLimit.ts` |
-| `src/workers/` & `src/jobs/` | Asynchronous job queues and background workers for CPU-intensive audio transcoding (FFmpeg HLS), malware scans, and payout processing. | `QueueManager.ts`, `Worker.ts`, `JobHandler.ts` |
-| `src/routes/` | Express router definitions wiring HTTP paths and HTTP methods to specific middlewares and controller handlers. | `authRoutes.ts`, `songRoutes.ts`, `releaseRoutes.ts`, `royaltyRoutes.ts` |
-| `src/errors/` | Application-wide error class (`AppError`) handling operational failures, status codes, error codes, and field details. | `errors/AppError.ts` |
+| Module Directory             | Responsibility                                                                                                                                      | Key Files & Artifacts                                                                                                    |
+| :--------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------- |
+| `src/app.ts`                 | Express application setup, global middleware registration, security headers, rate limiting, and main router attachment.                             | `app.ts`, `index.ts`                                                                                                     |
+| `src/config/`                | Centralized environment variables, database configuration, Redis client initialization, AWS/IPFS options, and constants.                            | `config/db.ts`, `config/redis.ts`, `config/constants.ts`                                                                 |
+| `src/controllers/`           | Thin HTTP controllers responsible ONLY for parsing request params/body, invoking services, and returning status codes.                              | `AuthController.ts`, `SongController.ts`, `ReleaseController.ts`, `RoyaltyTemplateController.ts`, `WalletController.ts`  |
+| `src/services/`              | Business logic domain layer containing transaction rules, validation, external Web3/S3 integration, and cross-service coordination.                 | `AuthService.ts`, `SongService.ts`, `SorobanService.ts`, `ScanService.ts`, `MarketplaceService.ts`, `ServiceRegistry.ts` |
+| `src/entities/`              | TypeORM database entity definitions mapping TypeScript classes to PostgreSQL tables with column decorators and relations.                           | `User.ts`, `Song.ts`, `Album.ts`, `RoyaltyPayout.ts`, `SongCollaborator.ts`, `Release.ts`, `Tag.ts`                      |
+| `src/dtos/`                  | Data Transfer Objects defining strict request validation schemas using `class-validator` and `class-transformer`.                                   | `RegisterUserDto.ts`, `LoginDto.ts`, `CreateSongDto.ts`, `UpdateProfileDto.ts`                                           |
+| `src/middlewares/`           | Express middlewares for JWT authentication, RBAC authorization, DTO validation, rate limiting, malware scanning, request logging, and sanitization. | `authMiddleware.ts`, `validate.ts`, `authRateLimiter.ts`, `sanitizeInput.ts`, `bodySizeLimit.ts`                         |
+| `src/workers/` & `src/jobs/` | Asynchronous job queues and background workers for CPU-intensive audio transcoding (FFmpeg HLS), malware scans, and payout processing.              | `QueueManager.ts`, `Worker.ts`, `JobHandler.ts`                                                                          |
+| `src/routes/`                | Express router definitions wiring HTTP paths and HTTP methods to specific middlewares and controller handlers.                                      | `authRoutes.ts`, `songRoutes.ts`, `releaseRoutes.ts`, `royaltyRoutes.ts`                                                 |
+| `src/errors/`                | Application-wide error class (`AppError`) handling operational failures, status codes, error codes, and field details.                              | `errors/AppError.ts`                                                                                                     |
 
 ---
 
 ## Key Feature Code Flows
 
 ### 1. Artist Authentication & Web3 Wallet Onboarding Flow
+
 ```mermaid
 sequenceDiagram
     autonumber
@@ -82,6 +83,7 @@ sequenceDiagram
 ```
 
 ### 2. Song Upload & HLS Transcoding Flow
+
 ```mermaid
 sequenceDiagram
     autonumber
@@ -110,6 +112,7 @@ sequenceDiagram
 ```
 
 ### 3. Soroban NFT Song Minting Relay Flow
+
 ```mermaid
 sequenceDiagram
     autonumber

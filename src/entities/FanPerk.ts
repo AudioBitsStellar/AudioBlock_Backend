@@ -7,46 +7,46 @@ import {
   ManyToOne,
   JoinColumn,
   Index,
-} from "typeorm";
-import { User } from "./User";
-import { SubscriptionTier } from "./Subscription";
+} from 'typeorm';
+import { User } from './User';
+import { SubscriptionTier } from './Subscription';
 
-@Entity("fan_perks")
-@Index(["artistId"])
-@Index(["tier"])
+@Entity('fan_perks')
+@Index(['artistId'])
+@Index(['tier'])
 export class FanPerk {
-  @PrimaryGeneratedColumn("uuid")
+  @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column({ type: "uuid" })
+  @Column({ type: 'uuid' })
   artistId!: string;
 
-  @ManyToOne(() => User, { onDelete: "CASCADE" })
-  @JoinColumn({ name: "artistId" })
+  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'artistId' })
   artist!: User;
 
-  @Column({ type: "enum", enum: SubscriptionTier })
+  @Column({ type: 'enum', enum: SubscriptionTier })
   tier!: SubscriptionTier;
 
-  @Column({ type: "varchar", length: 150 })
+  @Column({ type: 'varchar', length: 150 })
   name!: string;
 
-  @Column({ type: "text", nullable: true })
+  @Column({ type: 'text', nullable: true })
   description?: string | null;
 
-  @Column({ type: "varchar", length: 50, default: "custom" })
+  @Column({ type: 'varchar', length: 50, default: 'custom' })
   perkType!: string;
 
-  @Column({ type: "varchar", length: 500, nullable: true })
+  @Column({ type: 'varchar', length: 500, nullable: true })
   resourceUrl?: string | null;
 
-  @Column({ type: "int", nullable: true })
+  @Column({ type: 'int', nullable: true })
   discountPercent?: number | null;
 
   @Column({ default: false })
   hidden!: boolean;
 
-  @Column({ type: "int", default: 0 })
+  @Column({ type: 'int', default: 0 })
   sortOrder!: number;
 
   @CreateDateColumn()

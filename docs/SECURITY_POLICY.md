@@ -6,19 +6,19 @@ Container images are automatically scanned for known vulnerabilities using [Triv
 
 ### Scan Targets
 
-| Target       | Description                           |
-| ------------ | ------------------------------------- |
-| Base image   | `node:20` — the underlying OS/packages |
-| Final image  | `audioblock-backend` — full app image   |
+| Target      | Description                            |
+| ----------- | -------------------------------------- |
+| Base image  | `node:20` — the underlying OS/packages |
+| Final image | `audioblock-backend` — full app image  |
 
 ### Severity Thresholds
 
-| Severity  | CI Behavior                                              |
-| --------- | -------------------------------------------------------- |
-| CRITICAL  | Blocks merge on push/PR (exit code 1)                    |
-| HIGH      | Blocks merge on push/PR (exit code 1)                    |
-| MEDIUM    | Reported in SARIF output, does not block                 |
-| LOW        | Reported in SARIF output, does not block                 |
+| Severity | CI Behavior                              |
+| -------- | ---------------------------------------- |
+| CRITICAL | Blocks merge on push/PR (exit code 1)    |
+| HIGH     | Blocks merge on push/PR (exit code 1)    |
+| MEDIUM   | Reported in SARIF output, does not block |
+| LOW      | Reported in SARIF output, does not block |
 
 Scans run with `--ignore-unfixed` so only fixable vulnerabilities trigger failure.
 

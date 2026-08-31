@@ -134,25 +134,31 @@ export class CollaborationService {
 
   async disputeSplit(songId: string, requesterId: string): Promise<SongCollaborator> {
     const song = await this.getSongOrThrow(songId);
-    
+
     // Any collaborator can dispute
     const collaborator = await this.collaboratorRepo.findOneBy({
       songId,
       userId: requesterId,
       status: CollaboratorStatus.ACTIVE,
     });
-    
+
     if (!collaborator) {
       throw AppError.authorization('Only active collaborators can dispute splits');
     }
 
-    collaborator.disputeStatus = (await import('../entities/SongCollaborator')).DisputeStatus.DISPUTED;
+    collaborator.disputeStatus = (
+      await import('../entities/SongCollaborator')
+    ).DisputeStatus.DISPUTED;
     return this.collaboratorRepo.save(collaborator);
   }
 
-  async resolveDispute(songId: string, targetUserId: string, requesterId: string): Promise<SongCollaborator> {
+  async resolveDispute(
+    songId: string,
+    targetUserId: string,
+    requesterId: string,
+  ): Promise<SongCollaborator> {
     const song = await this.getSongOrThrow(songId);
-    
+
     // Only primary artist can resolve for now
     this.assertIsPrimaryArtist(song, requesterId);
 
@@ -161,12 +167,14 @@ export class CollaborationService {
       userId: targetUserId,
       status: CollaboratorStatus.ACTIVE,
     });
-    
+
     if (!collaborator) {
       throw AppError.notFound('Collaborator not found');
     }
 
-    collaborator.disputeStatus = (await import('../entities/SongCollaborator')).DisputeStatus.RESOLVED;
+    collaborator.disputeStatus = (
+      await import('../entities/SongCollaborator')
+    ).DisputeStatus.RESOLVED;
     return this.collaboratorRepo.save(collaborator);
   }
 }

@@ -4,6 +4,7 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  Index,
 } from 'typeorm';
 
 /**
@@ -11,6 +12,7 @@ import {
  * Enables resumable event polling and historical backfill (Issues #241, #250, #253).
  */
 @Entity('indexer_cursors')
+@Index('IDX_indexer_cursors_contract_network', ['contractId', 'network'], { unique: true })
 export class IndexerCursor {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
@@ -22,4 +24,23 @@ export class IndexerCursor {
   network!: string; // 'mainnet' | 'testnet' | 'futurenet'
 
   @Column({ type: 'bigint', default: 0 })
-  lastProcessedLedger!: numbe
+  lastProcessedLedger!: number;
+
+  @Column({ type: 'bigint', default: 0 })
+  eventsProcessed!: number;
+
+  @Column({ type: 'bigint', default: 0 })
+  errorCount!: number;
+
+  @Column({ type: 'text', nullable: true })
+  lastError!: string | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  lastErrorAt!: Date | null;
+
+  @CreateDateColumn()
+  createdAt!: Date;
+
+  @UpdateDateColumn()
+  updatedAt!: Date;
+}

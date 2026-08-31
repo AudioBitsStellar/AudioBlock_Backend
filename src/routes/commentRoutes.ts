@@ -14,6 +14,11 @@ router.put('/:id', requireAuth, validateDTO(UpdateCommentDTO), commentController
 router.delete('/:id', requireAuth, commentController.deleteComment);
 
 // Flag a comment into the moderation queue (Issue #411).
-router.post('/:id/report', requireAuth, validateDTO(ReportCommentDTO), commentController.reportComment);
+router.post(
+  '/:id/report',
+  requireAuth,
+  validateDTO(ReportCommentDTO),
+  commentController.reportComment,
+);
 
 export default router;

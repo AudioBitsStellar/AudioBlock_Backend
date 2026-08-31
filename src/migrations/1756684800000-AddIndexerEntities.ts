@@ -5,8 +5,28 @@ import { MigrationInterface, QueryRunner, Table, TableIndex } from 'typeorm';
  * Issues #241, #250, #253.
  */
 export class AddIndexerEntities1756684800000 implements MigrationInterface {
-  public async up(queryR
-       length: '50',
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    // Create indexer_cursors table
+    await queryRunner.createTable(
+      new Table({
+        name: 'indexer_cursors',
+        columns: [
+          {
+            name: 'id',
+            type: 'uuid',
+            isPrimary: true,
+            generationStrategy: 'uuid',
+            default: 'uuid_generate_v4()',
+          },
+          {
+            name: 'contractId',
+            type: 'varchar',
+            length: '100',
+          },
+          {
+            name: 'network',
+            type: 'varchar',
+            length: '50',
           },
           {
             name: 'lastProcessedLedger',

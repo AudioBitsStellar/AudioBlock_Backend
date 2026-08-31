@@ -24,7 +24,7 @@ const pollMintStatus = async (songId: string) => {
     const res = await fetch(`/api/songs/${songId}`);
     const song = await res.json();
 
-    if (song.mintStatus === "minted" || song.mintStatus === "failed") {
+    if (song.mintStatus === 'minted' || song.mintStatus === 'failed') {
       clearInterval(interval);
       handleMintComplete(song);
     }
@@ -41,14 +41,14 @@ Add event emission to `SongService.submitSongMintTx`:
 ```typescript
 // After successful mint
 await this.songRepo.save(song);
-await this.eventEmitter.emit("mint_status_changed", {
+await this.eventEmitter.emit('mint_status_changed', {
   eventId: generateEventId(),
-  eventType: "mint_status_changed",
+  eventType: 'mint_status_changed',
   timestamp: new Date().toISOString(),
   songId: song.id,
   onChainSongId: song.onChainSongId,
-  previousStatus: "minting",
-  newStatus: "minted",
+  previousStatus: 'minting',
+  newStatus: 'minted',
   txHash: hash,
   tokenId: song.onChainTokenId,
 });
@@ -58,27 +58,27 @@ await this.eventEmitter.emit("mint_status_changed", {
 
 ```typescript
 // src/services/WebSocketService.ts
-import { Server } from "socket.io";
+import { Server } from 'socket.io';
 
 export class WebSocketService {
   private io: Server;
 
   init(httpServer: any) {
     this.io = new Server(httpServer, {
-      cors: { origin: process.env.FRONTEND_URLS?.split(",") },
+      cors: { origin: process.env.FRONTEND_URLS?.split(',') },
     });
 
-    this.io.on("connection", (socket) => {
-      console.log("Client connected:", socket.id);
+    this.io.on('connection', (socket) => {
+      console.log('Client connected:', socket.id);
 
-      socket.on("subscribe", ({ userId }) => {
+      socket.on('subscribe', ({ userId }) => {
         socket.join(`user:${userId}`);
       });
     });
   }
 
   emitMintStatusChanged(userId: string, payload: MintStatusChangedPayload) {
-    this.io.to(`user:${userId}`).emit("mint_status_changed", payload);
+    this.io.to(`user:${userId}`).emit('mint_status_changed', payload);
   }
 }
 ```
@@ -94,11 +94,11 @@ export class WebhookService {
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         const res = await fetch(endpoint, {
-          method: "POST",
+          method: 'POST',
           headers: {
-            "Content-Type": "application/json",
+            'Content-Type': 'application/json',
             Authorization: `Bearer ${authToken}`,
-            "X-Webhook-Signature": this.signPayload(payload),
+            'X-Webhook-Signature': this.signPayload(payload),
           },
           body: JSON.stringify(payload),
         });
@@ -123,13 +123,13 @@ export class WebhookService {
 // src/entities/Event.ts
 @Entity()
 export class Event {
-  @PrimaryGeneratedColumn("uuid")
+  @PrimaryGeneratedColumn('uuid')
   id!: string;
 
   @Column()
   eventType!: string;
 
-  @Column("jsonb")
+  @Column('jsonb')
   payload!: WebhookPayload;
 
   @Column()
@@ -158,8 +158,8 @@ Once implemented, frontends must:
 1. **Connect to WebSocket on app load**:
 
    ```typescript
-   const socket = io("wss://api.audioblock.com");
-   socket.emit("subscribe", { userId: currentUser.id });
+   const socket = io('wss://api.audioblock.com');
+   socket.emit('subscribe', { userId: currentUser.id });
    ```
 
 2. **Register webhook endpoint** (optional, for reliability):
@@ -175,7 +175,7 @@ Once implemented, frontends must:
 
 3. **Handle events**:
    ```typescript
-   socket.on("mint_status_changed", (event: MintStatusChangedPayload) => {
+   socket.on('mint_status_changed', (event: MintStatusChangedPayload) => {
      updateSongUI(event.songId, event.newStatus);
    });
    ```

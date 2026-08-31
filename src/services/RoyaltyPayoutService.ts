@@ -50,10 +50,7 @@ export class RoyaltyPayoutService {
    * @param grossAmountStroops - Total sale amount to split among collaborators.
    * @returns RoyaltySplit entries, or [] if the song has no collaborators.
    */
-  async buildSplitsFromCollaborators(
-    songId: string,
-    grossAmount: string,
-  ): Promise<RoyaltySplit[]> {
+  async buildSplitsFromCollaborators(songId: string, grossAmount: string): Promise<RoyaltySplit[]> {
     const collaboratorRepo = AppDataSource.getRepository(SongCollaborator);
     const userRepo = AppDataSource.getRepository(User);
 
@@ -232,19 +229,16 @@ export class RoyaltyPayoutService {
     });
 
     if (payouts.length === 0) {
-      return "ID,SaleEventId,Status,Currency,GrossAmount,CreatedAt\n";
+      return 'ID,SaleEventId,Status,Currency,GrossAmount,CreatedAt\n';
     }
 
-    const headers = ["ID", "SaleEventId", "Status", "Currency", "GrossAmount", "CreatedAt"];
-    const rows = payouts.map((p) => [
-      p.id,
-      p.saleEventId,
-      p.status,
-      p.currency,
-      p.grossAmount,
-      p.createdAt.toISOString()
-    ].join(","));
+    const headers = ['ID', 'SaleEventId', 'Status', 'Currency', 'GrossAmount', 'CreatedAt'];
+    const rows = payouts.map((p) =>
+      [p.id, p.saleEventId, p.status, p.currency, p.grossAmount, p.createdAt.toISOString()].join(
+        ',',
+      ),
+    );
 
-    return [headers.join(","), ...rows].join("\n");
+    return [headers.join(','), ...rows].join('\n');
   }
 }
