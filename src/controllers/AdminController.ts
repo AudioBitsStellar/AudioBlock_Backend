@@ -11,6 +11,7 @@ import { AppError } from '../errors/AppError';
 import { routeParam } from '../utils/routeParams';
 import { VerificationStatus } from '../entities/ArtistVerification';
 import { TransactionLogService } from '../services/TransactionLogService';
+import { IndexerService } from '../services/IndexerService';
 
 /**
  * Admin-facing user & role management (Issue #100) and artist verification
@@ -22,6 +23,7 @@ export class AdminController {
   private static transactionLogService = new TransactionLogService();
   private static reportService = new ReportService();
   private static commentReportService = new CommentReportService();
+  private static indexerService = new IndexerService();
 
   /**
    * GET /api/admin/reports — list the pending content-report moderation queue

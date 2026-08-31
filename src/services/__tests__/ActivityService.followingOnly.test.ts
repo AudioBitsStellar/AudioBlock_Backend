@@ -50,9 +50,7 @@ describe('ActivityService.getActivityFeed with followingOnly', () => {
       { followerId: 'user-1', followingId: 'artist-2' },
     ]);
 
-    const mockActivities = [
-      { id: 'act-1', userId: 'artist-1', actionType: 'RELEASE_SONG' },
-    ];
+    const mockActivities = [{ id: 'act-1', userId: 'artist-1', actionType: 'RELEASE_SONG' }];
     mockActivityRepo.findAndCount.mockResolvedValue([mockActivities, 1]);
 
     const svc = new ActivityService();

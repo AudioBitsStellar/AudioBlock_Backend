@@ -6,24 +6,24 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
-} from "typeorm";
-import { User } from "./User";
+} from 'typeorm';
+import { User } from './User';
 
 /**
  * Webhook subscription for third-party event delivery.
  * Stores the subscriber's endpoint and secret used for HMAC signing.
  * Event types: e.g. "song.minted", "sale.completed", "mint_status_changed"
  */
-@Entity("webhook_subscriptions")
+@Entity('webhook_subscriptions')
 export class WebhookSubscription {
-  @PrimaryGeneratedColumn("uuid")
+  @PrimaryGeneratedColumn('uuid')
   id!: string;
 
   @Column()
   userId!: string;
 
-  @ManyToOne(() => User, { onDelete: "CASCADE" })
-  @JoinColumn({ name: "userId" })
+  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'userId' })
   user!: User;
 
   @Column()
@@ -34,7 +34,7 @@ export class WebhookSubscription {
   secret!: string;
 
   /** Comma-separated list stored as simple-array; empty or ["*"] means all events */
-  @Column({ type: "simple-array", nullable: true })
+  @Column({ type: 'simple-array', nullable: true })
   eventTypes!: string[];
 
   @Column({ default: true })

@@ -1,8 +1,44 @@
 import { Request, Response } from 'express';
+import AppDataSource from '../config/db';
+import { ActivityFeed } from '../entities/ActivityFeed';
+import { UserFollow } from '../entities/UserFollow';
 import { ActivityService } from '../services/ActivityService';
-import { HTTP_STATUS } from '../config/constants';
+import { AppError } from '../errors/AppError';
+import { handleError } from '../utils/helpers';
+
+const activityService = new ActivityService();
 
 export class ActivityController {
+  /**
+   * GET /api/activity/onchain
+   * Query indexed on-chain events with pagination and filters.
+   */
+  static getOnChainActivity = async (req: Request, res: Response) => {
+    try {
+      const contractType = req.query.contractType as string | undefined;
+      const eventType = req.query.eventType as string | undefined;
+      const address = req.query.address as string | undefined;
+      const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
+      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
+
+      const result = await activityService.getOnChainActivity({
+        contractType,
+        eventType,
+        address,
+        page,
+        limit,
+      });
+
+      return res.status(200).json({
+        success: true,
+        data: result.data,
+        pagination: result.pagination,
+      });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
   static getMyFeed = async (req: Request, res: Response) => {
     try {
       const userId = (req as any).user.id;
@@ -19,7 +55,7 @@ export class ActivityController {
 
   static getUserActivities = async (req: Request, res: Response) => {
     try {
-      const userId = req.params.id;
+      const userId = req.params.id as string;
       const cursor = req.query.cursor as string;
       const limit = req.query.limit ? parseInt(req.query.limit as string) : 20;
       const type = req.query.type as string | string[];
@@ -30,4 +66,68 @@ export class ActivityController {
       handleError(req, res, error);
     }
   };
+
+  static async getActivityFeed(req: Request, res: Response): Promise<void> {
+    const feedRepo = AppDataSource.getRepository(ActivityFeed);
+    const followRepo = AppDataSource.getRepository(UserFollow);
+
+    const mode = req.query.mode as string;
+    const userId = (req as any).user?.id;
+
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string, 10) || 20, 1), 100);
+    const page = Math.max(parseInt(req.query.page as string, 10) || 1, 1);
+    const skip = (page - 1) * limit;
+
+    if (mode === 'following') {
+      if (!userId) {
+        throw AppError.authentication('Authentication required for following feed');
+      }
+
+      const follows = await followRepo.find({
+        where: { followerId: userId },
+        select: ['followingId'],
+      });
+
+      const followingIds = follows.map((f: any) => f.followingId);
+
+      if (followingIds.length === 0) {
+        res.status(200).json({
+          page,
+          limit,
+          total: 0,
+          data: [],
+        });
+        return;
+      }
+
+      const [items, total] = await feedRepo
+        .createQueryBuilder('activity')
+        .where('activity.userId IN (:...followingIds)', { followingIds })
+        .orderBy('activity.createdAt', 'DESC')
+        .skip(skip)
+        .take(limit)
+        .getManyAndCount();
+
+      res.status(200).json({
+        page,
+        limit,
+        total,
+        data: items,
+      });
+      return;
+    }
+
+    const [items, total] = await feedRepo.findAndCount({
+      order: { createdAt: 'DESC' },
+      skip,
+      take: limit,
+    });
+
+    res.status(200).json({
+      page,
+      limit,
+      total,
+      data: items,
+    });
+  }
 }

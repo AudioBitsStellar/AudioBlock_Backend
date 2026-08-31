@@ -9,14 +9,14 @@ export const validWalletConnections = {
    * Standard Stellar mainnet public key format (G-address, 56 chars)
    */
   standard: {
-    stellarPublicKey: "GBXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    stellarPublicKey: 'GBXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
   },
 
   /**
    * Another valid example for testing multiple connections
    */
   alternative: {
-    stellarPublicKey: "GDYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY",
+    stellarPublicKey: 'GDYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY',
   },
 };
 
@@ -30,43 +30,42 @@ export const invalidWalletConnections = {
    * Empty string for public key
    */
   emptyString: {
-    stellarPublicKey: "",
+    stellarPublicKey: '',
   },
 
   /**
    * Wrong format - doesn't start with G
    */
   wrongPrefix: {
-    stellarPublicKey: "ABXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    stellarPublicKey: 'ABXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
   },
 
   /**
    * Too short
    */
   tooShort: {
-    stellarPublicKey: "GBXXX",
+    stellarPublicKey: 'GBXXX',
   },
 
   /**
    * Too long
    */
   tooLong: {
-    stellarPublicKey:
-      "GBXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    stellarPublicKey: 'GBXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
   },
 
   /**
    * M-address (secret key) - SECURITY RISK if accepted!
    */
   secretKey: {
-    stellarPublicKey: "MXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    stellarPublicKey: 'MXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
   },
 
   /**
    * Contains invalid characters
    */
   invalidCharacters: {
-    stellarPublicKey: "GB!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+    stellarPublicKey: 'GB!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!',
   },
 };
 
@@ -77,25 +76,24 @@ export const expectedResponses = {
   success: {
     success: true,
     data: {
-      stellarPublicKey: "GBXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+      stellarPublicKey: 'GBXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
     },
   },
 
   invalidFormat: {
     success: false,
     fields: {
-      stellarPublicKey:
-        "stellarPublicKey must be a valid Stellar G... address.",
+      stellarPublicKey: 'stellarPublicKey must be a valid Stellar G... address.',
     },
-    message: ["stellarPublicKey must be a valid Stellar G... address."],
+    message: ['stellarPublicKey must be a valid Stellar G... address.'],
   },
 
   missingField: {
     success: false,
     fields: {
-      stellarPublicKey: "stellarPublicKey is required.",
+      stellarPublicKey: 'stellarPublicKey is required.',
     },
-    message: ["stellarPublicKey is required."],
+    message: ['stellarPublicKey is required.'],
   },
 };
 

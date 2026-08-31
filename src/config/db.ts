@@ -14,6 +14,7 @@ import { AiGenerationRecord } from '../entities/AiGenerationRecord';
 import { TweetDraft } from '../entities/TweetDraft';
 import { IndexerCursor } from '../entities/IndexerCursor';
 import { BackfillStatus } from '../entities/BackfillStatus';
+import { IndexedEvent } from '../entities/IndexedEvent';
 
 dotenv.config();
 
@@ -42,6 +43,7 @@ const AppDataSource = new DataSource({
     TweetDraft,
     IndexerCursor,
     BackfillStatus,
+    IndexedEvent,
   ],
   migrations: [__dirname + '/../migrations/*.{js,ts}'],
   migrationsTableName: 'migrations',

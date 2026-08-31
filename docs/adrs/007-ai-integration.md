@@ -79,6 +79,7 @@ controls** as hard requirements. Concretely:
 ## Consequences
 
 ### Positive
+
 - Vendor changes are low-cost: swapping a provider means implementing the small
   domain interface, not rewriting business logic.
 - Artists retain control over their content, which is both a legal safeguard
@@ -88,6 +89,7 @@ controls** as hard requirements. Concretely:
   privacy promise.
 
 ### Negative / trade-offs
+
 - The abstraction layer and audit tables add up-front engineering that does not
   ship a user-visible feature by itself; the value only materializes once
   AI features exist.
@@ -98,18 +100,19 @@ controls** as hard requirements. Concretely:
   is extended deliberately.
 
 ### Neutral
+
 - Strategies for a particular feature (which model, which provider) are left to
-  that feature; this ADR fixes only the *plumbing*, consent, retention, and
+  that feature; this ADR fixes only the _plumbing_, consent, retention, and
   budget rules.
 - The opt-in flag is defined here as a required field, but its exact name/location
   is confirmed when the first AI feature is implemented.
 
 ## Alternatives considered
 
-| Option | Why rejected |
-|--------|-------------|
-| Call provider SDKs directly in feature code | Couples business logic to a vendor, blocks switching, mixes consent/cost/audit concerns into every call site |
-| Always-on (no opt-in) | Unacceptable legal/trust risk: artists did not consent to their content being sent to third-party models |
-| No abstract provider, only one fixed vendor | Vendor lock-in; hard to react to pricing/availability; contradicts provider-neutrality goal |
-| Separate opt-in per AI feature | More granular but much higher complexity and surface for confusion; a single artist-level flag keeps the contract simple |
-| Keep raw audio for offline re-processing | Violates the retention/minimization principle; we deliberately discard raw content after processing |
+| Option                                      | Why rejected                                                                                                             |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Call provider SDKs directly in feature code | Couples business logic to a vendor, blocks switching, mixes consent/cost/audit concerns into every call site             |
+| Always-on (no opt-in)                       | Unacceptable legal/trust risk: artists did not consent to their content being sent to third-party models                 |
+| No abstract provider, only one fixed vendor | Vendor lock-in; hard to react to pricing/availability; contradicts provider-neutrality goal                              |
+| Separate opt-in per AI feature              | More granular but much higher complexity and surface for confusion; a single artist-level flag keeps the contract simple |
+| Keep raw audio for offline re-processing    | Violates the retention/minimization principle; we deliberately discard raw content after processing                      |

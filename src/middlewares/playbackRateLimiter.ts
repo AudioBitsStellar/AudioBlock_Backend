@@ -27,8 +27,8 @@ export const playbackRateLimiter = rateLimit({
   handler: (req: Request, res: Response) => {
     const retryAfterSec = Math.ceil(windowMs / 1000);
     res.setHeader('Retry-After', String(retryAfterSec));
-    // We don't throw an error to prevent breaking clients, 
-    // instead we could just send a 200 indicating it was deduped, 
+    // We don't throw an error to prevent breaking clients,
+    // instead we could just send a 200 indicating it was deduped,
     // but the pattern usually involves 429. Let's return 429.
     handleError(
       res,

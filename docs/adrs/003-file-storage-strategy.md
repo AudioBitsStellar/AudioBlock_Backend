@@ -27,23 +27,26 @@ Chunked uploads land in `uploads/temp/`, are merged into `uploads/merged/`, and 
 ## Consequences
 
 ### Positive
+
 - IPFS CIDs are content-addressed — the same file always returns the same CID, preventing silent corruption
 - Pinata handles replication and availability; we don't operate storage infrastructure
 - S3 + CloudFront is battle-tested for image delivery with global low latency
 - Separating audio (Pinata) from images (S3) lets us tune costs and CDN policies independently
 
 ### Negative / trade-offs
+
 - IPFS retrieval latency can be high without Pinata's dedicated gateway; we depend on Pinata's SLA
 - Chunked upload logic adds complexity (chunk storage, merge step, cleanup) compared to direct streaming
 - Pinata API keys are secrets that must be rotated if compromised
 
 ### Neutral
+
 - `PinataService` (`src/services/PinataService`) is the single integration point; swapping to NFT.Storage or another pinning service requires only changing that service class
 
 ## Alternatives considered
 
-| Option | Why rejected |
-|--------|-------------|
-| S3 for audio too | Centralised; contradicts decentralised ownership model; harder to tie CID to NFT metadata |
-| Arweave | Permanent storage is appealing but pay-once model and limited JS SDK maturity ruled it out at time of decision |
-| Self-hosted IPFS node | Operational burden too high; availability depends on our uptime |
+| Option                | Why rejected                                                                                                   |
+| --------------------- | -------------------------------------------------------------------------------------------------------------- |
+| S3 for audio too      | Centralised; contradicts decentralised ownership model; harder to tie CID to NFT metadata                      |
+| Arweave               | Permanent storage is appealing but pay-once model and limited JS SDK maturity ruled it out at time of decision |
+| Self-hosted IPFS node | Operational burden too high; availability depends on our uptime                                                |

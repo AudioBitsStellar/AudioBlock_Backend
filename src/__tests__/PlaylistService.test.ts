@@ -459,7 +459,9 @@ describe('PlaylistService.moveSong (Issue #409)', () => {
     mockPlaylistRepo.findOneBy.mockResolvedValue(ownedPlaylist());
     mockPlaylistSongRepo.find.mockResolvedValue(entries.map((e) => ({ ...e })));
     mockPlaylistSongRepo.save.mockImplementation(async (saved: PlaylistSong[]) => saved);
-    mockPlaylistRepo.findOne.mockResolvedValue(ownedPlaylist({ songs: [] as unknown as PlaylistSong[] }));
+    mockPlaylistRepo.findOne.mockResolvedValue(
+      ownedPlaylist({ songs: [] as unknown as PlaylistSong[] }),
+    );
 
     const svc = makeSvc();
     await svc.moveSong('pl-1', 'user-1', 'song-3', 0);
@@ -513,7 +515,11 @@ describe('PlaylistService follow (Issue #408)', () => {
 
   it('is idempotent when already following', async () => {
     mockPlaylistRepo.findOneBy.mockResolvedValue(ownedPlaylist({ userId: 'user-2' }));
-    mockFollowRepo.findOneBy.mockResolvedValue({ id: 'pf-1', userId: 'user-1', playlistId: 'pl-1' });
+    mockFollowRepo.findOneBy.mockResolvedValue({
+      id: 'pf-1',
+      userId: 'user-1',
+      playlistId: 'pl-1',
+    });
     mockFollowRepo.count.mockResolvedValue(3);
 
     const svc = makeSvc();

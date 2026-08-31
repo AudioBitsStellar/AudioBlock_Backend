@@ -20,6 +20,7 @@ None of the following call an LLM or generative model; they are deterministic
 and run on either the node process or the SQL database.
 
 ### 1. Song cloud-streaming & manifest pre-computation
+
 - **Where:** `src/workers/precomputeManifest.ts`, `SongController.stream`.
 - **What it does:** transcodes audio (via `fluent-ffmpeg`) into HLS segments
   and pre-computes signed streaming manifests.
@@ -27,6 +28,7 @@ and run on either the node process or the SQL database.
   happens locally.
 
 ### 2. Moderation (flag / unflag, bulk actions)
+
 - **Where:** `src/services/Song/SongModerationService.ts`, `ContentReport`,
   `TakedownRequest`, `AdminController`.
 - **What it does:** human/admins **flag** a song for review (`flag`,
@@ -36,14 +38,17 @@ and run on either the node process or the SQL database.
 - **Data sent:** none to third parties; flags are stored locally.
 
 ### 3. Search
+
 - **Where:** `src/services/SearchIndexService.ts`.
 - **What it does:** an inverted index (Redis) for song lookup. Deterministic
   tokenization — **not** semantic/vector search, no embeddings.
 
 ### 4. Recommendations / discovery
+
 - No collaborative-filtering or ML recommendation engine is present today.
 
 ### 5. Async AI-assisted generation (cover art, descriptions)
+
 - **Where:** `src/services/ai/` (`AiProvider` interface, `NoopAiProvider`,
   `AiGenerationService`), `src/workers/AiJobHandlers.ts`,
   `POST /api/ai/songs/:songId/cover-art` and `/description`.
@@ -69,6 +74,7 @@ and run on either the node process or the SQL database.
   are reserved for when those features are built.
 
 ### 6. Release-announcement tweet drafts
+
 - **Where:** `src/services/TweetDraftService.ts`,
   `POST /api/auth/twitter/draft`, `GET /api/auth/twitter/drafts`,
   `POST /api/auth/twitter/draft/:id/approve`,
@@ -90,12 +96,12 @@ For completeness, the following outbound destinations exist — but they are
 **storage / blockchain**, not AI analysis. None of these are model inference
 endpoints and none receive prompts or generate content:
 
-| Destination | Purpose | Data sent | When |
-|---|---|---|---|
+| Destination                                         | Purpose                   | Data sent                             | When                     |
+| --------------------------------------------------- | ------------------------- | ------------------------------------- | ------------------------ |
 | **Pinata / IPFS** (`src/services/PinataService.ts`) | Content-addressed storage | Audio files, cover art, metadata JSON | After upload / transcode |
-| **AWS S3** (bucket `raw/`, `hls/`, `covers/`) | Object storage | Raw audio, HLS segments, covers | During upload pipeline |
-| **Stellar / Soroban** (`src/config/soroban.ts`) | On-chain metadata | Minted song metadata / CIDs | When minting |
-| **Dynamic Labs** (EVM) | Wallet-based auth | Wallet address, signature nonces | On login |
+| **AWS S3** (bucket `raw/`, `hls/`, `covers/`)       | Object storage            | Raw audio, HLS segments, covers       | During upload pipeline   |
+| **Stellar / Soroban** (`src/config/soroban.ts`)     | On-chain metadata         | Minted song metadata / CIDs           | When minting             |
+| **Dynamic Labs** (EVM)                              | Wallet-based auth         | Wallet address, signature nonces      | On login                 |
 
 ---
 

@@ -1,15 +1,15 @@
-import { IsUrl, IsOptional, IsArray, IsString, ArrayNotEmpty, IsIn } from "class-validator";
+import { IsUrl, IsOptional, IsArray, IsString } from 'class-validator';
 
 export const ALLOWED_WEBHOOK_EVENTS = [
-  "song.minted",
-  "sale.completed",
-  "mint_status_changed",
-  "sale_completed",
-  "*",
+  'song.minted',
+  'sale.completed',
+  'mint_status_changed',
+  'sale_completed',
+  '*',
 ] as const;
 
 export class CreateWebhookSubscriptionDTO {
-  @IsUrl({}, { message: "endpoint must be a valid URL" })
+  @IsUrl({}, { message: 'endpoint must be a valid URL' })
   endpoint!: string;
 
   @IsOptional()

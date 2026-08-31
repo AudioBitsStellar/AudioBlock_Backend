@@ -1,8 +1,8 @@
-import { Request, Response } from "express";
-import { AppDataSource } from "../config/data-source";
-import { FanPerk } from "../entities/FanPerk";
-import { handleError } from "../utils/helpers";
-import { AppError } from "../errors/AppError";
+import { Request, Response } from 'express';
+import { AppDataSource } from '../config/data-source';
+import { FanPerk } from '../entities/FanPerk';
+import { handleError } from '../utils/helpers';
+import { AppError } from '../errors/AppError';
 
 export class FanPerkController {
   listPerks = async (req: Request, res: Response): Promise<void> => {
@@ -11,7 +11,7 @@ export class FanPerkController {
       const repo = AppDataSource.getRepository(FanPerk);
       const perks = await repo.find({
         where: { artistId, hidden: false },
-        order: { sortOrder: "ASC", createdAt: "DESC" },
+        order: { sortOrder: 'ASC', createdAt: 'DESC' },
       });
       res.json({ perks });
     } catch (error) {
@@ -25,7 +25,7 @@ export class FanPerkController {
       const repo = AppDataSource.getRepository(FanPerk);
       const perks = await repo.find({
         where: { artistId },
-        order: { sortOrder: "ASC", createdAt: "DESC" },
+        order: { sortOrder: 'ASC', createdAt: 'DESC' },
       });
       res.json({ perks });
     } catch (error) {
@@ -36,9 +36,10 @@ export class FanPerkController {
   createPerk = async (req: Request, res: Response): Promise<void> => {
     try {
       const artistId = (req as any).userId;
-      const { tier, name, description, perkType, resourceUrl, discountPercent, hidden, sortOrder } = req.body;
+      const { tier, name, description, perkType, resourceUrl, discountPercent, hidden, sortOrder } =
+        req.body;
       if (!tier || !name) {
-        return handleError(req, res, AppError.badRequest("tier and name are required"));
+        return handleError(req, res, AppError.badRequest('tier and name are required'));
       }
       const repo = AppDataSource.getRepository(FanPerk);
       const perk = repo.create({
@@ -46,7 +47,7 @@ export class FanPerkController {
         tier,
         name,
         description: description || null,
-        perkType: perkType || "custom",
+        perkType: perkType || 'custom',
         resourceUrl: resourceUrl || null,
         discountPercent: discountPercent || null,
         hidden: hidden || false,
@@ -66,7 +67,7 @@ export class FanPerkController {
       const repo = AppDataSource.getRepository(FanPerk);
       const perk = await repo.findOneBy({ id, artistId });
       if (!perk) {
-        return handleError(req, res, AppError.notFound("Perk not found"));
+        return handleError(req, res, AppError.notFound('Perk not found'));
       }
       Object.assign(perk, req.body);
       await repo.save(perk);
@@ -83,7 +84,7 @@ export class FanPerkController {
       const repo = AppDataSource.getRepository(FanPerk);
       const perk = await repo.findOneBy({ id, artistId });
       if (!perk) {
-        return handleError(req, res, AppError.notFound("Perk not found"));
+        return handleError(req, res, AppError.notFound('Perk not found'));
       }
       await repo.remove(perk);
       res.json({ deleted: true });

@@ -30,24 +30,22 @@ describe('ActivityService filtering', () => {
   });
 
   it('throws AppError on invalid activity type filter', async () => {
-    await expect(
-      activityService.getFeed('user-1', undefined, 20, 'invalid_type')
-    ).rejects.toThrow(AppError);
+    await expect(activityService.getFeed('user-1', undefined, 20, 'invalid_type')).rejects.toThrow(
+      AppError,
+    );
   });
 
   it('applies type filter when valid single type is passed', async () => {
     await activityService.getFeed('user-1', undefined, 20, 'song_upload');
-    expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-      'activity.actionType IN (:...types)',
-      { types: ['song_upload'] }
-    );
+    expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('activity.actionType IN (:...types)', {
+      types: ['song_upload'],
+    });
   });
 
   it('applies type filter when valid comma-separated types are passed', async () => {
     await activityService.getFeed('user-1', undefined, 20, 'song_upload,artist_follow');
-    expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-      'activity.actionType IN (:...types)',
-      { types: ['song_upload', 'artist_follow'] }
-    );
+    expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('activity.actionType IN (:...types)', {
+      types: ['song_upload', 'artist_follow'],
+    });
   });
 });

@@ -14,7 +14,7 @@ export class RoyaltyPayoutController {
       }
 
       const csvData = await royaltyPayoutService.exportHistory(artistId);
-      
+
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename="royalty-payouts.csv"');
       return res.status(200).send(csvData);

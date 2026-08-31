@@ -37,10 +37,7 @@ describe('ActivityService.getActivityFeed', () => {
   });
 
   it('returns activity from followed accounts when mode is following', async () => {
-    mockUserFollowRepo.find.mockResolvedValue([
-      { followingId: 'u2' },
-      { followingId: 'u3' },
-    ]);
+    mockUserFollowRepo.find.mockResolvedValue([{ followingId: 'u2' }, { followingId: 'u3' }]);
     const expectedActivities = [{ id: 'a1', userId: 'u2', actionType: 'song_release' }];
     mockActivityRepo.find.mockResolvedValue(expectedActivities);
 

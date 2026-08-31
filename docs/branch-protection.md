@@ -17,21 +17,21 @@ configuration. Live GitHub settings must match what is recorded here.
 `main` is the production-ready branch. All code here has been reviewed, tested,
 and is safe to deploy.
 
-| Rule | Setting | Rationale |
-|---|---|---|
-| Require a pull request before merging | **Enabled** | No direct pushes to `main` |
-| Required approving reviews | **1** (minimum) | At least one peer review on every change |
-| Dismiss stale reviews on new commits | **Enabled** | Re-review required if PR is updated after approval |
-| Require review from Code Owners | **Enabled** | CODEOWNERS reviewers auto-requested for mapped paths |
-| Require status checks to pass | **Enabled** | CI must be green before merge |
-| Required status checks | `test` (Jest), `build` (tsc) | Ensure tests and TypeScript compile pass |
-| Require branches to be up to date | **Enabled** | PR branch must be rebased/merged with `main` before merging |
-| Require conversation resolution | **Enabled** | All review threads must be resolved |
-| Restrict who can push to matching branches | **Enabled** | Only maintainers / repo admins may bypass |
-| Allow force pushes | **Disabled** | Prevents history rewrite on `main` |
-| Allow deletions | **Disabled** | `main` cannot be deleted |
-| Require signed commits | **Recommended** | Enable once the team has GPG/SSH signing set up |
-| Lock branch | **Disabled** | `main` accepts PRs normally |
+| Rule                                       | Setting                      | Rationale                                                   |
+| ------------------------------------------ | ---------------------------- | ----------------------------------------------------------- |
+| Require a pull request before merging      | **Enabled**                  | No direct pushes to `main`                                  |
+| Required approving reviews                 | **1** (minimum)              | At least one peer review on every change                    |
+| Dismiss stale reviews on new commits       | **Enabled**                  | Re-review required if PR is updated after approval          |
+| Require review from Code Owners            | **Enabled**                  | CODEOWNERS reviewers auto-requested for mapped paths        |
+| Require status checks to pass              | **Enabled**                  | CI must be green before merge                               |
+| Required status checks                     | `test` (Jest), `build` (tsc) | Ensure tests and TypeScript compile pass                    |
+| Require branches to be up to date          | **Enabled**                  | PR branch must be rebased/merged with `main` before merging |
+| Require conversation resolution            | **Enabled**                  | All review threads must be resolved                         |
+| Restrict who can push to matching branches | **Enabled**                  | Only maintainers / repo admins may bypass                   |
+| Allow force pushes                         | **Disabled**                 | Prevents history rewrite on `main`                          |
+| Allow deletions                            | **Disabled**                 | `main` cannot be deleted                                    |
+| Require signed commits                     | **Recommended**              | Enable once the team has GPG/SSH signing set up             |
+| Lock branch                                | **Disabled**                 | `main` accepts PRs normally                                 |
 
 ---
 
@@ -39,10 +39,10 @@ and is safe to deploy.
 
 These are best-practice rules to enable as the team grows:
 
-| Rule | Why |
-|---|---|
-| Require signed commits | Guarantees commit authorship; protects against spoofed commits |
-| Require linear history | Keeps `git log` clean; enforces rebase-or-squash merge strategy |
+| Rule                           | Why                                                               |
+| ------------------------------ | ----------------------------------------------------------------- |
+| Require signed commits         | Guarantees commit authorship; protects against spoofed commits    |
+| Require linear history         | Keeps `git log` clean; enforces rebase-or-squash merge strategy   |
 | Require deployments to succeed | Gate on a staging deploy passing before merge (once CD is set up) |
 
 ---
@@ -52,15 +52,15 @@ These are best-practice rules to enable as the team grows:
 While not enforced by GitHub protection rules, all contributors must follow this
 naming scheme (documented here for reference and potential future ruleset enforcement):
 
-| Prefix | Use case | Example |
-|---|---|---|
-| `feat/` | New feature | `feat/artist-royalty-split` |
-| `fix/` | Bug fix | `fix/upload-chunk-timeout` |
-| `chore/` | Maintenance, tooling, deps | `chore/update-stellar-sdk` |
-| `docs/` | Documentation only | `docs/soroban-integration` |
-| `hotfix/` | Urgent production patch | `hotfix/v1.1.1` |
-| `refactor/` | Code restructure, no behaviour change | `refactor/song-service` |
-| `security/` | Security fix or hardening | `security/jwt-expiry` |
+| Prefix      | Use case                              | Example                     |
+| ----------- | ------------------------------------- | --------------------------- |
+| `feat/`     | New feature                           | `feat/artist-royalty-split` |
+| `fix/`      | Bug fix                               | `fix/upload-chunk-timeout`  |
+| `chore/`    | Maintenance, tooling, deps            | `chore/update-stellar-sdk`  |
+| `docs/`     | Documentation only                    | `docs/soroban-integration`  |
+| `hotfix/`   | Urgent production patch               | `hotfix/v1.1.1`             |
+| `refactor/` | Code restructure, no behaviour change | `refactor/song-service`     |
+| `security/` | Security fix or hardening             | `security/jwt-expiry`       |
 
 ---
 
@@ -81,8 +81,8 @@ after this PR is merged. Steps:
 
 ### Verification Log
 
-| Date | Verified by | Notes |
-|---|---|---|
+| Date        | Verified by                      | Notes                                      |
+| ----------- | -------------------------------- | ------------------------------------------ |
 | _(pending)_ | _(admin to fill in after merge)_ | Initial setup — rules created with this PR |
 
 ---

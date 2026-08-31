@@ -32,7 +32,7 @@ class Semaphore {
   private queue: Array<() => void> = [];
   private running = 0;
 
- constructor(private readonly max: number) {}
+  constructor(private readonly max: number) {}
 
   async acquire(): Promise<void> {
     if (this.running < this.max) {
@@ -206,10 +206,11 @@ export class SorobanService {
     }
 
     const response = await this.withBackoff(
-      () => serverWithEvents.getEvents!({
-        filters: [{ type: 'contract', contractIds: [royaltyContractId] }],
-        limit: 200,
-      }),
+      () =>
+        serverWithEvents.getEvents!({
+          filters: [{ type: 'contract', contractIds: [royaltyContractId] }],
+          limit: 200,
+        }),
       'getEvents',
     );
 
