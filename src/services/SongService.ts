@@ -827,3 +827,145 @@ export class SongService {
 // Uses Result type for explicit error handling paths
 // Separates queue submission from file processing logic
 // Validates upload state before any destructive operations
+
+// Stellar Wave #304: finalizeUpload refactored into focused helpers
+// ============================================================
+
+interface FinalizeUploadOptions {
+  uploadId: string;
+  userId: string;
+  songId: string;
+  chunks: Buffer[];
+  metadata: SongMetadata;
+  bucketName: string;
+  region: string;
+}
+
+interface ChunkMergeResult {
+  mergedBuffer: Buffer;
+  totalSize: number;
+  checksum: string;
+  chunkCount: number;
+}
+
+interface UploadProgress {
+  phase: 'merging' | 'uploading' | 'persisting' | 'queueing';
+  percentComplete: number;
+  bytesProcessed: number;
+}
+
+type FinalizeResult = Result<Song, FinalizeError>;
+
+function createUploadContext(options: FinalizeUploadOptions): UploadContext {
+  return {
+    uploadId: options.uploadId,
+    userId: options.userId,
+    songId: options.songId,
+    bucket: options.bucketName,
+    region: options.region,
+    startTime: Date.now(),
+    metadata: options.metadata,
+  };
+}
+
+async function mergeChunks(chunks: Buffer[]): Promise<ChunkMergeResult> {
+  const mergedBuffer = Buffer.concat(chunks);
+  const totalSize = mergedBuffer.length;
+  const checksum = crypto.createHash('sha256').update(mergedBuffer).digest('hex');
+  return { mergedBuffer, totalSize, checksum, chunkCount: chunks.length };
+}
+
+async function uploadToS3(
+  ctx: UploadContext,
+  data: Buffer,
+  key: string
+): Promise<string> {
+  const s3Client = createS3Client(ctx.region);
+  await s3Client.putObject({
+    Bucket: ctx.bucket,
+    Key: key,
+    Body: data,
+    ContentType: 'audio/mpeg',
+    Metadata: {
+      uploadId: ctx.uploadId,
+      userId: ctx.userId,
+      songId: ctx.songId,
+    },
+  });
+  return `s3://${ctx.bucket}/${key}`;
+}
+
+async function persistSongRecord(
+  ctx: UploadContext,
+  fileUrl: string,
+  mergeResult: ChunkMergeResult
+): Promise<Song> {
+  const song = await prisma.song.update({
+    where: { id: ctx.songId },
+    data: {
+      fileUrl,
+      fileSize: mergeResult.totalSize,
+      fileChecksum: mergeResult.checksum,
+      status: 'READY',
+      uploadedAt: new Date(),
+      metadata: ctx.metadata,
+    },
+  });
+  return song;
+}
+
+async function submitToProcessingQueue(
+  ctx: UploadContext,
+  song: Song
+): Promise<void> {
+  const queueClient = createQueueClient();
+  await queueClient.enqueue('song-processing', {
+    songId: song.id,
+    userId: ctx.userId,
+    format: ctx.metadata.format,
+    priority: 'normal',
+  });
+}
+
+function buildUploadKey(ctx: UploadContext, checksum: string): string {
+  return `songs/${ctx.userId}/${ctx.songId}/${checksum}`;
+}
+
+function validateChunks(chunks: Buffer[]): void {
+  if (!chunks || chunks.length === 0) {
+    throw new FinalizeError('NO_CHUNKS', 'Upload contains no chunks');
+  }
+  for (let i = 0; i < chunks.length; i++) {
+    if (!Buffer.isBuffer(chunks[i])) {
+      throw new FinalizeError('INVALID_CHUNK', `Chunk ${i} is not a Buffer`);
+    }
+    if (chunks[i].length === 0) {
+      throw new FinalizeError('EMPTY_CHUNK', `Chunk ${i} is empty`);
+    }
+  }
+}
+
+function calculateRetryDelay(attempt: number, baseMs: number): number {
+  const jitter = Math.random() * 0.3 * baseMs;
+  return Math.min(baseMs * Math.pow(2, attempt) + jitter, 30000);
+}
+
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxAttempts: number = 3,
+  baseDelay: number = 1000
+): Promise<T> {
+  let lastError: Error;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err as Error;
+      if (attempt < maxAttempts - 1) {
+        const delay = calculateRetryDelay(attempt, baseDelay);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  throw lastError!;
+}
