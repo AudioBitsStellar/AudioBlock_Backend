@@ -16,6 +16,7 @@ export class AdminController {
   private static userService = new UserService();
   private static artistProfileService = new ArtistProfileService();
   private static transactionLogService = new TransactionLogService();
+  private static indexerService = new (require('../services/IndexerService').IndexerService)();
 
   /**
    * POST /api/admin/users/:id/role — assign a role to a user.
@@ -152,6 +153,30 @@ export class AdminController {
       const result = await AdminController.transactionLogService.getAdminLogs(filters);
 
       return res.status(HTTP_STATUS.OK).json(result);
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  /**
+   * GET /api/admin/indexer/status — get indexer health per contract/network (Issue #253).
+   *
+   * Returns cursor position, lag, event count, and last error for all contracts.
+   * Admin-gated via requirePermission middleware.
+   */
+  static getIndexerStatus = async (req: Request, res: Response) => {
+    try {
+      const currentLedgerParam = req.query.currentLedger as string | undefined;
+      const currentLedger = currentLedgerParam ? Number(currentLedgerParam) : undefined;
+
+      const statuses = await AdminController.indexerService.getAllStatus(currentLedger);
+      const backfillStatuses = await AdminController.indexerService.getAllBackfillStatus();
+
+      return res.status(HTTP_STATUS.OK).json({
+        success: true,
+        indexers: statuses,
+        backfills: backfillStatuses,
+      });
     } catch (error) {
       handleError(req, res, error);
     }

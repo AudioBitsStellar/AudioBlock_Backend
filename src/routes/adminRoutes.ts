@@ -103,4 +103,11 @@ router.get(
   AdminController.getTransactionLogs,
 );
 
+// Indexer health/status (Issue #253) — admins and moderators.
+router.get(
+  '/indexer/status',
+  requirePermission(Permission.CONTENT_MODERATE),
+  AdminController.getIndexerStatus,
+);
+
 export default router;
