@@ -11,6 +11,7 @@ Complete reference of all environment variables used by the AudioBlocks Backend.
 - [AWS S3](#aws-s3)
 - [Pinata / IPFS](#pinata--ipfs)
 - [Soroban (Stellar)](#soroban-stellar)
+- [Indexer Worker](#indexer-worker)
 - [Dynamic Labs (EVM)](#dynamic-labs-evm)
 - [Twitter OAuth](#twitter-oauth)
 - [Email](#email)
@@ -125,6 +126,18 @@ Complete reference of all environment variables used by the AudioBlocks Backend.
 _\* Required for the selected network. All five IDs must be set for the chosen `SOROBAN_NETWORK`._
 
 **Note:** The backend never holds Stellar secret keys. Artists sign transactions client-side (e.g. Freighter wallet).
+
+---
+
+## Indexer Worker
+
+| Variable                                | Required | Default   | Description                                    |
+| --------------------------------------- | -------- | --------- | ---------------------------------------------- |
+| `INDEXER_POLL_INTERVAL_MS`              | No       | `5000`    | Poll interval for the Soroban event indexer    |
+| `INDEXER_PAGE_SIZE`                     | No       | `100`     | Max events fetched per `getEvents` page        |
+| `INDEXER_LAG_MONITOR_INTERVAL_MS`       | No       | `60000`   | Interval for computing/exporting indexer lag   |
+| `INDEXER_OVERLAP_WINDOW`                | No       | `10`      | Ledger overlap window back from head           |
+| `INDEXER_GAP_THRESHOLD`                 | No       | `50`      | Ledger gap threshold that triggers a warning   |
 
 ---
 
