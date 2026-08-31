@@ -145,7 +145,7 @@ export class CommentService {
     );
 
     const [comments, total] = await this.commentRepo.findAndCount({
-      where: { songId, parentId: IsNull() },
+      where: { songId, parentId: IsNull(), flagged: false },
       relations: ['user'],
       order: { createdAt: 'DESC' },
       skip: (safePage - 1) * safeLimit,
@@ -191,7 +191,7 @@ export class CommentService {
     );
 
     const [replies, total] = await this.commentRepo.findAndCount({
-      where: { parentId: commentId },
+      where: { parentId: commentId, flagged: false },
       relations: ['user'],
       order: { createdAt: 'ASC' },
       skip: (safePage - 1) * safeLimit,

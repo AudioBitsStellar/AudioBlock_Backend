@@ -5,6 +5,7 @@ const mockGetSongComments = jest.fn();
 const mockGetReplies = jest.fn();
 const mockUpdateComment = jest.fn();
 const mockDeleteComment = jest.fn();
+const mockSubmitReport = jest.fn();
 
 jest.mock('../services/CommentService', () => ({
   CommentService: jest.fn().mockImplementation(() => ({
@@ -13,6 +14,12 @@ jest.mock('../services/CommentService', () => ({
     getReplies: mockGetReplies,
     updateComment: mockUpdateComment,
     deleteComment: mockDeleteComment,
+  })),
+}));
+
+jest.mock('../services/CommentReportService', () => ({
+  CommentReportService: jest.fn().mockImplementation(() => ({
+    submitReport: mockSubmitReport,
   })),
 }));
 
@@ -35,6 +42,7 @@ beforeEach(() => {
   mockGetReplies.mockReset();
   mockUpdateComment.mockReset();
   mockDeleteComment.mockReset();
+  mockSubmitReport.mockReset();
 });
 
 describe('CommentController.createComment', () => {
