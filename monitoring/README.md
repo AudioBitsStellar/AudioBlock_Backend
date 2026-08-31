@@ -58,6 +58,21 @@ Host/system overview using standard `prometheus-node-exporter` metrics
 node exporter is added to the compose topology and scraped — confirm the scrape
 job exists before relying on them.
 
+### `audioblock-indexer.json` (Issue #242)
+
+Blockchain indexer health dashboard visualizing metrics from `IndexerService`:
+
+- `indexer_lag_ledgers` — Ledgers behind latest Stellar ledger (by network/contract)
+- `indexer_events_processed_total` — Total events processed (cumulative and rate)
+- `indexer_errors_total` — Error count and rate (with alerting)
+- Event processing throughput (events/s)
+- Lag distribution (p50/p95/p99)
+- Per-network processing rate
+- 24-hour summaries (events, errors)
+
+Includes alert rules for high lag (>1000 ledgers) and error rate (>0.1/s).
+Covers all 5 AudioBlock contracts (Artist, Song, Album, Marketplace, Royalty).
+
 ## Adding a dashboard
 
 1. Create (or copy) a `*.json` file under `monitoring/dashboards/`.

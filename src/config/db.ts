@@ -12,6 +12,8 @@ import { TakedownRequest } from '../entities/TakedownRequest';
 import { ApiKey } from '../entities/ApiKey';
 import { AiGenerationRecord } from '../entities/AiGenerationRecord';
 import { TweetDraft } from '../entities/TweetDraft';
+import { IndexerCursor } from '../entities/IndexerCursor';
+import { BackfillStatus } from '../entities/BackfillStatus';
 
 dotenv.config();
 
@@ -38,6 +40,8 @@ const AppDataSource = new DataSource({
     ApiKey,
     AiGenerationRecord,
     TweetDraft,
+    IndexerCursor,
+    BackfillStatus,
   ],
   migrations: [__dirname + '/../migrations/*.{js,ts}'],
   migrationsTableName: 'migrations',

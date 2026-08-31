@@ -263,4 +263,28 @@ export class AdminController {
       handleError(req, res, error);
     }
   };
+
+  /**
+   * GET /api/admin/indexer/status — get indexer health per contract/network (Issue #253).
+   *
+   * Returns cursor position, lag, event count, and last error for all contracts.
+   * Admin-gated via requirePermission middleware.
+   */
+  static getIndexerStatus = async (req: Request, res: Response) => {
+    try {
+      const currentLedgerParam = req.query.currentLedger as string | undefined;
+      const currentLedger = currentLedgerParam ? Number(currentLedgerParam) : undefined;
+
+      const statuses = await AdminController.indexerService.getAllStatus(currentLedger);
+      const backfillStatuses = await AdminController.indexerService.getAllBackfillStatus();
+
+      return res.status(HTTP_STATUS.OK).json({
+        success: true,
+        indexers: statuses,
+        backfills: backfillStatuses,
+      });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
 }

@@ -1,0 +1,215 @@
+{
+  "__inputs": [],
+  "__requires": [],
+  "title": "AudioBlock Backend — Indexer Health",
+  "uid": "audioblock-indexer",
+  "version": 1,
+  "timezone": "utc",
+  "editable": true,
+  "refresh": "30s",
+  "schemaVersion": 30,
+  "panels": [
+    {
+      "title": "Indexer Lag (ledgers behind)",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "indexer_lag_ledgers",
+          "legendFormat": "{{network}}/{{contract}}",
+          "refId": "A"
+        }
+      ],
+      "yaxes": [
+        { "format": "short", "label": "Ledgers Behind" },
+        { "format": "short" }
+      ],
+      "alert": {
+        "name": "High Indexer Lag",
+        "message": "Indexer is falling behind",
+        "conditions": [
+          {
+            "evaluator": { "type": "gt", "params": [1000] },
+            "operator": { "type": "and" },
+            "query": { "params": ["A", "5m", "now"] },
+            "reducer": { "type": "avg" },
+            "type": "query"
+          }
+        ]
+      }
+    },
+    {
+      "title": "Event Processing Throughput (events/s)",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(indexer_events_processed_total[5m])",
+: [
+        { "format": "short", "label": "Total Events" },
+        { "format": "short" }
+      ]
+    },
+    {
+      "title": "Error Rate (errors/s)",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "rate(indexer_errors_total[5m])",
+          "legendFormat": "{{network}}/{{contract}}",
+          "refId": "A"
+        }
+      ],
+      "yaxes": [
+        { "format": "ops", "label": "Errors/s" },
+        { "format": "short" }
+      ],
+      "alert": {
+        "name": "Indexer Errors",
+        "message": "Indexer is experiencing errors",
+        "conditions": [
+          {
+            "evaluator": { "type": "gt", "params": [0.1] },
+            "operator": { "type": "and" },
+            "query": { "params": ["A", "5m", "now"] },
+            "reducer": { "type": "avg" },
+            "type": "query"
+          }
+        ]
+      }
+    },
+    {
+      "title": "Total Errors by Contract",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "indexer_errors_total",
+          "legendFormat": "{{network}}/{{contract}}",
+          "refId": "A"
+        }
+      ],
+      "yaxes": [
+        { "format": "short", "label": "Total Errors" },
+        { "format": "short" }
+      ]
+    },
+    {
+      "title": "Lag by Contract (current)",
+      "type": "singlestat",
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 16 },
+      "targets": [
+        {
+          "expr": "max(indexer_lag_ledgers) by (contract)",
+          "refId": "A"
+        }
+      ],
+      "format": "short",
+      "thresholds": "500,1000",
+      "colors": ["#299c46", "#e5ac0e", "#bf1b00"]
+    },
+    {
+      "title": "Events Processed (24h)",
+      "type": "singlestat",
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum(increase(indexer_events_processed_total[24h]))",
+          "refId": "A"
+        }
+      ],
+      "format": "short"
+    },
+    {
+      "title": "Errors (24h)",
+      "type": "singlestat",
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum(increase(indexer_errors_total[24h]))",
+          "refId": "A"
+        }
+      ],
+      "format": "short",
+      "thresholds": "10,50",
+      "colors": ["#299c46", "#e5ac0e", "#bf1b00"]
+    },
+    {
+      "title": "Processing Rate by Network",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "targets": [
+        {
+          "expr": "sum(rate(indexer_events_processed_total[5m])) by (network)",
+          "legendFormat": "{{network}}",
+          "refId": "A"
+        }
+      ],
+      "yaxes": [
+        { "format": "ops", "label": "Events/s" },
+        { "format": "short" }
+      ]
+    },
+    {
+      "title": "Lag Distribution (all contracts)",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(indexer_lag_ledgers[5m])) by (le))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(indexer_lag_ledgers[5m])) by (le))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(indexer_lag_ledgers[5m])) by (le))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ],
+      "yaxes": [
+        { "format": "short", "label": "Lag (ledgers)" },
+        { "format": "short" }
+      ]
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "network",
+        "type": "query",
+        "query": "label_values(indexer_lag_ledgers, network)",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "includeAll": true
+      },
+      {
+        "name": "contract",
+        "type": "query",
+        "query": "label_values(indexer_lag_ledgers{network=\"$network\"}, contract)",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "includeAll": true
+      }
+    ]
+  },
+  "annotations": {
+    "list": [
+      {
+        "name": "Deployments",
+        "datasource": "Prometheus",
+        "enable": true,
+        "iconColor": "blue"
+      }
+    ]
+  }
+}
