@@ -26,6 +26,7 @@ import commentRoutes from "./routes/commentRoutes";
 import commentReactionRoutes from "./routes/commentReactionRoutes";
 import subscriptionRoutes from "./routes/subscriptionRoutes";
 import aiRoutes from "./routes/aiRoutes";
+import activityStreamRoutes from "./routes/activityStreamRoutes";
 
 // Route imports
 
@@ -143,6 +144,9 @@ app.use("/api/subscriptions", subscriptionRoutes);
 
 // AI-assisted generation (cover art, descriptions) — async, queued via JobQueueService
 app.use("/api/ai", aiRoutes);
+
+// Live on-chain activity feed (SSE) — Issue #251
+app.use("/api/activity", activityStreamRoutes);
 
 
 // Error handling middleware
