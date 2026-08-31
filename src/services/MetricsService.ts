@@ -107,6 +107,23 @@ export const indexerErrorsTotal = new client.Counter({
   registers: [register],
 });
 
+// ── Soroban RPC metrics (Issue #257) ────────────────────────────────────────
+
+export const sorobanRpcCallsTotal = new client.Counter({
+  name: 'soroban_rpc_calls_total',
+  help: 'Total number of Soroban RPC calls',
+  labelNames: ['network', 'method', 'status'] as const,
+  registers: [register],
+});
+
+export const sorobanRpcLatencySeconds = new client.Histogram({
+  name: 'soroban_rpc_latency_seconds',
+  help: 'Soroban RPC call latency in seconds',
+  labelNames: ['network', 'method'] as const,
+  buckets: [0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30],
+  registers: [register],
+});
+
 /**
  * Update the Prometheus gauges reflecting the current PostgreSQL connection
  * pool state.

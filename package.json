@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "ts-node-dev --respawn --trace-warnings --transpile-only src/index.ts",
     "worker": "ts-node src/workers/SongProcessorWorker.ts",
+    "worker:indexer": "ts-node src/workers/IndexerWorker.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "jest",
@@ -17,6 +18,7 @@
     "db:seed:test": "ts-node src/seeders/test.seeder.ts",
     "reconcile:royalties": "ts-node src/jobs/RoyaltyReconciliationJob.ts",
     "reconcile:onchain": "ts-node src/jobs/OnChainReconciliationJob.ts",
+    "cli:reindex": "ts-node src/cli/reindex.ts",
     "migration:generate": "typeorm migration:generate",
     "migration:run": "typeorm migration:run -d dist/config/db.js",
     "migration:revert": "typeorm migration:revert -d dist/config/db.js",

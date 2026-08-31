@@ -10,6 +10,7 @@ import {
 import { getNetworkPassphrase, getSorobanServer } from '../../config/soroban';
 import { RoyaltyPayoutEvent } from '../../types';
 import logger from '../../config/logger';
+import { sorobanRpcCallsTotal, sorobanRpcLatencySeconds } from '../MetricsService';
 
 const POLL_INTERVAL_MS = 1500;
 const POLL_TIMEOUT_MS = 30000;
@@ -81,16 +82,27 @@ function sleep(ms: number): Promise<void> {
 export class SorobanService {
   private server = getSorobanServer();
   private semaphore = new Semaphore(MAX_CONCURRENT_RPC);
+  private network = process.env.SOROBAN_NETWORK || 'testnet';
 
   /**
    * Executes an RPC call with exponential backoff on transient errors.
+   * Instruments call metrics for monitoring (Issue #257).
    */
   private async withBackoff<T>(fn: () => Promise<T>, label: string): Promise<T> {
+    const startTime = Date.now();
     let lastError: unknown;
+
     for (let attempt = 0; attempt <= BACKOFF_MAX_RETRIES; attempt++) {
       await this.semaphore.acquire();
       try {
-        return await fn();
+        const result = await fn();
+
+        // Record success metrics
+        const duration = (Date.now() - startTime) / 1000;
+        sorobanRpcCallsTotal.inc({ network: this.network, method: label, status: 'success' });
+        sorobanRpcLatencySeconds.observe({ network: this.network, method: label }, duration);
+
+        return result;
       } catch (err) {
         lastError = err;
         if (attempt < BACKOFF_MAX_RETRIES && isRetryableError(err)) {
@@ -98,6 +110,10 @@ export class SorobanService {
           logger.warn({ attempt, delay, label }, 'Soroban RPC call failed, retrying with backoff');
           await sleep(delay);
         } else {
+          // Record failure metrics
+          const duration = (Date.now() - startTime) / 1000;
+          sorobanRpcCallsTotal.inc({ network: this.network, method: label, status: 'error' });
+          sorobanRpcLatencySeconds.observe({ network: this.network, method: label }, duration);
           throw err;
         }
       } finally {
