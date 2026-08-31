@@ -85,6 +85,26 @@ export class ContentReport {
   @Column({ type: 'text', nullable: true })
   resolutionNote?: string | null;
 
+  /** Issue #273: AI-generated severity score (0-100, advisory only) */
+  @Column({ type: 'int', nullable: true })
+  aiSeverityScore?: number | null;
+
+  /** Issue #273: AI-suggested priority (advisory only, never auto-actioned) */
+  @Column({ type: 'varchar', nullable: true })
+  aiSuggestedPriority?: 'low' | 'medium' | 'high' | 'critical' | null;
+
+  /** Issue #273: AI-identified categories (JSON array, advisory only) */
+  @Column({ type: 'simple-json', nullable: true })
+  aiCategories?: string[] | null;
+
+  /** Issue #273: AI reasoning for the score (optional explanation) */
+  @Column({ type: 'text', nullable: true })
+  aiReasoning?: string | null;
+
+  /** Issue #273: Which AI provider generated the score */
+  @Column({ type: 'varchar', nullable: true })
+  aiProvider?: string | null;
+
   @CreateDateColumn()
   createdAt!: Date;
 

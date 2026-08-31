@@ -6,21 +6,27 @@
  * keywords) map to the set of song IDs that contain them, giving near-constant
  * lookup regardless of catalog size.
  *
+ * Issue #274: Adds optional semantic search using AI embeddings alongside
+ * keyword-based search. Falls back gracefully if embedding call fails.
+ *
  * Storage layout (Redis):
  *   search:token:<token>   → Set<songId>         (inverted index posting list)
  *   search:doc:<songId>    → JSON stored fields  (for cleanup on update/delete)
  *   search:docs            → Set<songId>         (all indexed docs, for rebuild)
+ *   search:embedding:<songId> → JSON float array (Issue #274: semantic vectors)
  *
  * Because it lives in Redis it survives server restarts, and it's updated
  * asynchronously (off the request path) whenever a song is created, updated,
  * flagged or deleted.
  */
 import redis from '../config/redis';
+import { getAiProvider } from './ai';
 import logger from '../config/logger';
 
 const TOKEN_PREFIX = 'search:token:';
 const DOC_PREFIX = 'search:doc:';
 const DOCS_SET = 'search:docs';
+const EMBEDDING_PREFIX = 'search:embedding:'; // Issue #274
 
 /** Fields we keep per indexed song. */
 interface IndexedDoc {
@@ -68,6 +74,7 @@ export class SearchIndexService {
   /**
    * (Re)index a single song. Idempotent: any tokens from a previous version of
    * the doc are removed first so stale postings don't linger after edits.
+   * Issue #274: Also generates and stores embeddings for semantic search.
    */
   static async indexSong(song: IndexableSong): Promise<void> {
     await this.removeSong(song.id); // clear previous postings first
@@ -82,6 +89,9 @@ export class SearchIndexService {
     pipeline.set(`${DOC_PREFIX}${doc.id}`, JSON.stringify(doc));
     pipeline.sadd(DOCS_SET, doc.id);
     await pipeline.exec();
+
+    // Issue #274: Generate and store embedding (async, best-effort)
+    await this.storeEmbedding(song, doc);
 
     logger.debug({ songId: doc.id, tokens: doc.tokens.length }, 'Search index updated');
   }
@@ -198,8 +208,92 @@ export class SearchIndexService {
         }
       }
       pipeline.del(`${DOC_PREFIX}${id}`);
+      pipeline.del(`${EMBEDDING_PREFIX}${id}`); // Issue #274
     }
     pipeline.del(DOCS_SET);
     await pipeline.exec();
+  }
+
+  /**
+   * Issue #274: Generate and store embedding for a song (async, best-effort).
+   * Called automatically during indexSong. Fails silently if AI call errors.
+   */
+  private static async storeEmbedding(song: IndexableSong, doc: IndexedDoc): Promise<void> {
+    try {
+      const provider = getAiProvider();
+      const text = `${doc.title} ${doc.artist} ${doc.keywords}`.trim();
+
+      const result = await provider.embed({ text });
+      await redis.set(`${EMBEDDING_PREFIX}${song.id}`, JSON.stringify(result.embedding));
+
+      logger.debug({ songId: song.id, model: result.model }, 'Song embedding stored');
+    } catch (error) {
+      // Fail silently: semantic search is optional enhancement
+      logger.debug({ songId: song.id, error }, 'Failed to generate embedding, skipping');
+    }
+  }
+
+  /**
+   * Issue #274: Semantic search using embeddings. Falls back to keyword search
+   * if embedding generation fails or no embeddings are available.
+   */
+  static async semanticSearch(query: string, limit = 20): Promise<string[]> {
+    try {
+      // Generate query embedding
+      const provider = getAiProvider();
+      const queryResult = await provider.embed({ text: query });
+      const queryEmbedding = queryResult.embedding;
+
+      // Fetch all doc IDs
+      const allDocs = await redis.smembers(DOCS_SET);
+      if (allDocs.length === 0) return [];
+
+      // Calculate cosine similarity with each stored embedding
+      const scores: Array<{ id: string; score: number }> = [];
+
+      for (const docId of allDocs) {
+        const embeddingData = await redis.get(`${EMBEDDING_PREFIX}${docId}`);
+        if (!embeddingData) continue;
+
+        try {
+          const docEmbedding: number[] = JSON.parse(embeddingData);
+          const similarity = this.cosineSimilarity(queryEmbedding, docEmbedding);
+          scores.push({ id: docId, score: similarity });
+        } catch {
+          // Skip documents with corrupt embeddings
+          continue;
+        }
+      }
+
+      // Return top matches sorted by similarity
+      return scores
+        .sort((a, b) => b.score - a.score)
+        .slice(0, limit)
+        .map((s) => s.id);
+    } catch (error) {
+      // Fall back to keyword search if semantic search fails
+      logger.debug({ error }, 'Semantic search failed, falling back to keyword search');
+      return this.search(query, limit);
+    }
+  }
+
+  /**
+   * Issue #274: Calculate cosine similarity between two embedding vectors.
+   */
+  private static cosineSimilarity(a: number[], b: number[]): number {
+    if (a.length !== b.length) return 0;
+
+    let dotProduct = 0;
+    let normA = 0;
+    let normB = 0;
+
+    for (let i = 0; i < a.length; i++) {
+      dotProduct += a[i] * b[i];
+      normA += a[i] * a[i];
+      normB += b[i] * b[i];
+    }
+
+    const denominator = Math.sqrt(normA) * Math.sqrt(normB);
+    return denominator === 0 ? 0 : dotProduct / denominator;
   }
 }

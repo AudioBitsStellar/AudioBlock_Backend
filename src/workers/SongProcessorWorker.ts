@@ -31,7 +31,13 @@ async function transcodeToHLS(localFile: string, hlsDir: string): Promise<void> 
 
   await new Promise<void>((resolve, reject) => {
     ffmpeg(localFile)
-      .outputOptions(['-codec: copy', '-start_number 0', '-hls_time 10', '-hls_list_size 0', '-f hls'])
+      .outputOptions([
+        '-codec: copy',
+        '-start_number 0',
+        '-hls_time 10',
+        '-hls_list_size 0',
+        '-f hls',
+      ])
       .output(path.join(hlsDir, 'master.m3u8'))
       .on('end', () => resolve())
       .on('error', reject)
@@ -49,11 +55,13 @@ async function uploadHLSToS3(songId: string, fileId: string): Promise<string> {
 
   for (const f of hlsFiles) {
     const filePath = path.join(hlsDir, f);
-    await s3.upload({
-      Bucket: process.env.AWS_BUCKET_NAME!,
-      Key: `${s3BasePath}${f}`,
-      Body: fs.createReadStream(filePath),
-    }).promise();
+    await s3
+      .upload({
+        Bucket: process.env.AWS_BUCKET_NAME!,
+        Key: `${s3BasePath}${f}`,
+        Body: fs.createReadStream(filePath),
+      })
+      .promise();
   }
 
   return `https://${process.env.AWS_BUCKET_NAME}.s3.amazonaws.com/${s3BasePath}master.m3u8`;
@@ -61,12 +69,19 @@ async function uploadHLSToS3(songId: string, fileId: string): Promise<string> {
 
 /**
  * Build metadata for on-chain minting.
+ * Issue #269: Includes AI-generated description if approved by artist.
  */
 async function buildMetadata(song: Song, coverCid: string, masterUrl: string) {
+  // Use AI-generated description if artist approved it, otherwise use manual description
+  const description =
+    song.aiGeneratedDescription && song.aiDescriptionApproved
+      ? song.aiGeneratedDescription
+      : song.description;
+
   return {
     name: song.title,
     artist: song.artistAddress,
-    description: song.description,
+    description,
     image: `ipfs://${coverCid}`,
     animation_url: masterUrl,
     attributes: [
@@ -74,6 +89,9 @@ async function buildMetadata(song: Song, coverCid: string, masterUrl: string) {
       { trait_type: 'loudness', value: song.loudness || 0 },
       { trait_type: 'genre', value: song.genre },
       { trait_type: 'cover_url', value: coverCid },
+      ...(song.aiGeneratedDescription && song.aiDescriptionApproved
+        ? [{ trait_type: 'ai_description_used', value: 'true' }]
+        : []),
     ],
   };
 }
@@ -101,7 +119,9 @@ async function processSongMessage(
 
   // 3. Upload cover art to IPFS
   const tempCoverPath = path.join(os.tmpdir(), `${fileId}-cover.jpg`);
-  const coverResponse = await axios.get<ArrayBuffer>(song.coverArtPath, { responseType: 'arraybuffer' });
+  const coverResponse = await axios.get<ArrayBuffer>(song.coverArtPath, {
+    responseType: 'arraybuffer',
+  });
   fs.writeFileSync(tempCoverPath, Buffer.from(coverResponse.data));
   const coverRes = await PinataService.uploadFile(tempCoverPath, `${songId}-cover.jpg`);
 
@@ -136,12 +156,7 @@ function parsePayload(raw: string): SongPayload | null {
 /**
  * Handle message failure (retry or DLQ).
  */
-function handleFailure(
-  channel: any,
-  msg: any,
-  payload: SongPayload,
-  error: unknown,
-): void {
+function handleFailure(channel: any, msg: any, payload: SongPayload, error: unknown): void {
   const attempt = (payload.attempt ?? 1) + 1;
   logger.error({ songId: payload.songId, attempt, err: error }, 'Song processing failed');
 
@@ -180,7 +195,10 @@ export async function startSongWorker() {
       }
 
       const attempt = payload.attempt ?? 1;
-      logger.info({ songId: payload.songId, attempt }, `Processing song (attempt ${attempt}/${MAX_ATTEMPTS})`);
+      logger.info(
+        { songId: payload.songId, attempt },
+        `Processing song (attempt ${attempt}/${MAX_ATTEMPTS})`,
+      );
 
       try {
         await processSongMessage(payload, logService, versionService);
