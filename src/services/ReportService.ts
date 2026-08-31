@@ -6,6 +6,7 @@ import { AppError } from '../errors/AppError';
 import { SearchIndexService } from './SearchIndexService';
 import { TransactionLogService } from './TransactionLogService';
 import { CacheService } from './CacheService';
+import { getAiProvider } from './ai';
 import logger from '../config/logger';
 
 /**
@@ -85,6 +86,9 @@ export class ReportService {
       status: ReportStatus.PENDING,
     });
     await this.reportRepo.save(report);
+
+    // Issue #273: Score report with AI (fails open if AI call errors)
+    await this.scoreReportWithAI(report, song);
 
     const pendingReports = await this.reportRepo.count({
       where: { songId, status: ReportStatus.PENDING },
@@ -267,5 +271,46 @@ export class ReportService {
       );
     }
     return value as ReportAction;
+  }
+
+  /**
+   * Issue #273: Score report with AI for triage priority (advisory only).
+   * Fails open: if AI call errors, report is still queued normally.
+   */
+  private async scoreReportWithAI(report: ContentReport, song: Song): Promise<void> {
+    try {
+      const provider = getAiProvider();
+      const result = await provider.scoreContentReport({
+        reportId: report.id,
+        contentType: 'song',
+        contentText: `${song.title} - ${song.description || ''}`,
+        reportReason: report.reason,
+        reporterContext: report.description || '',
+      });
+
+      report.aiSeverityScore = result.severityScore;
+      report.aiSuggestedPriority = result.suggestedPriority;
+      report.aiCategories = result.categories;
+      report.aiReasoning = result.reasoning;
+      report.aiProvider = result.provider;
+
+      await this.reportRepo.save(report);
+
+      logger.info(
+        {
+          reportId: report.id,
+          songId: report.songId,
+          aiScore: result.severityScore,
+          aiPriority: result.suggestedPriority,
+        },
+        'AI content moderation scoring completed',
+      );
+    } catch (error) {
+      // Fail open: log error but don't block report submission
+      logger.warn(
+        { reportId: report.id, songId: report.songId, error },
+        'AI content moderation scoring failed, proceeding without AI score',
+      );
+    }
   }
 }

@@ -117,6 +117,18 @@ export class Song {
   @Column({ nullable: true })
   language?: string;
 
+  /** Issue #269: AI-generated description draft for artist approval */
+  @Column({ type: 'text', nullable: true })
+  aiGeneratedDescription?: string | null;
+
+  /** Issue #269: Whether artist approved the AI description for NFT metadata */
+  @Column({ default: false })
+  aiDescriptionApproved!: boolean;
+
+  /** Issue #271: AI-generated cover art URL (before artist approval) */
+  @Column({ type: 'text', nullable: true })
+  aiGeneratedCoverUrl?: string | null;
+
   @CreateDateColumn()
   createdAt!: Date;
 
