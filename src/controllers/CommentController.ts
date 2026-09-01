@@ -1,18 +1,22 @@
 import { Request, Response } from 'express';
 import { CommentService } from '../services/CommentService';
+import { CommentReportService } from '../services/CommentReportService';
 import { handleError } from '../utils/helpers';
 import { HTTP_STATUS } from '../config/constants';
 import { AppError } from '../errors/AppError';
 import { routeParam } from '../utils/routeParams';
 
 /**
- * Controller for song comment endpoints (Issue #90).
+ * Controller for song comment endpoints (Issue #90) and comment flagging
+ * (Issue #411).
  */
 export class CommentController {
   private commentService: CommentService;
+  private reportService: CommentReportService;
 
   constructor() {
     this.commentService = new CommentService();
+    this.reportService = new CommentReportService();
   }
 
   /**
@@ -119,6 +123,32 @@ export class CommentController {
       await this.commentService.deleteComment(userId, routeParam(req.params.id));
 
       res.status(HTTP_STATUS.OK).json({ message: 'Comment deleted successfully' });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  /**
+   * Flag a comment so it surfaces in the moderation queue (Issue #411).
+   * POST /api/comments/:id/report
+   */
+  reportComment = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const reporterId = (req as any).user?.id as string | undefined;
+
+      if (!reporterId) {
+        return handleError(req, res, AppError.authentication('User not authenticated'));
+      }
+
+      const report = await this.reportService.submitReport(routeParam(req.params.id), reporterId, {
+        reason: req.body.reason,
+        description: req.body.description,
+      });
+
+      res.status(HTTP_STATUS.CREATED).json({
+        message: 'Comment reported successfully',
+        report,
+      });
     } catch (error) {
       handleError(req, res, error);
     }

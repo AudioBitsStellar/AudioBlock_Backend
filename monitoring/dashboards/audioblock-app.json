@@ -1,0 +1,150 @@
+{
+  "__inputs": [],
+  "__requires": [],
+  "title": "AudioBlock Backend — App",
+  "uid": "audioblock-app",
+  "version": 1,
+  "timezone": "utc",
+  "editable": true,
+  "refresh": "30s",
+  "schemaVersion": 30,
+  "panels": [
+    {
+      "title": "Request Rate (rps)",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total[5m])) by (method)",
+          "legendFormat": "{{method}}",
+          "refId": "A"
+        }
+      ],
+      "yaxes": [{ "format": "reqps", "label": "Requests/s" }, { "format": "short" }]
+    },
+    {
+      "title": "Error Rate (5xx) (rps)",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m])) by (route)",
+          "legendFormat": "{{route}}",
+          "refId": "A"
+        }
+      ],
+      "yaxes": [{ "format": "reqps", "label": "Errors/s" }, { "format": "short" }]
+    },
+    {
+      "title": "Latency (p95 / p99)",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p99",
+          "refId": "B"
+        }
+      ],
+      "yaxes": [{ "format": "s", "label": "Latency" }, { "format": "short" }]
+    },
+    {
+      "title": "Active In-Flight Requests",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "http_requests_active",
+          "legendFormat": "active",
+          "refId": "A"
+        }
+      ],
+      "yaxes": [{ "format": "short", "label": "Requests" }, { "format": "short" }]
+    },
+    {
+      "title": "Database Connection Pool",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 },
+      "targets": [
+        {
+          "expr": "db_pool_active",
+          "legendFormat": "active",
+          "refId": "A"
+        },
+        {
+          "expr": "db_pool_idle",
+          "legendFormat": "idle",
+          "refId": "B"
+        },
+        {
+          "expr": "db_pool_waiting",
+          "legendFormat": "waiting",
+          "refId": "C"
+        }
+      ],
+      "yaxes": [{ "format": "short", "label": "Connections" }, { "format": "short" }]
+    },
+    {
+      "title": "Songs Uploaded",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
+      "targets": [
+        {
+          "expr": "rate(songs_uploaded_total[5m])",
+          "legendFormat": "songs/s",
+          "refId": "A"
+        }
+      ],
+      "yaxes": [{ "format": "short", "label": "Songs/s" }, { "format": "short" }]
+    },
+    {
+      "title": "Cache Efficiency",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "rate(cache_hits_total[5m])",
+          "legendFormat": "hits",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(cache_misses_total[5m])",
+          "legendFormat": "misses",
+          "refId": "B"
+        }
+      ],
+      "yaxes": [{ "format": "short", "label": "Ops/s" }, { "format": "short" }]
+    },
+    {
+      "title": "Marketplace Volume (stroops)",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 },
+      "targets": [
+        {
+          "expr": "rate(marketplace_volume_stroops_total[5m])",
+          "legendFormat": "stroops/s",
+          "refId": "A"
+        }
+      ],
+      "yaxes": [{ "format": "short", "label": "Stroops/s" }, { "format": "short" }]
+    },
+    {
+      "title": "Royalties Paid",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 },
+      "targets": [
+        {
+          "expr": "rate(royalties_paid_total[5m])",
+          "legendFormat": "payouts/s",
+          "refId": "A"
+        }
+      ],
+      "yaxes": [{ "format": "short", "label": "Payouts/s" }, { "format": "short" }]
+    }
+  ]
+}

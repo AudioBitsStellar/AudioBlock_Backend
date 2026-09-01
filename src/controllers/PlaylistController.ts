@@ -143,6 +143,66 @@ export class PlaylistController {
     }
   };
 
+  /** PATCH /api/playlists/:id/songs/:songId/position — move one song (Issue #409). */
+  static moveSong = async (req: Request, res: Response) => {
+    try {
+      const playlistId = req.params.id as string;
+      const songId = req.params.songId as string;
+      const userId = (req as any).user.id as string;
+      const newPosition = req.body?.newPosition as number | undefined;
+
+      if (newPosition === undefined || !Number.isInteger(newPosition) || newPosition < 0) {
+        throw AppError.validation(
+          'newPosition must be a non-negative integer',
+          undefined,
+          'PLAYLIST_REORDER_INVALID',
+        );
+      }
+
+      const playlist = await playlistService.moveSong(playlistId, userId, songId, newPosition);
+      return res.status(200).json({ success: true, data: playlist });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  /** POST /api/playlists/:id/follow — follow a playlist (Issue #408). */
+  static followPlaylist = async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user.id as string;
+      const playlistId = req.params.id as string;
+      const result = await playlistService.followPlaylist(userId, playlistId);
+      return res.status(200).json({ success: true, data: result });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  /** DELETE /api/playlists/:id/follow — unfollow a playlist (Issue #408). */
+  static unfollowPlaylist = async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user.id as string;
+      const playlistId = req.params.id as string;
+      await playlistService.unfollowPlaylist(userId, playlistId);
+      return res.status(200).json({ success: true, message: 'Playlist unfollowed' });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  /** GET /api/playlists/followed — list the caller's followed playlists (Issue #408). */
+  static listFollowedPlaylists = async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user.id as string;
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+      const result = await playlistService.listFollowedPlaylists(userId, page, limit);
+      return res.status(200).json({ success: true, ...result });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
   /** GET /api/playlists/:id/collaborators — list a playlist's collaborators. */
   static listCollaborators = async (req: Request, res: Response) => {
     try {

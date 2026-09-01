@@ -99,7 +99,7 @@ export class Song {
   @Column({ default: false })
   flagged!: boolean;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ type: 'timestamp', nullable: true })
   flaggedAt?: Date | null;
 
   @Column({ type: 'text', nullable: true })
@@ -116,6 +116,18 @@ export class Song {
 
   @Column({ nullable: true })
   language?: string;
+
+  /** Issue #269: AI-generated description draft for artist approval */
+  @Column({ type: 'text', nullable: true })
+  aiGeneratedDescription?: string | null;
+
+  /** Issue #269: Whether artist approved the AI description for NFT metadata */
+  @Column({ default: false })
+  aiDescriptionApproved!: boolean;
+
+  /** Issue #271: AI-generated cover art URL (before artist approval) */
+  @Column({ type: 'text', nullable: true })
+  aiGeneratedCoverUrl?: string | null;
 
   @CreateDateColumn()
   createdAt!: Date;

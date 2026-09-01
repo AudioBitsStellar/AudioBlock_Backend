@@ -1,7 +1,6 @@
 import AppDataSource from '../config/db';
 import { SongPlayEvent } from '../entities/SongPlayEvent';
 import { TransactionLogService } from '../services/TransactionLogService';
-import { Between } from 'typeorm';
 import logger from '../config/logger';
 
 export async function runPlaybackAggregationJob(): Promise<void> {
@@ -34,7 +33,7 @@ export async function runPlaybackAggregationJob(): Promise<void> {
       artistId,
       '',
       'DAILY_PLAYBACK_AGGREGATION',
-      `Song ${songId} received ${playCount} plays in the last 24 hours.`
+      `Song ${songId} received ${playCount} plays in the last 24 hours.`,
     );
   }
 

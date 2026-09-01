@@ -15,16 +15,19 @@ State the decision clearly in one or two sentences. Then explain the rationale: 
 ## Consequences
 
 ### Positive
+
 - …
 
 ### Negative / trade-offs
+
 - …
 
 ### Neutral
+
 - …
 
 ## Alternatives considered
 
 | Option | Why rejected |
-|--------|-------------|
-| …      | …           |
+| ------ | ------------ |
+| …      | …            |

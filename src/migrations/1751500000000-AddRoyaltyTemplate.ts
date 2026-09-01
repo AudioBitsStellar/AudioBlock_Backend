@@ -46,7 +46,7 @@ export class AddRoyaltyTemplate1751500000000 implements MigrationInterface {
       new TableForeignKey({
         name: 'FK_royalty_template_user',
         columnNames: ['userId'],
-        referencedTableName: 'user',
+        referencedTableName: 'users',
         referencedColumnNames: ['id'],
         onDelete: 'CASCADE',
       }),

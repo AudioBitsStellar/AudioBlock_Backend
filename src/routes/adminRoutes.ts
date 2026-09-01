@@ -8,6 +8,8 @@ import { SongController } from '../controllers/SongController';
 import { JobController } from '../controllers/JobController';
 import { AdminController } from '../controllers/AdminController';
 import { bulkModerationRateLimiter } from '../middlewares/bulkModerationRateLimiter';
+import { ResolveReportDTO } from '../dtos/ReportSongDTO';
+import { ResolveCommentReportDTO } from '../dtos/ReportCommentDTO';
 
 const router = Router();
 
@@ -59,6 +61,20 @@ router.put(
   AdminController.resolveReport,
 );
 
+// Comment report queue (Issue #411) — flagged comments surface here with full
+// comment context so they can be reviewed in the same moderation flow.
+router.get(
+  '/comment-reports',
+  requirePermission(Permission.CONTENT_MODERATE),
+  AdminController.listCommentReports,
+);
+router.put(
+  '/comment-reports/:id/resolve',
+  requirePermission(Permission.CONTENT_MODERATE),
+  validateDTO(ResolveCommentReportDTO),
+  AdminController.resolveCommentReport,
+);
+
 // Search index maintenance (Issue #135)
 router.post(
   '/search/rebuild',
@@ -101,6 +117,13 @@ router.get(
   '/transaction-logs',
   requirePermission(Permission.TRANSACTION_LOGS_VIEW),
   AdminController.getTransactionLogs,
+);
+
+// Indexer health/status (Issue #253) — admins and moderators.
+router.get(
+  '/indexer/status',
+  requirePermission(Permission.CONTENT_MODERATE),
+  AdminController.getIndexerStatus,
 );
 
 export default router;

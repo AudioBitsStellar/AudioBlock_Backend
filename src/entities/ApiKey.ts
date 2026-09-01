@@ -33,6 +33,10 @@ export class ApiKey {
   @Column({ unique: true })
   keyHash!: string;
 
+  /** Non-secret display prefix, e.g. `abk_1a2b3c4d` — shown in key listings. */
+  @Column({ nullable: true })
+  keyPrefix?: string;
+
   @Column({ type: 'simple-array', default: '' })
   scopes!: ApiKeyScope[];
 
@@ -50,8 +54,9 @@ export class ApiKey {
   @Column('simple-array', { default: '' })
   permissions!: string[];
 
-  @Column({ default: false })
-  isRevoked!: boolean;
+  /** Set when the key is revoked; unset (null) means the key is active. */
+  @Column({ type: 'timestamp', nullable: true })
+  revokedAt?: Date;
 
   @Column({ type: 'timestamp', nullable: true })
   lastUsedAt?: Date;

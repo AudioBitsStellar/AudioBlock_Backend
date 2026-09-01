@@ -67,7 +67,7 @@ export class RoyaltyPayout {
   @Column({ nullable: true })
   discrepancyReason?: string;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ type: 'timestamp', nullable: true })
   reconciledAt?: Date;
 
   @ManyToOne(() => User, (user) => user.royaltyPayouts, {

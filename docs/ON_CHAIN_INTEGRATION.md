@@ -100,27 +100,27 @@ See `src/types/OnChainErrorCodes.ts` for full enum. Key codes:
 
 ```typescript
 async function submitSetup(signedXdr: string) {
-  const res = await fetch("/api/artist/onchain/submit-setup", {
-    method: "POST",
+  const res = await fetch('/api/artist/onchain/submit-setup', {
+    method: 'POST',
     body: JSON.stringify({ signedXdr }),
-    headers: { "Content-Type": "application/json" },
+    headers: { 'Content-Type': 'application/json' },
   });
 
   const data = await res.json();
 
   if (!data.success) {
     switch (data.errorCode) {
-      case "TRANSACTION_EXPIRED":
+      case 'TRANSACTION_EXPIRED':
         // Re-fetch unsigned transaction
         return retryPrepareSetup();
 
-      case "WALLET_NOT_CONNECTED":
+      case 'WALLET_NOT_CONNECTED':
         // Redirect to wallet connection
-        return navigate("/connect-wallet");
+        return navigate('/connect-wallet');
 
-      case "CONTRACT_INVOCATION_FAILED":
+      case 'CONTRACT_INVOCATION_FAILED':
         // Fatal error
-        return showError("Setup failed. Please contact support.");
+        return showError('Setup failed. Please contact support.');
 
       default:
         if (data.retryable) {
@@ -170,27 +170,27 @@ The current implementation does NOT require a signed challenge for wallet connec
 **Example Integration:**
 
 ```typescript
-import { isConnected, getPublicKey } from "@stellar/freighter-api";
+import { isConnected, getPublicKey } from '@stellar/freighter-api';
 
 async function connectWallet() {
   if (!(await isConnected())) {
-    alert("Please install Freighter wallet");
+    alert('Please install Freighter wallet');
     return;
   }
 
   const publicKey = await getPublicKey();
 
-  const res = await fetch("/api/artist/onchain/connect-wallet", {
-    method: "POST",
+  const res = await fetch('/api/artist/onchain/connect-wallet', {
+    method: 'POST',
     body: JSON.stringify({ stellarPublicKey: publicKey }),
     headers: {
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
       Authorization: `Bearer ${authToken}`,
     },
   });
 
   if (res.ok) {
-    console.log("Wallet connected:", publicKey);
+    console.log('Wallet connected:', publicKey);
   }
 }
 ```
@@ -202,13 +202,13 @@ See `tests/fixtures/walletConnection.fixture.ts` (to be created by frontend team
 ```typescript
 // Both backend and frontend can reference this fixture
 export const validWalletConnection = {
-  stellarPublicKey: "GBXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+  stellarPublicKey: 'GBXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
 };
 
 export const invalidWalletConnections = [
-  { stellarPublicKey: "invalid" }, // Wrong format
-  { stellarPublicKey: "MXXXXXXX" }, // M-address (secret key)
-  { stellarPublicKey: "" }, // Empty
+  { stellarPublicKey: 'invalid' }, // Wrong format
+  { stellarPublicKey: 'MXXXXXXX' }, // M-address (secret key)
+  { stellarPublicKey: '' }, // Empty
 ];
 ```
 
@@ -279,11 +279,11 @@ See `src/types/WebhookPayloads.ts` for full schema.
 **Option 1: WebSocket (Recommended for real-time UX)**
 
 ```typescript
-const ws = new WebSocket("wss://api.audioblock.com/events");
+const ws = new WebSocket('wss://api.audioblock.com/events');
 
-ws.on("message", (data) => {
+ws.on('message', (data) => {
   const event = JSON.parse(data);
-  if (event.eventType === "mint_status_changed") {
+  if (event.eventType === 'mint_status_changed') {
     updateSongStatus(event.songId, event.newStatus);
   }
 });

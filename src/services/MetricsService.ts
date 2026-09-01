@@ -1,6 +1,13 @@
 /**
  * Prometheus metrics for monitoring HTTP requests, database pool, uploads,
- * royalties, marketplace volume, and cache performance.
+ * royalties, marketplace volume, cache performance, and blockchain indexer health.
+ *
+ * Indexer metrics (Issues #241, #242):
+ * - indexer_lag_ledgers: Ledgers behind latest Stellar ledger (by network/contract)
+ * - indexer_events_processed_total: Total blockchain events processed
+ * - indexer_errors_total: Total indexer errors
+ *
+ * See monitoring/dashboards/audioblock-indexer.json for visualization.
  */
 import client from 'prom-client';
 
@@ -74,6 +81,46 @@ export const cacheHitsTotal = new client.Counter({
 export const cacheMissesTotal = new client.Counter({
   name: 'cache_misses_total',
   help: 'Total number of cache misses',
+  registers: [register],
+});
+
+// ── Indexer metrics (Issue #241) ────────────────────────────────────────────
+
+export const indexerLagLedgers = new client.Gauge({
+  name: 'indexer_lag_ledgers',
+  help: 'Number of ledgers behind the latest Stellar ledger',
+  labelNames: ['network', 'contract'] as const,
+  registers: [register],
+});
+
+export const indexerEventsProcessedTotal = new client.Counter({
+  name: 'indexer_events_processed_total',
+  help: 'Total number of blockchain events processed by the indexer',
+  labelNames: ['network', 'contract'] as const,
+  registers: [register],
+});
+
+export const indexerErrorsTotal = new client.Counter({
+  name: 'indexer_errors_total',
+  help: 'Total number of indexer errors',
+  labelNames: ['network', 'contract'] as const,
+  registers: [register],
+});
+
+// ── Soroban RPC metrics (Issue #257) ────────────────────────────────────────
+
+export const sorobanRpcCallsTotal = new client.Counter({
+  name: 'soroban_rpc_calls_total',
+  help: 'Total number of Soroban RPC calls',
+  labelNames: ['network', 'method', 'status'] as const,
+  registers: [register],
+});
+
+export const sorobanRpcLatencySeconds = new client.Histogram({
+  name: 'soroban_rpc_latency_seconds',
+  help: 'Soroban RPC call latency in seconds',
+  labelNames: ['network', 'method'] as const,
+  buckets: [0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30],
   registers: [register],
 });
 

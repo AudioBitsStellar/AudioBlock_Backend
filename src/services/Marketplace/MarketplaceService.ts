@@ -1,6 +1,6 @@
-import { SorobanContracts } from "../../config/soroban";
-import { SorobanService, addressArg, u64Arg } from "../Soroban/SorobanService";
-import { PreparedTransaction } from "../Artist/ArtistService";
+import { SorobanContracts } from '../../config/soroban';
+import { SorobanService, addressArg, u64Arg } from '../Soroban/SorobanService';
+import { PreparedTransaction } from '../Artist/ArtistService';
 
 export class MarketplaceService {
   private soroban: SorobanService;
@@ -17,15 +17,15 @@ export class MarketplaceService {
   async prepareListing(
     sellerPublicKey: string,
     tokenId: number,
-    priceInStroops: number
+    priceInStroops: number,
   ): Promise<PreparedTransaction> {
     const xdr = await this.soroban.prepareInvocation(
       sellerPublicKey,
       SorobanContracts.marketplace,
-      "list_nft",
-      [addressArg(sellerPublicKey), u64Arg(tokenId), u64Arg(priceInStroops)]
+      'list_nft',
+      [addressArg(sellerPublicKey), u64Arg(tokenId), u64Arg(priceInStroops)],
     );
-    return { xdr, networkPassphrase: process.env.SOROBAN_NETWORK_PASSPHRASE || "" };
+    return { xdr, networkPassphrase: process.env.SOROBAN_NETWORK_PASSPHRASE || '' };
   }
 
   /** Submits the seller's signed `list_nft` transaction and returns the tx hash. */
@@ -39,17 +39,14 @@ export class MarketplaceService {
    * The buyer's wallet signs and returns the XDR via `submitBuy` —
    * the backend never holds the buyer's key.
    */
-  async prepareBuy(
-    buyerPublicKey: string,
-    tokenId: number
-  ): Promise<PreparedTransaction> {
+  async prepareBuy(buyerPublicKey: string, tokenId: number): Promise<PreparedTransaction> {
     const xdr = await this.soroban.prepareInvocation(
       buyerPublicKey,
       SorobanContracts.marketplace,
-      "buy_nft",
-      [addressArg(buyerPublicKey), u64Arg(tokenId)]
+      'buy_nft',
+      [addressArg(buyerPublicKey), u64Arg(tokenId)],
     );
-    return { xdr, networkPassphrase: process.env.SOROBAN_NETWORK_PASSPHRASE || "" };
+    return { xdr, networkPassphrase: process.env.SOROBAN_NETWORK_PASSPHRASE || '' };
   }
 
   /** Submits the buyer's signed `buy_nft` transaction and returns the tx hash. */
@@ -58,20 +55,22 @@ export class MarketplaceService {
 
     // ── Webhook event emission (sale completed) ────────────────────────────
     try {
-      const { WebhookService } = await import("../WebhookService");
+      const { WebhookService } = await import('../WebhookService');
       const webhook = new WebhookService();
-      await webhook.publish("sale.completed", {
+      await webhook.publish('sale.completed', {
         txHash: hash,
         // tokenId not directly available here; include hash for linkage
         // Caller can enrich via MarketplaceController if needed
       });
-      await webhook.publish("sale_completed", { txHash: hash });
+      await webhook.publish('sale_completed', { txHash: hash });
     } catch (webhookErr) {
       // Non-fatal — sale succeeded even if webhook fails
       try {
-        const logger = (await import("../../config/logger")).default;
-        logger.warn({ err: webhookErr }, "Webhook publish failed for sale.completed — non-fatal");
-      } catch {}
+        const logger = (await import('../../config/logger')).default;
+        logger.warn({ err: webhookErr }, 'Webhook publish failed for sale.completed — non-fatal');
+      } catch (err) {
+        void err;
+      }
     }
 
     return { txHash: hash };
@@ -80,15 +79,20 @@ export class MarketplaceService {
     sellerPublicKey: string,
     tokenId: number,
     startingPriceInStroops: number,
-    durationSeconds: number
+    durationSeconds: number,
   ): Promise<PreparedTransaction> {
     const xdr = await this.soroban.prepareInvocation(
       sellerPublicKey,
       SorobanContracts.marketplace,
-      "create_auction",
-      [addressArg(sellerPublicKey), u64Arg(tokenId), u64Arg(startingPriceInStroops), u64Arg(durationSeconds)]
+      'create_auction',
+      [
+        addressArg(sellerPublicKey),
+        u64Arg(tokenId),
+        u64Arg(startingPriceInStroops),
+        u64Arg(durationSeconds),
+      ],
     );
-    return { xdr, networkPassphrase: process.env.SOROBAN_NETWORK_PASSPHRASE || "" };
+    return { xdr, networkPassphrase: process.env.SOROBAN_NETWORK_PASSPHRASE || '' };
   }
 
   async submitAuction(signedXdr: string): Promise<{ txHash: string }> {
@@ -99,15 +103,15 @@ export class MarketplaceService {
   async prepareBid(
     bidderPublicKey: string,
     tokenId: number,
-    bidAmountInStroops: number
+    bidAmountInStroops: number,
   ): Promise<PreparedTransaction> {
     const xdr = await this.soroban.prepareInvocation(
       bidderPublicKey,
       SorobanContracts.marketplace,
-      "place_bid",
-      [addressArg(bidderPublicKey), u64Arg(tokenId), u64Arg(bidAmountInStroops)]
+      'place_bid',
+      [addressArg(bidderPublicKey), u64Arg(tokenId), u64Arg(bidAmountInStroops)],
     );
-    return { xdr, networkPassphrase: process.env.SOROBAN_NETWORK_PASSPHRASE || "" };
+    return { xdr, networkPassphrase: process.env.SOROBAN_NETWORK_PASSPHRASE || '' };
   }
 
   async submitBid(signedXdr: string): Promise<{ txHash: string }> {

@@ -1,307 +1,213 @@
-/**
- * Song Processor Worker (Issue #36)
- *
- * Retry / back-off policy for failed transcode and IPFS-pin jobs
- * ──────────────────────────────────────────────────────────────
- * Each message carries an optional `attempt` counter (injected below on
- * re-queue).  When processing fails the worker follows this policy:
- *
- *   1. If attempt < WORKER_MAX_ATTEMPTS, the message is nack'd and
- *      re-published after an exponential back-off delay:
- *        delay = WORKER_BACKOFF_BASE_MS * 2^(attempt - 1)
- *        capped at WORKER_BACKOFF_MAX_MS
- *
- *   2. Once all retries are exhausted the job is moved to the
- *      dead-letter queue ("song_processing_dlq") AND a SONG_FAILED
- *      entry is written to TransactionLog for operator visibility.
- *
- * Configuration (env vars, documented in .env.example):
- *   WORKER_MAX_ATTEMPTS       – max processing attempts  (default: 3)
- *   WORKER_BACKOFF_BASE_MS    – base delay in ms          (default: 2000)
- *   WORKER_BACKOFF_MAX_MS     – ceiling delay in ms       (default: 30000)
- */
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
-import ffmpeg from 'fluent-ffmpeg';
-import axios from 'axios';
-import { getChannel } from '../config/rabbitmq';
-import { s3 } from '../config/s3';
-import { CacheService } from '../services/CacheService';
-import AppDataSource from '../config/db';
+import { getChannel, MAIN_QUEUE, DLQ } from '../config/rabbitmq';
+import { AppDataSource } from '../config/data-source';
 import { Song } from '../entities/Song';
-import { PinataService } from '../services/PinataService';
-import { precomputeSignedManifest } from './precomputeManifest';
 import { TransactionLogService } from '../services/TransactionLogService';
-import { SearchIndexService } from '../services/SearchIndexService';
-import { SongVersionService } from '../services/Song/SongVersionService';
-import { NotificationService } from '../services/NotificationService';
+import { SongVersionService } from '../services/SongVersionService';
+import { PinataService } from '../services/PinataService';
+import { SorobanService } from '../services/Soroban/SorobanService';
 import logger from '../config/logger';
-
-const MAIN_QUEUE = 'song_processing';
-const DLQ = 'song_processing_dlq';
-
-const MAX_ATTEMPTS = parseInt(process.env.WORKER_MAX_ATTEMPTS || '3', 10);
-const BACKOFF_BASE_MS = parseInt(process.env.WORKER_BACKOFF_BASE_MS || '2000', 10);
-const BACKOFF_MAX_MS = parseInt(process.env.WORKER_BACKOFF_MAX_MS || '30000', 10);
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
+import axios from 'axios';
+import ffmpeg from 'fluent-ffmpeg';
+import { S3 } from 'aws-sdk';
 
 const songRepo = AppDataSource.getRepository(Song);
+const MAX_ATTEMPTS = 3;
+const s3 = new S3({ region: process.env.AWS_REGION });
 
-/** Compute exponential back-off delay (capped). */
-function backoffDelay(attempt: number): number {
-  return Math.min(BACKOFF_BASE_MS * Math.pow(2, attempt - 1), BACKOFF_MAX_MS);
+interface SongPayload {
+  songId: string;
+  fileId: string;
+  attempt?: number;
+}
+
+/**
+ * Transcode an MP3 file to HLS format.
+ */
+async function transcodeToHLS(localFile: string, hlsDir: string): Promise<void> {
+  if (!fs.existsSync(hlsDir)) fs.mkdirSync(hlsDir, { recursive: true });
+
+  await new Promise<void>((resolve, reject) => {
+    ffmpeg(localFile)
+      .outputOptions([
+        '-codec: copy',
+        '-start_number 0',
+        '-hls_time 10',
+        '-hls_list_size 0',
+        '-f hls',
+      ])
+      .output(path.join(hlsDir, 'master.m3u8'))
+      .on('end', () => resolve())
+      .on('error', reject)
+      .run();
+  });
+}
+
+/**
+ * Upload HLS files to S3.
+ */
+async function uploadHLSToS3(songId: string, fileId: string): Promise<string> {
+  const hlsDir = `uploads/hls/${fileId}`;
+  const s3BasePath = `songs/${songId}/hls/`;
+  const hlsFiles = fs.readdirSync(hlsDir);
+
+  for (const f of hlsFiles) {
+    const filePath = path.join(hlsDir, f);
+    await s3
+      .upload({
+        Bucket: process.env.AWS_BUCKET_NAME!,
+        Key: `${s3BasePath}${f}`,
+        Body: fs.createReadStream(filePath),
+      })
+      .promise();
+  }
+
+  return `https://${process.env.AWS_BUCKET_NAME}.s3.amazonaws.com/${s3BasePath}master.m3u8`;
+}
+
+/**
+ * Build metadata for on-chain minting.
+ * Issue #269: Includes AI-generated description if approved by artist.
+ */
+async function buildMetadata(song: Song, coverCid: string, masterUrl: string) {
+  // Use AI-generated description if artist approved it, otherwise use manual description
+  const description =
+    song.aiGeneratedDescription && song.aiDescriptionApproved
+      ? song.aiGeneratedDescription
+      : song.description;
+
+  return {
+    name: song.title,
+    artist: song.artistAddress,
+    description,
+    image: `ipfs://${coverCid}`,
+    animation_url: masterUrl,
+    attributes: [
+      { trait_type: 'duration', value: song.duration || 0 },
+      { trait_type: 'loudness', value: song.loudness || 0 },
+      { trait_type: 'genre', value: song.genre },
+      { trait_type: 'cover_url', value: coverCid },
+      ...(song.aiGeneratedDescription && song.aiDescriptionApproved
+        ? [{ trait_type: 'ai_description_used', value: 'true' }]
+        : []),
+    ],
+  };
+}
+
+/**
+ * Handle a single song processing message.
+ */
+async function processSongMessage(
+  payload: SongPayload,
+  logService: TransactionLogService,
+  versionService: SongVersionService,
+): Promise<void> {
+  const { songId, fileId } = payload;
+  const song = await songRepo.findOne({ where: { id: songId }, relations: ['user'] });
+  if (!song) throw new Error('Song not found');
+
+  const localFile = path.join('uploads/merged', `${fileId}.mp3`);
+  const hlsDir = `uploads/hls/${fileId}`;
+
+  // 1. Transcode to HLS
+  await transcodeToHLS(localFile, hlsDir);
+
+  // 2. Upload to S3
+  const masterUrl = await uploadHLSToS3(songId, fileId);
+
+  // 3. Upload cover art to IPFS
+  const tempCoverPath = path.join(os.tmpdir(), `${fileId}-cover.jpg`);
+  const coverResponse = await axios.get<ArrayBuffer>(song.coverArtPath, {
+    responseType: 'arraybuffer',
+  });
+  fs.writeFileSync(tempCoverPath, Buffer.from(coverResponse.data));
+  const coverRes = await PinataService.uploadFile(tempCoverPath, `${songId}-cover.jpg`);
+
+  // 4. Build and upload metadata
+  const metadata = await buildMetadata(song, coverRes.cid, masterUrl);
+  const metadataRes = await PinataService.uploadJSON(metadata, `${songId}-metadata.json`);
+
+  // 5. Log and version
+  await logService.log(songId, 'hls_transcoded', { masterUrl, metadataCid: metadataRes.cid });
+  await versionService.createVersion(songId, metadataRes.cid, masterUrl);
+
+  // 6. Mint on-chain
+  const soroban = new SorobanService();
+  await soroban.mintSong(song.user!.stellarPublicKey, metadataRes.cid);
+
+  logger.info({ songId, fileId }, 'Song processing complete');
+}
+
+/**
+ * Parse and validate a queue message.
+ */
+function parsePayload(raw: string): SongPayload | null {
+  try {
+    const payload = JSON.parse(raw);
+    if (!payload.songId || !payload.fileId) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Handle message failure (retry or DLQ).
+ */
+function handleFailure(channel: any, msg: any, payload: SongPayload, error: unknown): void {
+  const attempt = (payload.attempt ?? 1) + 1;
+  logger.error({ songId: payload.songId, attempt, err: error }, 'Song processing failed');
+
+  if (attempt >= MAX_ATTEMPTS) {
+    logger.error({ songId: payload.songId }, 'Max attempts reached, sending to DLQ');
+    channel.nack(msg, false, false); // Send to DLQ
+  } else {
+    // Requeue with incremented attempt
+    channel.sendToQueue(MAIN_QUEUE, Buffer.from(JSON.stringify({ ...payload, attempt })), {
+      persistent: true,
+      expiration: String(60_000 * attempt), // Exponential backoff
+    });
+    channel.ack(msg);
+  }
 }
 
 export async function startSongWorker() {
   try {
     const channel = getChannel();
-
     const logService = new TransactionLogService();
     const versionService = new SongVersionService();
 
-    // Assert main queue and dead-letter queue before consuming.
     await channel.assertQueue(MAIN_QUEUE, { durable: true });
     await channel.assertQueue(DLQ, { durable: true });
 
     logger.info(`🎵 Waiting for messages in queue: ${MAIN_QUEUE} (max attempts: ${MAX_ATTEMPTS})`);
 
-    // eslint-disable-next-line complexity -- existing handler tracked in docs/refactoring_priority.md
     channel.consume(MAIN_QUEUE, async (msg) => {
       if (!msg) return;
 
-      let payload: { songId: string; fileId: string; attempt?: number };
-      try {
-        payload = JSON.parse(msg.content.toString());
-      } catch {
-        // Malformed message — discard permanently
+      const payload = parsePayload(msg.content.toString());
+      if (!payload) {
         logger.error({ raw: msg.content.toString() }, 'Malformed queue message, discarding');
         channel.nack(msg, false, false);
         return;
       }
 
-      const { songId, fileId } = payload;
       const attempt = payload.attempt ?? 1;
-      const logCtx = { songId, fileId, attempt };
-
-      logger.info(logCtx, `Processing song (attempt ${attempt}/${MAX_ATTEMPTS})`);
+      logger.info(
+        { songId: payload.songId, attempt },
+        `Processing song (attempt ${attempt}/${MAX_ATTEMPTS})`,
+      );
 
       try {
-        const song = await songRepo.findOne({
-          where: { id: songId },
-          relations: ['user'],
-        });
-        if (!song) throw new Error('Song not found');
-
-        const localFile = path.join('uploads/merged', `${fileId}.mp3`);
-        const hlsDir = `uploads/hls/${fileId}`;
-
-        if (!fs.existsSync(hlsDir)) fs.mkdirSync(hlsDir, { recursive: true });
-
-        // Transcode to HLS
-        await new Promise((resolve, reject) => {
-          ffmpeg(localFile)
-            .outputOptions([
-              '-codec: copy',
-              '-start_number 0',
-              '-hls_time 10',
-              '-hls_list_size 0',
-              '-f hls',
-            ])
-            .output(path.join(hlsDir, 'master.m3u8'))
-            .on('end', resolve)
-            .on('error', reject)
-            .run();
-        });
-
-        // Upload HLS to S3
-        const hlsFiles = fs.readdirSync(hlsDir);
-        const s3BasePath = `songs/${songId}/hls/`;
-
-        for (const f of hlsFiles) {
-          const filePath = path.join(hlsDir, f);
-          await s3
-            .upload({
-              Bucket: process.env.AWS_BUCKET_NAME!,
-              Key: `${s3BasePath}${f}`,
-              Body: fs.createReadStream(filePath),
-            })
-            .promise();
-        }
-
-        const masterUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.amazonaws.com/${s3BasePath}master.m3u8`;
-        const tempCoverPath = path.join(os.tmpdir(), `${fileId}-cover.jpg`);
-        const coverResponse = await axios.get<ArrayBuffer>(song.coverArtPath, {
-          responseType: 'arraybuffer',
-        });
-        fs.writeFileSync(tempCoverPath, Buffer.from(coverResponse.data));
-
-        const coverRes = await PinataService.uploadFile(tempCoverPath, `${songId}-cover.jpg`);
-
-        const metadata = {
-          name: song.title,
-          artist: song.artistAddress,
-          description: song.description,
-          image: `ipfs://${coverRes.cid}`,
-          animation_url: masterUrl,
-          attributes: [
-            { trait_type: 'duration', value: song.duration || 0 },
-            { trait_type: 'loudness', value: song.loudness || 0 },
-            { trait_type: 'genre', value: song.genre },
-            { trait_type: 'cover_url', value: coverRes.cid },
-            { trait_type: 'artist_name', value: song?.user.name },
-            { trait_type: 'artist_username', value: song?.user.username },
-            { trait_type: 'Composers', value: song.composers || '' },
-          ],
-        };
-
-        const metadataRes = await PinataService.uploadJSON(metadata, `${songId}-metadata.json`);
-
-        // Update song record
-        song.status = 'ready';
-        song.hlsMasterUrl = masterUrl;
-        song.metadataCid = metadataRes.cid;
-        song.metadata = metadata;
-        await songRepo.save(song);
-
-        // Mirror the processing outputs onto the active revision so each
-        // version keeps its own playable manifest and metadata CID (Issue #86).
-        await versionService
-          .syncActiveVersion(songId, {
-            status: 'ready',
-            hlsMasterUrl: masterUrl,
-            metadataCid: metadataRes.cid,
-            duration: song.duration,
-            loudness: song.loudness,
-            errorReason: null,
-          })
-          .catch((err) => logger.warn({ songId, err }, 'Failed to sync active song version'));
-
-        await precomputeSignedManifest(song.id).catch((err) =>
-          logger.warn({ err }, 'precompute failed'),
-        );
-
-        // Let the artist know their song went live (Issue #79).
-        try {
-          await new NotificationService().create({
-            userId: song.user.id,
-            type: 'song_status',
-            title: 'Song is live',
-            message: `Your song "${song.title}" has finished processing and is now live.`,
-            data: { songId: song.id, status: 'ready' },
-          });
-        } catch (err) {
-          logger.warn({ songId, err }, 'Failed to create song-ready notification');
-        }
-
-        await CacheService.cacheSong(songId, song);
-
-        // Song is now live and searchable — update the precomputed search
-        // index asynchronously (Issue #135).
-        SearchIndexService.scheduleIndexUpdate(song);
-
-        await logService.createLogEntry(
-          song.user.id,
-          '',
-          'SONG_PROCESSED',
-          `Song with ID ${song.id} has been processed and is live. Awaiting artist signature to mint.`,
-        );
-
-        fs.unlinkSync(localFile);
-        fs.rmdirSync(hlsDir, { recursive: true });
-
+        await processSongMessage(payload, logService, versionService);
         channel.ack(msg);
-        logger.info(logCtx, 'Song processed successfully');
-      } catch (err) {
-        logger.error({ ...logCtx, err }, `Song processing failed on attempt ${attempt}`);
-
-        if (attempt < MAX_ATTEMPTS) {
-          // Re-queue with incremented attempt counter after back-off
-          const delay = backoffDelay(attempt);
-          logger.warn(logCtx, `Retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_ATTEMPTS})`);
-
-          setTimeout(() => {
-            try {
-              channel.publish(
-                '',
-                MAIN_QUEUE,
-                Buffer.from(JSON.stringify({ songId, fileId, attempt: attempt + 1 })),
-                { persistent: true },
-              );
-            } catch (publishErr) {
-              logger.error({ ...logCtx, err: publishErr }, 'Failed to re-queue message');
-            }
-          }, delay);
-
-          // Ack the original so it doesn't block the queue while we wait
-          channel.ack(msg);
-        } else {
-          // All attempts exhausted — send to DLQ, update song status, and log for visibility
-          logger.error(
-            logCtx,
-            `Song ${songId} failed after ${MAX_ATTEMPTS} attempts, moving to DLQ`,
-          );
-
-          try {
-            const song = await songRepo.findOne({ where: { id: songId }, relations: ['user'] });
-            if (song) {
-              song.status = 'failed';
-              song.errorReason = (err as Error)?.message || String(err);
-              await songRepo.save(song);
-
-              // Keep the active revision's status in step with the song's
-              // (Issue #86), so a failed re-upload is visible per version.
-              await versionService
-                .syncActiveVersion(songId, {
-                  status: 'failed',
-                  errorReason: song.errorReason,
-                })
-                .catch((syncErr) =>
-                  logger.warn({ songId, err: syncErr }, 'Failed to sync failed song version'),
-                );
-
-              if (song.user?.id) {
-                const logService = new TransactionLogService();
-                await logService.createLogEntry(
-                  song.user.id,
-                  '',
-                  'SONG_FAILED',
-                  `Song ${songId} failed processing after ${MAX_ATTEMPTS} attempts: ${song.errorReason}`,
-                );
-
-                // Notify the artist that processing failed (Issue #79).
-                try {
-                  await new NotificationService().create({
-                    userId: song.user.id,
-                    type: 'song_status',
-                    title: 'Song processing failed',
-                    message: `Your song could not be processed: ${song.errorReason}`,
-                    data: { songId, status: 'failed' },
-                  });
-                } catch (notifyErr) {
-                  logger.warn(
-                    { songId, err: notifyErr },
-                    'Failed to create song-failed notification',
-                  );
-                }
-              }
-            }
-          } catch (updateErr) {
-            logger.error({ songId, err: updateErr }, 'Failed to update song status to FAILED');
-          }
-
-          channel.publish(
-            '',
-            DLQ,
-            Buffer.from(JSON.stringify({ songId, fileId, attempt, error: String(err) })),
-            { persistent: true },
-          );
-
-          channel.ack(msg);
-        }
+      } catch (error) {
+        handleFailure(channel, msg, payload, error);
       }
     });
   } catch (error) {
-    logger.error({ err: error }, '❌ Could not start song worker');
-    logger.warn('⚠️ Worker will retry when RabbitMQ reconnects');
+    logger.error({ err: error }, 'Failed to start song worker');
   }
 }

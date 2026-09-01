@@ -8,6 +8,7 @@ import { UserService } from './../services/UserService';
 import { Request, Response } from 'express';
 import { validate } from 'class-validator';
 import { AppError } from '../errors/AppError';
+import { handleError } from '../utils/helpers';
 import logger from '../config/logger';
 
 function toValidationDetails(errors: { property: string; constraints?: Record<string, string> }[]) {
@@ -341,17 +342,20 @@ export class AuthController {
   private handleError(res: Response, error: unknown): void {
     if (error instanceof AppError) {
       logger.error({ err: error }, error.message);
-      return res.status(error.statusCode).json({ message: error.message, details: error.details });
+      res.status(error.statusCode).json({ message: error.message, details: error.details });
+      return;
     }
 
     if (error instanceof Error) {
       logger.error({ err: error }, error.message);
-      return res.status(400).json({ message: error.message });
+      res.status(400).json({ message: error.message });
+      return;
     }
 
     if (typeof error === 'string') {
       logger.error({ err: error }, error);
-      return res.status(400).json({ message: error });
+      res.status(400).json({ message: error });
+      return;
     }
 
     logger.error({ err: error }, 'Unknown error');

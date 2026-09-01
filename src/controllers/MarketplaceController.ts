@@ -101,7 +101,7 @@ export class MarketplaceController {
         stellarPublicKey,
         Number(tokenId),
         Number(startingPriceInStroops),
-        Number(durationSeconds)
+        Number(durationSeconds),
       );
       return res.status(200).json({ success: true, data: prepared });
     } catch (error) {
@@ -130,7 +130,11 @@ export class MarketplaceController {
           'WALLET_NOT_CONNECTED',
         );
       }
-      const prepared = await marketplaceService.prepareBid(stellarPublicKey, Number(tokenId), Number(bidAmountInStroops));
+      const prepared = await marketplaceService.prepareBid(
+        stellarPublicKey,
+        Number(tokenId),
+        Number(bidAmountInStroops),
+      );
       return res.status(200).json({ success: true, data: prepared });
     } catch (error) {
       handleError(req, res, error);

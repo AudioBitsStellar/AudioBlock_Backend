@@ -1,0 +1,27 @@
+# Grafana provisioning configuration (dashboard-as-code, Issue #382).
+#
+# Consolidated single provisioning file. Grafana reads this from
+# /etc/grafana/provisioning/provisioning.yml inside the container (see
+# docker-compose.yml, which mounts ./monitoring/grafana/provisioning.yml and
+# ./monitoring/dashboards into the container).
+apiVersion: 1
+
+# Prometheus datasource wired to the in-compose Prometheus instance.
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+
+# Dashboard provider points at the version-controlled dashboards directory.
+providers:
+  - name: "AudioBlock Backend"
+    orgId: 1
+    folder: ""
+    type: file
+    disableDeletion: false
+    editable: true
+    updateIntervalSeconds: 10
+    options:
+      path: /etc/grafana/provisioning/dashboards

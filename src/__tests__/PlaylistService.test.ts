@@ -10,6 +10,7 @@ import { PlaylistService } from '../services/PlaylistService';
 import { Playlist } from '../entities/Playlist';
 import { PlaylistSong } from '../entities/PlaylistSong';
 import { PlaylistCollaborator, PlaylistCollaboratorRole } from '../entities/PlaylistCollaborator';
+import { PlaylistFollow } from '../entities/PlaylistFollow';
 import { Song } from '../entities/Song';
 
 const mockPlaylistRepo = {
@@ -35,6 +36,14 @@ const mockCollaboratorRepo = {
   save: jest.fn(),
   delete: jest.fn(),
 };
+const mockFollowRepo = {
+  findOneBy: jest.fn(),
+  find: jest.fn(),
+  insert: jest.fn(),
+  delete: jest.fn(),
+  findAndCount: jest.fn(),
+  count: jest.fn(),
+};
 const mockSongRepo = {
   findOneBy: jest.fn(),
   createQueryBuilder: jest.fn(),
@@ -46,6 +55,7 @@ beforeEach(() => {
     if (entity === Playlist) return mockPlaylistRepo;
     if (entity === PlaylistSong) return mockPlaylistSongRepo;
     if (entity === PlaylistCollaborator) return mockCollaboratorRepo;
+    if (entity === PlaylistFollow) return mockFollowRepo;
     if (entity === Song) return mockSongRepo;
     throw new Error(`Unexpected entity: ${(entity as { name?: string })?.name}`);
   });
@@ -435,5 +445,126 @@ describe('PlaylistService rule-based playlists (Issue #407)', () => {
     expect(getMany).toHaveBeenCalled();
     expect(result.songs).toHaveLength(2);
     expect(result.songs[0].songId).toBe('song-a');
+  });
+});
+
+describe('PlaylistService.moveSong (Issue #409)', () => {
+  const entries = [
+    { id: 'ps-1', playlistId: 'pl-1', songId: 'song-1', position: 0 },
+    { id: 'ps-2', playlistId: 'pl-1', songId: 'song-2', position: 1 },
+    { id: 'ps-3', playlistId: 'pl-1', songId: 'song-3', position: 2 },
+  ];
+
+  it('moves a song to a new position, compacting the order', async () => {
+    mockPlaylistRepo.findOneBy.mockResolvedValue(ownedPlaylist());
+    mockPlaylistSongRepo.find.mockResolvedValue(entries.map((e) => ({ ...e })));
+    mockPlaylistSongRepo.save.mockImplementation(async (saved: PlaylistSong[]) => saved);
+    mockPlaylistRepo.findOne.mockResolvedValue(
+      ownedPlaylist({ songs: [] as unknown as PlaylistSong[] }),
+    );
+
+    const svc = makeSvc();
+    await svc.moveSong('pl-1', 'user-1', 'song-3', 0);
+
+    const saved = mockPlaylistSongRepo.save.mock.calls[0][0] as PlaylistSong[];
+    expect(saved.map((e) => e.songId)).toEqual(['song-3', 'song-1', 'song-2']);
+    expect(saved.map((e) => e.position)).toEqual([0, 1, 2]);
+  });
+
+  it('rejects moving a song that is not in the playlist', async () => {
+    mockPlaylistRepo.findOneBy.mockResolvedValue(ownedPlaylist());
+    mockPlaylistSongRepo.find.mockResolvedValue(entries.map((e) => ({ ...e })));
+
+    const svc = makeSvc();
+    await expect(svc.moveSong('pl-1', 'user-1', 'ghost', 1)).rejects.toMatchObject({
+      statusCode: 404,
+    });
+  });
+
+  it('rejects a negative position', async () => {
+    mockPlaylistRepo.findOneBy.mockResolvedValue(ownedPlaylist());
+
+    const svc = makeSvc();
+    await expect(svc.moveSong('pl-1', 'user-1', 'song-1', -1)).rejects.toMatchObject({
+      statusCode: 400,
+    });
+  });
+
+  it('rejects moving a song in a rule-based playlist', async () => {
+    mockPlaylistRepo.findOneBy.mockResolvedValue(ownedPlaylist({ isRuleBased: true }));
+
+    const svc = makeSvc();
+    await expect(svc.moveSong('pl-1', 'user-1', 'song-1', 0)).rejects.toMatchObject({
+      statusCode: 400,
+    });
+  });
+});
+
+describe('PlaylistService follow (Issue #408)', () => {
+  it('follows a playlist owned by another user', async () => {
+    mockPlaylistRepo.findOneBy.mockResolvedValue(ownedPlaylist({ userId: 'user-2' }));
+    mockFollowRepo.findOneBy.mockResolvedValue(null);
+    mockFollowRepo.count.mockResolvedValue(2);
+
+    const svc = makeSvc();
+    const result = await svc.followPlaylist('user-1', 'pl-1');
+
+    expect(mockFollowRepo.insert).toHaveBeenCalledWith({ userId: 'user-1', playlistId: 'pl-1' });
+    expect(result).toEqual({ followed: true, followerCount: 2 });
+  });
+
+  it('is idempotent when already following', async () => {
+    mockPlaylistRepo.findOneBy.mockResolvedValue(ownedPlaylist({ userId: 'user-2' }));
+    mockFollowRepo.findOneBy.mockResolvedValue({
+      id: 'pf-1',
+      userId: 'user-1',
+      playlistId: 'pl-1',
+    });
+    mockFollowRepo.count.mockResolvedValue(3);
+
+    const svc = makeSvc();
+    const result = await svc.followPlaylist('user-1', 'pl-1');
+
+    expect(mockFollowRepo.insert).not.toHaveBeenCalled();
+    expect(result).toEqual({ followed: false, followerCount: 3 });
+  });
+
+  it('rejects following your own playlist', async () => {
+    mockPlaylistRepo.findOneBy.mockResolvedValue(ownedPlaylist({ userId: 'user-1' }));
+
+    const svc = makeSvc();
+    await expect(svc.followPlaylist('user-1', 'pl-1')).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  it('unfollows a playlist', async () => {
+    mockFollowRepo.delete.mockResolvedValue({ affected: 1 });
+
+    const svc = makeSvc();
+    await svc.unfollowPlaylist('user-1', 'pl-1');
+
+    expect(mockFollowRepo.delete).toHaveBeenCalledWith({ userId: 'user-1', playlistId: 'pl-1' });
+  });
+
+  it('lists followed playlists newest first', async () => {
+    const playlist = ownedPlaylist({ userId: 'user-2', id: 'pl-1' });
+    mockFollowRepo.findAndCount.mockResolvedValue([
+      [{ id: 'pf-1', playlist, createdAt: new Date('2026-01-01') }],
+      1,
+    ]);
+
+    const svc = makeSvc();
+    const result = await svc.listFollowedPlaylists('user-1', 1, 20);
+
+    expect(mockFollowRepo.findAndCount).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: 'user-1' },
+        relations: { playlist: { user: true } },
+        skip: 0,
+        take: 20,
+      }),
+    );
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0].playlist.id).toBe('pl-1');
+    expect(result.pagination.total).toBe(1);
   });
 });

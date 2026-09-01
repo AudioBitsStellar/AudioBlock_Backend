@@ -8,16 +8,25 @@ services:
       - "4000:4000"
     env_file: .env.docker
     environment:
-      # Declared here as a default (Issue #404); overlay files override it.
       - NODE_ENV=development
     depends_on:
       - db
       - redis
-      - rabbitmq
+      # RabbitMQ is optional for the minimal stack (API + DB + Redis). The
+      # backend starts without it and connects lazily; `docker compose up`
+      # (no profile) therefore omits rabbitmq. Use `--profile full` or
+      # `--profile queue` to include it.
     volumes:
       - .:/app
       - /app/node_modules
       - ./uploads:/app/uploads
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:4000/health/live', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
   db:
     container_name: audioblocks-db
     image: postgres:15-alpine
@@ -30,20 +39,32 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   redis:
-    image: redis:7
+    image: redis:7-alpine
     container_name: redis-server
     ports:
       - '6379:6379'
     restart: always
     volumes:
       - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: pgadmin
     restart: always
     ports:
-      - "5050:80"  # Host:Container (access via localhost:5050)
+      - "5050:80"
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@local.com
       PGADMIN_DEFAULT_PASSWORD: admin123
@@ -51,6 +72,9 @@ services:
       - pgadmin_data:/var/lib/pgadmin
     depends_on:
       - db
+    profiles:
+      - full
+      - tools
   rabbitmq:
     image: rabbitmq:3-management
     container_name: rabbitmq
@@ -63,6 +87,10 @@ services:
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
+    profiles:
+      - full
+      - queue
+      - messaging
 
   prometheus:
     image: prom/prometheus:latest
@@ -78,6 +106,10 @@ services:
       - "--storage.tsdb.path=/prometheus"
       - "--web.console.libraries=/usr/share/prometheus/console_libraries"
       - "--web.console.templates=/usr/share/prometheus/consoles"
+    profiles:
+      - full
+      - monitoring
+      - observability
 
   grafana:
     image: grafana/grafana:latest
@@ -90,10 +122,15 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: admin
       GF_INSTALL_PLUGINS: ""
     volumes:
-      - ./monitoring/grafana:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/provisioning.yml:/etc/grafana/provisioning/provisioning.yml:ro
+      - ./monitoring/dashboards:/etc/grafana/provisioning/dashboards:ro
       - grafana_data:/var/lib/grafana
     depends_on:
       - prometheus
+    profiles:
+      - full
+      - monitoring
+      - observability
 
 volumes:
   pgdata:
@@ -102,4 +139,3 @@ volumes:
   rabbitmq_data:
   prometheus_data:
   grafana_data:
-  

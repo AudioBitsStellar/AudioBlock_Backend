@@ -75,6 +75,16 @@ export class Comment {
   @Column({ default: false })
   edited!: boolean;
 
+  /** True once a moderator acted on a comment report (Issue #411). */
+  @Column({ default: false })
+  flagged!: boolean;
+
+  @Column({ type: 'timestamp', nullable: true })
+  flaggedAt?: Date | null;
+
+  @Column({ type: 'text', nullable: true })
+  flagReason?: string | null;
+
   @CreateDateColumn()
   createdAt!: Date;
 

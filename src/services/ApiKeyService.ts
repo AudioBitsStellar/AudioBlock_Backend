@@ -1,8 +1,21 @@
-import { getRepository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { ApiKey, ApiKeyScope } from '../entities/ApiKey';
-import { User } from '../entities/User';
+import { User, UserRole } from '../entities/User';
+import AppDataSource from '../config/db';
 import { AppError } from '../errors/AppError';
-import * as crypto from 'crypto';
+import { ERROR_MESSAGES } from '../config/constants';
+import { Permission, roleHasPermission } from '../types/Permissions';
+import {
+  validateRequired,
+  validateStringLength,
+  validateUUID,
+} from '../validators/ServiceValidator';
+import {
+  generateApiKey,
+  hashApiKey,
+  isApiKeyFormat,
+  timingSafeEqualHex,
+} from '../utils/apiKeyCrypto';
 
 /** Maximum length of the user-supplied key name. */
 const API_KEY_NAME_MAX_LENGTH = 100;
@@ -10,13 +23,18 @@ const API_KEY_NAME_MAX_LENGTH = 100;
 /** Maximum number of simultaneously active keys per user. */
 const MAX_ACTIVE_KEYS_PER_USER = 20;
 
+/** Rate-limit tiers assignable to a key; self-service issuance stays "standard". */
+export const API_KEY_RATE_LIMIT_TIERS = ['standard', 'high', 'unlimited'] as const;
+export type ApiKeyRateLimitTier = (typeof API_KEY_RATE_LIMIT_TIERS)[number];
+
 /** An API key as returned to the client — never carries the hash. */
 export interface ApiKeyView {
   id: string;
   name: string;
-  keyPrefix: string;
-  rateLimitTier: string;
+  keyPrefix?: string;
+  scopes?: ApiKeyScope[];
   permissions: string[];
+  rateLimitTier: string;
   lastUsedAt?: Date;
   revokedAt?: Date;
   createdAt: Date;
@@ -38,8 +56,13 @@ export interface AuthenticatedApiKey {
  * (Issue #89).
  */
 export class ApiKeyService {
-  private apiKeyRepo = getRepository(ApiKey);
-  private userRepo = getRepository(User);
+  private apiKeyRepo: Repository<ApiKey>;
+  private userRepo: Repository<User>;
+
+  constructor() {
+    this.apiKeyRepo = AppDataSource.getRepository(ApiKey);
+    this.userRepo = AppDataSource.getRepository(User);
+  }
 
   /**
    * Issues a new API key for a user.
@@ -49,43 +72,86 @@ export class ApiKeyService {
    *
    * @param userId - Owner of the key
    * @param name - Human-readable label for the key
-   * @param permissions - Requested permission strings (defaults to none)
-   * @param rateLimitTier - Rate limit tier (defaults to 'standard')
+   * @param scopes - Requested coarse-grained scopes (read-only / upload / admin)
+   * @param permissions - Requested fine-grained permission strings. Rejected if
+   *   any permission exceeds what the owning user's role currently holds — a
+   *   key can never grant more than its owner has (enforced again on every
+   *   request in {@link keyHasPermission}, so a later role downgrade also
+   *   revokes it).
+   * @param rateLimitTier - Rate-limit tier for the key. Self-service issuance
+   *   (the public `POST /api/api-keys` route) always passes "standard"; higher
+   *   tiers are only ever assigned by trusted internal callers (e.g. an admin
+   *   flow), never taken directly from client input.
    * @returns The stored key view plus the one-time raw key
-   * @throws {AppError} When the user is missing, the name is invalid, a
-   *   requested permission exceeds the user's role, or the key limit is reached
    */
   async createApiKey(
     userId: string,
     name: string,
     scopes: ApiKeyScope[] = [],
     permissions: string[] = [],
-    rateLimitTier: string = 'standard',
+    rateLimitTier: ApiKeyRateLimitTier = 'standard',
   ): Promise<CreatedApiKey> {
     validateUUID(userId, 'userId');
     validateRequired(name, 'name');
     validateStringLength(name, 'name', 1, API_KEY_NAME_MAX_LENGTH);
 
     const user = await this.userRepo.findOne({ where: { id: userId } });
+
     if (!user) {
-      throw AppError.notFound('User not found');
+      throw AppError.notFound(ERROR_MESSAGES.USER_NOT_FOUND);
     }
 
-    const rawKey = `ab_${crypto.randomBytes(32).toString('hex')}`;
-    const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
+    this.assertPermissionsAllowedForRole(user.role, permissions);
+
+    const activeKeyCount = await this.apiKeyRepo.count({
+      where: { userId, revokedAt: IsNull() },
+    });
+
+    if (activeKeyCount >= MAX_ACTIVE_KEYS_PER_USER) {
+      throw AppError.businessLogic(
+        `API key limit reached (${MAX_ACTIVE_KEYS_PER_USER} active keys). Revoke an existing key first.`,
+      );
+    }
+
+    const { rawKey, keyHash, keyPrefix } = generateApiKey();
 
     const apiKey = this.apiKeyRepo.create({
       userId,
       name,
       keyHash,
       keyPrefix,
-      permissions: requestedPermissions,
+      scopes,
+      permissions,
       rateLimitTier,
     });
 
     const saved = await this.apiKeyRepo.save(apiKey);
 
     return { ...this.toView(saved), rawKey };
+  }
+
+  /**
+   * Rejects issuance when a requested permission is either unrecognized or
+   * exceeds what `role` currently holds — the "never exceed the owner's role"
+   * invariant, enforced at issue time.
+   */
+  private assertPermissionsAllowedForRole(role: UserRole, permissions: string[]): void {
+    for (const permission of permissions) {
+      if (!Object.values(Permission).includes(permission as Permission)) {
+        throw AppError.validation(
+          `Unknown permission: ${permission}`,
+          undefined,
+          'INVALID_PERMISSION',
+        );
+      }
+      if (!roleHasPermission(role, permission as Permission)) {
+        throw AppError.authorization(
+          `Cannot issue a key with permission "${permission}": your role does not hold it`,
+          undefined,
+          'PERMISSION_EXCEEDS_ROLE',
+        );
+      }
+    }
   }
 
   /**
@@ -107,13 +173,11 @@ export class ApiKeyService {
   }
 
   /**
-   * Revokes a key the caller owns. Revocation is idempotent: revoking an
-   * already-revoked key returns it unchanged rather than erroring.
+   * Revokes a key the caller owns.
    *
    * @param userId - Caller, who must own the key
    * @param keyId - Key to revoke
    * @returns The revoked key view
-   * @throws {AppError} When the key does not exist or belongs to another user
    */
   async revokeApiKey(userId: string, keyId: string): Promise<ApiKeyView> {
     validateUUID(userId, 'userId');
@@ -121,94 +185,85 @@ export class ApiKeyService {
 
     const apiKey = await this.apiKeyRepo.findOne({ where: { id: keyId } });
 
-    if (!apiKey) {
+    if (!apiKey || apiKey.userId !== userId) {
       throw AppError.notFound('API key not found');
     }
 
-    if (apiKey.userId !== userId) {
-      throw AppError.authorization('Forbidden: You do not own this API key');
+    if (apiKey.revokedAt) {
+      return this.toView(apiKey);
     }
 
-    if (!apiKey.revokedAt) {
-      apiKey.revokedAt = new Date();
-      await this.apiKeyRepo.save(apiKey);
-    }
+    apiKey.revokedAt = new Date();
+    const saved = await this.apiKeyRepo.save(apiKey);
 
-    return this.toView(apiKey);
+    return this.toView(saved);
   }
 
   /**
-   * Validates a raw API key presented in a request.
+   * Validates a raw API key and resolves the user it authenticates.
    *
-   * @param rawKey - The secret key provided by the caller
-   * @returns The resolved ApiKey entity and its owning User
-   * @throws {AppError} When the key is invalid, revoked, or its owner is missing
+   * @param rawKey - The full raw key from the request
+   * @returns The key record and its owner
    */
   async validateApiKey(rawKey: string): Promise<AuthenticatedApiKey> {
     if (!isApiKeyFormat(rawKey)) {
-      throw AppError.authentication('Unauthorized: Invalid API key format');
+      throw AppError.authentication('Invalid API key');
     }
 
-    const keyPrefix = rawKey.slice(0, 12);
-    const candidates = await this.apiKeyRepo.find({
-      where: { keyPrefix, revokedAt: IsNull() },
+    const keyHash = hashApiKey(rawKey);
+
+    const apiKey = await this.apiKeyRepo.findOne({
+      where: { keyHash },
       relations: ['user'],
     });
 
-    const keyHash = hashApiKey(rawKey);
-    let matchedKey: ApiKey | null = null;
-
-    for (const candidate of candidates) {
-      if (timingSafeEqualHex(candidate.keyHash, keyHash)) {
-        matchedKey = candidate;
-        break;
-      }
+    if (!apiKey || !timingSafeEqualHex(apiKey.keyHash, keyHash)) {
+      throw AppError.authentication('Invalid API key');
     }
 
-    if (!matchedKey || !matchedKey.user) {
-      throw AppError.authentication('Unauthorized: Invalid or revoked API key');
+    if (apiKey.revokedAt) {
+      throw AppError.authentication('API key has been revoked');
     }
 
-    matchedKey.lastUsedAt = new Date();
-    await this.apiKeyRepo.save(matchedKey);
+    if (!apiKey.user) {
+      throw AppError.authentication('Associated user not found');
+    }
 
-    return { apiKey: matchedKey, user: matchedKey.user };
+    return { apiKey, user: apiKey.user };
   }
 
   /**
-   * Checks whether a key has a given permission, and whether its owner's role
-   * still holds that permission.
+   * A key must be explicitly granted `requiredScope` (or `admin`, which
+   * implies every scope). A key issued with no scopes holds none — it does
+   * not fall back to unrestricted access.
    */
-  keyHasPermission(apiKey: ApiKey, user: User, permission: Permission): boolean {
-    if (!apiKey.permissions.includes(permission)) {
+  keyHasScope(apiKey: ApiKey, requiredScope: ApiKeyScope): boolean {
+    if (!apiKey.scopes || apiKey.scopes.length === 0) {
       return false;
     }
-
-    const rolePermissions = ROLE_PERMISSIONS[user.role as keyof typeof ROLE_PERMISSIONS] || [];
-    return rolePermissions.includes(permission);
+    return apiKey.scopes.includes(requiredScope) || apiKey.scopes.includes(ApiKeyScope.ADMIN);
   }
 
-  private normalizePermissions(permissions: string[]): Permission[] {
-    return Array.from(new Set(permissions)) as Permission[];
-  }
-
-  private assertPermissionsWithinRole(permissions: Permission[], user: User): void {
-    const rolePermissions = ROLE_PERMISSIONS[user.role as keyof typeof ROLE_PERMISSIONS] || [];
-    const invalid = permissions.find((p) => !rolePermissions.includes(p));
-
-    if (invalid) {
-      throw AppError.businessLogic(
-        `Permission '${invalid}' exceeds the capabilities of role '${user.role}'`,
-      );
+  /**
+   * A permission is granted only when the key lists it AND the owning user's
+   * role still holds it — so a role downgrade after issuance revokes the
+   * permission immediately, without needing to touch the key itself.
+   */
+  keyHasPermission(apiKey: ApiKey, user: User, permission: string): boolean {
+    if (!apiKey.permissions || !apiKey.permissions.includes(permission)) {
+      return false;
     }
+    return roleHasPermission(user.role, permission as Permission);
+  }
 
   private toView(apiKey: ApiKey): ApiKeyView {
     return {
       id: apiKey.id,
       name: apiKey.name,
       keyPrefix: apiKey.keyPrefix,
-      rateLimitTier: apiKey.rateLimitTier || 'standard',
+      scopes: apiKey.scopes,
       permissions: apiKey.permissions,
+      rateLimitTier: apiKey.rateLimitTier,
       lastUsedAt: apiKey.lastUsedAt,
       revokedAt: apiKey.revokedAt,
       createdAt: apiKey.createdAt,

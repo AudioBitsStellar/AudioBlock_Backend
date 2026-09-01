@@ -3,6 +3,7 @@ import AppDataSource from '../config/db';
 import { Playlist, PlaylistRule } from '../entities/Playlist';
 import { PlaylistSong } from '../entities/PlaylistSong';
 import { PlaylistCollaborator, PlaylistCollaboratorRole } from '../entities/PlaylistCollaborator';
+import { PlaylistFollow } from '../entities/PlaylistFollow';
 import { Song } from '../entities/Song';
 import { AppError } from '../errors/AppError';
 
@@ -29,6 +30,17 @@ export interface AddCollaboratorInput {
   role: PlaylistCollaboratorRole;
 }
 
+/** Result of a follow/unfollow operation, mirroring `UserFollow` counts. */
+export interface PlaylistFollowCounts {
+  followerCount: number;
+}
+
+/** A followed playlist plus its owner, returned by listing endpoints. */
+export interface FollowedPlaylist {
+  playlist: Playlist;
+  followedAt: Date;
+}
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
@@ -50,12 +62,14 @@ export class PlaylistService {
   private playlistRepo: Repository<Playlist>;
   private playlistSongRepo: Repository<PlaylistSong>;
   private collaboratorRepo: Repository<PlaylistCollaborator>;
+  private followRepo: Repository<PlaylistFollow>;
   private songRepo: Repository<Song>;
 
   constructor() {
     this.playlistRepo = AppDataSource.getRepository(Playlist);
     this.playlistSongRepo = AppDataSource.getRepository(PlaylistSong);
     this.collaboratorRepo = AppDataSource.getRepository(PlaylistCollaborator);
+    this.followRepo = AppDataSource.getRepository(PlaylistFollow);
     this.songRepo = AppDataSource.getRepository(Song);
   }
 
@@ -304,8 +318,64 @@ export class PlaylistService {
   }
 
   /**
-   * List the collaborators of a playlist. Reader (owner/collaborator) only.
+   * Move a single song to a new position without requiring the caller to
+   * resend the full playlist (Issue #409). Positions are compacted and kept
+   * stable after the move so the resulting order is deterministic.
+   *
+   * Owner or an editor collaborator may move a song.
    */
+  async moveSong(
+    playlistId: string,
+    userId: string,
+    songId: string,
+    newPosition: number,
+  ): Promise<Playlist> {
+    const playlist = await this.getEditablePlaylist(playlistId, userId);
+    if (playlist.isRuleBased) {
+      throw AppError.validation(
+        'Cannot manually reorder a rule-based playlist',
+        undefined,
+        'PLAYLIST_RULE_BASED',
+      );
+    }
+
+    if (!Number.isInteger(newPosition) || newPosition < 0) {
+      throw AppError.validation(
+        'newPosition must be a non-negative integer',
+        undefined,
+        'PLAYLIST_REORDER_INVALID',
+      );
+    }
+
+    const entries = await this.playlistSongRepo.find({
+      where: { playlistId },
+      order: { position: 'ASC' },
+    });
+
+    const entry = entries.find((e) => e.songId === songId);
+    if (!entry) {
+      throw AppError.notFound('Song is not in this playlist', undefined, 'PLAYLIST_SONG_NOT_FOUND');
+    }
+
+    // Clamp the requested position to the valid range and splice.
+    const maxIndex = entries.length - 1;
+    const target = Math.min(newPosition, maxIndex);
+    if (target === entry.position) {
+      return this.getById(playlistId, userId);
+    }
+
+    const ordered = entries.filter((e) => e.songId !== songId);
+    ordered.splice(target, 0, entry);
+
+    await this.playlistSongRepo.save(
+      ordered.map((e, index) => {
+        e.position = index;
+        return e;
+      }),
+    );
+
+    return this.getById(playlistId, userId);
+  }
   async listCollaborators(playlistId: string, viewerId?: string): Promise<PlaylistCollaborator[]> {
     const playlist = await this.getReadablePlaylist(playlistId, viewerId);
     void playlist;
@@ -410,6 +480,87 @@ export class PlaylistService {
     if (!result.affected) {
       throw AppError.notFound('Collaborator not found on this playlist');
     }
+  }
+
+  /**
+   * Follow (subscribe to) someone else's playlist (Issue #408).
+   *
+   * Idempotent: following a playlist the user already follows is a no-op. The
+   * caller may not follow their own playlist.
+   */
+  async followPlaylist(
+    userId: string,
+    playlistId: string,
+  ): Promise<{ followed: boolean; followerCount: number }> {
+    const playlist = await this.getReadablePlaylist(playlistId, userId);
+    if (playlist.userId === userId) {
+      throw AppError.validation(
+        'You cannot follow your own playlist',
+        undefined,
+        'PLAYLIST_FOLLOW_SELF',
+      );
+    }
+
+    const existing = await this.followRepo.findOneBy({ userId, playlistId });
+    if (existing) {
+      return { followed: false, followerCount: await this.countFollowers(playlistId) };
+    }
+
+    await this.followRepo.insert({ userId, playlistId });
+    return { followed: true, followerCount: await this.countFollowers(playlistId) };
+  }
+
+  /**
+   * Unfollow a playlist (Issue #408). Idempotent.
+   */
+  async unfollowPlaylist(userId: string, playlistId: string): Promise<void> {
+    await this.followRepo.delete({ userId, playlistId });
+  }
+
+  /**
+   * List the playlists a user follows, newest first (Issue #408).
+   */
+  async listFollowedPlaylists(
+    userId: string,
+    page = 1,
+    limit = 20,
+  ): Promise<{
+    data: FollowedPlaylist[];
+    pagination: { page: number; limit: number; total: number; totalPages: number };
+  }> {
+    const safePage = Math.max(1, Math.floor(page) || 1);
+    const safeLimit = Math.min(Math.max(1, Math.floor(limit) || 20), 100);
+
+    const [follows, total] = await this.followRepo.findAndCount({
+      where: { userId },
+      relations: { playlist: { user: true } },
+      order: { createdAt: 'DESC' },
+      skip: (safePage - 1) * safeLimit,
+      take: safeLimit,
+    });
+
+    return {
+      data: follows.map((follow) => ({
+        playlist: follow.playlist,
+        followedAt: follow.createdAt,
+      })),
+      pagination: {
+        page: safePage,
+        limit: safeLimit,
+        total,
+        totalPages: Math.ceil(total / safeLimit) || 0,
+      },
+    };
+  }
+
+  /** Number of listeners following a playlist. */
+  async countFollowers(playlistId: string): Promise<number> {
+    return this.followRepo.count({ where: { playlistId } });
+  }
+
+  /** Whether a user currently follows a playlist. */
+  async isFollowing(userId: string, playlistId: string): Promise<boolean> {
+    return !!(await this.followRepo.findOneBy({ userId, playlistId }));
   }
 
   /**

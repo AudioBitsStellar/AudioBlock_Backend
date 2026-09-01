@@ -9,6 +9,7 @@ import { validateSorobanConfig } from './config/soroban';
 import { validateEnvironment } from './config/env';
 import { startDbPoolMonitor } from './services/DbPoolMonitor';
 import { startJobQueueWorker, startJobQueueMonitor } from './workers/JobQueueWorker';
+import { registerAiJobHandlers } from './workers/AiJobHandlers';
 import logger from './config/logger';
 import { startConnectionStateLogger } from './services/DatabaseConnectionManager';
 import {
@@ -67,6 +68,7 @@ async function main() {
       process.exit(1);
     });
 
+    registerAiJobHandlers();
     startJobQueueWorker();
     startJobQueueMonitor();
 

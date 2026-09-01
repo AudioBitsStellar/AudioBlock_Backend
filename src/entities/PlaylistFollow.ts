@@ -7,36 +7,37 @@ import {
   JoinColumn,
   Index,
   Unique,
-} from "typeorm";
-import { User } from "./User";
-import { Playlist } from "./Playlist";
+} from 'typeorm';
+import { User } from './User';
+import { Playlist } from './Playlist';
 
 /**
- * Playlist follow/subscribe (Issue #408).
+ * A listener following a playlist to receive updates (Issue #408).
  *
- * Listeners can follow a playlist to receive notifications when new songs
- * are added. One follow per user per playlist.
+ * Mirrors the `UserFollow` relation: a follower subscribes to a playlist so
+ * that playlist activity can surface in their feed. The `(userId, playlistId)`
+ * unique constraint prevents duplicate follows from the same listener.
  */
-@Entity("playlist_follows")
-@Unique("UQ_playlist_follow_user_playlist", ["userId", "playlistId"])
-@Index(["playlistId"])
-@Index(["userId"])
+@Entity('playlist_follows')
+@Unique(['userId', 'playlistId'])
 export class PlaylistFollow {
-  @PrimaryGeneratedColumn("uuid")
+  @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column({ type: "uuid" })
+  @Index()
+  @Column()
   userId!: string;
 
-  @ManyToOne(() => User, { onDelete: "CASCADE" })
-  @JoinColumn({ name: "userId" })
+  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'userId' })
   user!: User;
 
-  @Column({ type: "uuid" })
+  @Index()
+  @Column()
   playlistId!: string;
 
-  @ManyToOne(() => Playlist, { onDelete: "CASCADE" })
-  @JoinColumn({ name: "playlistId" })
+  @ManyToOne(() => Playlist, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'playlistId' })
   playlist!: Playlist;
 
   @CreateDateColumn()

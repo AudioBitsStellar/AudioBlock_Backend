@@ -8,81 +8,84 @@ import {
   JoinColumn,
   Index,
   Unique,
-} from "typeorm";
-import { User } from "./User";
-import { Comment } from "./Comment";
+} from 'typeorm';
+import { Comment } from './Comment';
+import { User } from './User';
 
+/** Why a listener flagged a comment (Issue #411). */
 export enum CommentReportReason {
-  SPAM = "spam",
-  HARASSMENT = "harassment",
-  INAPPROPRIATE = "inappropriate",
-  COPYRIGHT = "copyright",
-  OTHER = "other",
+  HARASSMENT = 'harassment',
+  SPAM = 'spam',
+  HATE_SPEECH = 'hate_speech',
+  INAPPROPRIATE = 'inappropriate',
+  OTHER = 'other',
 }
 
+/** Lifecycle of a comment report in the moderation queue. */
 export enum CommentReportStatus {
-  PENDING = "pending",
-  RESOLVED = "resolved",
+  PENDING = 'pending',
+  RESOLVED = 'resolved',
 }
 
+/** What the moderator did about the flagged comment. */
 export enum CommentReportAction {
-  NO_ACTION = "no_action",
-  COMMENT_HIDDEN = "comment_hidden",
-  COMMENT_REMOVED = "comment_removed",
-  USER_WARNED = "user_warned",
-  USER_SUSPENDED = "user_suspended",
-  DISMISSED = "dismissed",
+  NO_ACTION = 'no_action',
+  COMMENT_FLAGGED = 'comment_flagged',
+  COMMENT_REMOVED = 'comment_removed',
+  DISMISSED = 'dismissed',
 }
 
 /**
- * Comment flagging integrated into moderation queue (Issue #411).
+ * A user-submitted report against a comment (Issue #411).
  *
- * When a user flags a comment, it creates a report that appears in the
- * moderation queue alongside song ContentReports. Moderators can review,
- * hide, remove, or take action against the commenter.
+ * Comment reports surface directly in the existing moderation review flow,
+ * carrying full comment context (the comment text and the parent thread). The
+ * `(commentId, reporterId)` unique constraint ensures a single account cannot
+ * file duplicate reports against the same comment.
  */
-@Entity("comment_reports")
-@Unique("UQ_comment_report_user_comment", ["commentId", "reporterId"])
-@Index(["commentId"])
-@Index(["reporterId"])
-@Index(["status"])
+@Entity('comment_reports')
+@Unique('UQ_comment_report_reporter_comment', ['commentId', 'reporterId'])
 export class CommentReport {
-  @PrimaryGeneratedColumn("uuid")
+  @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column({ type: "uuid" })
-  commentId!: string;
-
-  @ManyToOne(() => Comment, { onDelete: "CASCADE" })
-  @JoinColumn({ name: "commentId" })
+  @ManyToOne(() => Comment, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'commentId' })
   comment!: Comment;
 
-  @Column({ type: "uuid" })
-  reporterId!: string;
+  @Index()
+  @Column()
+  commentId!: string;
 
-  @ManyToOne(() => User, { onDelete: "CASCADE" })
-  @JoinColumn({ name: "reporterId" })
+  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'reporterId' })
   reporter!: User;
 
-  @Column({ type: "varchar", default: CommentReportReason.OTHER })
+  @Index()
+  @Column()
+  reporterId!: string;
+
+  @Column({ type: 'varchar', default: CommentReportReason.OTHER })
   reason!: CommentReportReason;
 
-  @Column({ type: "text", nullable: true })
+  @Column({ type: 'text', nullable: true })
   description?: string | null;
 
-  @Column({ type: "varchar", default: CommentReportStatus.PENDING })
+  @Index()
+  @Column({ type: 'varchar', default: CommentReportStatus.PENDING })
   status!: CommentReportStatus;
 
-  @Column({ type: "varchar", nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   actionTaken?: CommentReportAction | null;
 
+  /** Moderator who resolved the report. */
   @Column({ nullable: true })
   resolvedBy?: string | null;
 
-  @Column({ type: "timestamp", nullable: true })
+  @Column({ type: 'timestamp', nullable: true })
   resolvedAt?: Date | null;
 
-  @Column({ type: "text", nullable: true })
+  @Column({ type: 'text', nullable: true })
   resolutionNote?: string | null;
 
   @CreateDateColumn()

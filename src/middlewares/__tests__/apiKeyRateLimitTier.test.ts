@@ -1,9 +1,8 @@
-import request from 'supertest';
 import express from 'express';
 import { requireApiKey } from '../apiKeyMiddleware';
 import { ApiKeyService } from '../../services/ApiKeyService';
 import AppDataSource from '../../config/db';
-import { User } from '../../entities/User';
+import { User, UserRole } from '../../entities/User';
 
 jest.mock('../../config/redis', () => {
   const store = new Map<string, any>();
@@ -20,7 +19,13 @@ jest.mock('../../config/redis', () => {
             return Promise.resolve([null, count]);
           },
           expire: () => {},
-          exec: () => Promise.resolve([[null, 0], [null, 1], [null, 5], [null, 1]])
+          exec: () =>
+            Promise.resolve([
+              [null, 0],
+              [null, 1],
+              [null, 5],
+              [null, 1],
+            ]),
         };
       },
     },
@@ -52,13 +57,13 @@ describe('API Key Rate Limit Tiers', () => {
       email: 'tier@example.com',
       username: 'tieruser',
       passwordHash: 'hash',
-      role: 'admin',
+      role: UserRole.ADMIN,
     });
     await userRepo.save(user);
 
     const service = new ApiKeyService();
-    const standardKey = await service.createApiKey(user.id, 'Standard Key', [], 'standard');
-    const highKey = await service.createApiKey(user.id, 'High Key', [], 'high');
+    const standardKey = await service.createApiKey(user.id, 'Standard Key', [], [], 'standard');
+    const highKey = await service.createApiKey(user.id, 'High Key', [], [], 'high');
 
     expect(standardKey.rateLimitTier).toBe('standard');
     expect(highKey.rateLimitTier).toBe('high');

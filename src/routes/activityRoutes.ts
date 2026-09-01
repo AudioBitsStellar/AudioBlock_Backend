@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import { ActivityController } from '../controllers/ActivityController';
-import { requireAuth, authMiddleware } from '../middlewares/authMiddleware';
+import { requireAuth, optionalAuth } from '../middlewares/authMiddleware';
 
 const router = Router();
 
-router.get('/', authMiddleware, ActivityController.getActivityFeed);
+router.get('/onchain', ActivityController.getOnChainActivity);
+router.get('/', optionalAuth, ActivityController.getActivityFeed);
 router.get('/feed/me', requireAuth, ActivityController.getMyFeed);
 router.get('/users/:id/activities', ActivityController.getUserActivities);
 

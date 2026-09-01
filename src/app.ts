@@ -22,6 +22,12 @@ import embedRoutes from "./routes/embedRoutes";
 import royaltyPayoutRoutes from "./routes/royaltyPayoutRoutes";
 import playlistRoutes from "./routes/playlistRoutes";
 import userRoutes from "./routes/userRoutes";
+import commentRoutes from "./routes/commentRoutes";
+import commentReactionRoutes from "./routes/commentReactionRoutes";
+import subscriptionRoutes from "./routes/subscriptionRoutes";
+import aiRoutes from "./routes/aiRoutes";
+import activityRoutes from "./routes/activityRoutes";
+import activityStreamRoutes from "./routes/activityStreamRoutes";
 
 // Route imports
 
@@ -127,6 +133,22 @@ app.use("/api/users", userRoutes);
 
 //TWITTER CALLBACK ROUTE
 app.use("/api/auth/twitter", twitterRoutes);
+
+// Song comments + replies (Issue #90)
+app.use("/api/comments", commentRoutes);
+
+// Comment reactions: like, heart, fire (Issue #412)
+app.use("/api/comments", commentReactionRoutes);
+
+// Subscriptions: tiered plans, gifting, trial periods (Issues #413, #414, #415, #416)
+app.use("/api/subscriptions", subscriptionRoutes);
+
+// AI-assisted generation (cover art, descriptions) — async, queued via JobQueueService
+app.use("/api/ai", aiRoutes);
+
+// On-chain activity & feeds (REST queries + live SSE stream)
+app.use("/api/activity", activityRoutes);
+app.use("/api/activity", activityStreamRoutes);
 
 
 // Error handling middleware
