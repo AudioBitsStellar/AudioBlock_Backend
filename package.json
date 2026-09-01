@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "ts-node-dev --respawn --trace-warnings --transpile-only src/index.ts",
     "worker": "ts-node src/workers/SongProcessorWorker.ts",
-    "worker:indexer": "ts-node src/workers/IndexerWorker.ts",
+    "worker:indexer": "ts-node src/workers/indexer/index.ts",
+    "cli": "ts-node src/scripts/backfill.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "jest",

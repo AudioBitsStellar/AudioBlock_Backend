@@ -2,6 +2,10 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+# Indexer lag alerting rules (Issue #240).
+rule_files:
+  - "prometheus-alerts.yml"
+
 scrape_configs:
   - job_name: "audioblock-backend"
     static_configs:
