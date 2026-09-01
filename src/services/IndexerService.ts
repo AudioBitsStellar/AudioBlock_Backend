@@ -249,6 +249,13 @@ export class IndexerService {
   }
 
   /**
+   * Get the raw backfill record for a contract + network, or null if none.
+   */
+  async getBackfillStatus(contractId: string, network: string): Promise<BackfillStatus | null> {
+    return this.backfillRepo.findOne({ where: { contractId, network } });
+  }
+
+  /**
    * Get all backfill statuses (for admin visibility).
    */
   async getAllBackfillStatus(): Promise<BackfillInfo[]> {
