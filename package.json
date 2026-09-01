@@ -47,7 +47,7 @@
     "@aws-sdk/client-s3": "^3.916.0",
     "@dynamic-labs-wallet/core": "^0.0.187",
     "@dynamic-labs-wallet/node-evm": "^0.0.187",
-    "@stellar/stellar-sdk": "^16.0.0",
+    "@stellar/stellar-sdk": "^16.3.0",
     "amqplib": "^0.10.9",
     "aws-sdk": "^2.1692.0",
     "axios": "^1.12.2",
