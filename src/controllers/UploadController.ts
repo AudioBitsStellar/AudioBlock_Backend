@@ -53,9 +53,9 @@ export class UploadController {
       const artistId = user.id;
       const artistAddress = user.walletAddress;
 
-      const song = await songService.finalizeUpload(
+      const song = await songService.finalizeUpload({
         fileId,
-        Number(totalChunks),
+        totalChunks: Number(totalChunks),
         title,
         artistId,
         artistAddress,
@@ -63,7 +63,7 @@ export class UploadController {
         genre,
         coverArtPath,
         composers,
-      );
+      });
       return res.status(201).json({ success: true, data: song });
     } catch (err: any) {
       // Surface malware detection as a 422 with a clear artist-facing message
