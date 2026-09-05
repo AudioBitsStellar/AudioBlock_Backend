@@ -19,6 +19,13 @@ entries, and releases.
 9. [Branch Protection](#branch-protection)
 
 ---
+## Issue Labels
+
+- `good-first-issue` is the canonical label for beginner-friendly issues.
+- The variant `good first issue` (with spaces) should not be used — please migrate any
+  issues found using it to `good-first-issue`.
+
+---
 
 ## Getting Started
 
