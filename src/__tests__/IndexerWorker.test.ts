@@ -155,4 +155,91 @@ describe('IndexerWorker', () => {
     expect(outcome.eventsProcessed).toBe(0);
     expect(indexerService.recordProgress).not.toHaveBeenCalled();
   });
+
+  it('counts skipped events when decoder returns null', async () => {
+    const nullDecoderContract: IndexerContract = {
+      ...nftContract,
+      decoder: { decode: () => null } as unknown as typeof nftContract.decoder,
+    };
+
+    const reader = makeReader({
+      latest: 500,
+      pages: [
+        {
+          events: [
+            {
+              id: 'evt-skip-1',
+              ledger: 480,
+              txHash: 'tx-skip-1',
+              contractId: 'CA_NFT',
+              topic: [{ symbol: 'unknown_event' }],
+              value: 'raw',
+            },
+            {
+              id: 'evt-skip-2',
+              ledger: 481,
+              txHash: 'tx-skip-2',
+              contractId: 'CA_NFT',
+              topic: [{ symbol: 'unknown_event' }],
+              value: 'raw',
+            },
+          ],
+          cursor: '',
+          latestLedger: 500,
+        },
+      ],
+    });
+
+    const indexerService = makeIndexerService();
+    const eventService = makeEventService();
+    const worker = new IndexerWorker({
+      contracts: [nullDecoderContract],
+      indexerService,
+      eventService,
+      reader,
+    });
+
+    const outcome = await worker.pollOnce(nullDecoderContract);
+    expect(outcome.eventsSkipped).toBe(2);
+    expect(outcome.eventsProcessed).toBe(0);
+    expect(eventService.upsertEvent).not.toHaveBeenCalled();
+  });
+
+  it('reports errors separately from skipped events when upsert fails', async () => {
+    const indexerService = makeIndexerService();
+    const eventService = makeEventService();
+    eventService.upsertEvent = jest.fn().mockRejectedValue(new Error('DB write failed'));
+
+    const reader = makeReader({
+      latest: 500,
+      pages: [
+        {
+          events: [
+            {
+              id: 'evt-err-1',
+              ledger: 480,
+              txHash: 'tx-err-1',
+              contractId: 'CA_NFT',
+              topic: [{ symbol: 'mint' }, 'GOWNER'],
+              value: 'token-1',
+            },
+          ],
+          cursor: '',
+          latestLedger: 500,
+        },
+      ],
+    });
+
+    const worker = new IndexerWorker({
+      contracts: [nftContract],
+      indexerService,
+      eventService,
+      reader,
+    });
+
+    const outcome = await worker.pollOnce(nftContract);
+    expect(outcome.errors).toBeGreaterThanOrEqual(1);
+    expect(outcome.eventsSkipped).toBe(0);
+    expect(outcome.eventsProcessed).toBe(0);
+  });
 });
