@@ -41,6 +41,7 @@ export interface PollOutcome {
   contractType: string;
   eventsFetched: number;
   eventsProcessed: number;
+  eventsSkipped: number;
   errors: number;
   cursor: string | null;
   latestLedger: number;
@@ -91,6 +92,7 @@ export class IndexerWorker {
   async pollOnce(contract: IndexerContract): Promise<PollOutcome> {
     let eventsFetched = 0;
     let eventsProcessed = 0;
+    let eventsSkipped = 0;
     let errors = 0;
     let cursor: string | null = null;
 
@@ -111,6 +113,7 @@ export class IndexerWorker {
       );
       eventsFetched += initial.fetched;
       eventsProcessed += initial.processed;
+      eventsSkipped += initial.skipped;
       errors += initial.errors;
       cursor = initial.cursor;
 
@@ -121,6 +124,7 @@ export class IndexerWorker {
       );
       eventsFetched += drained.fetched;
       eventsProcessed += drained.processed;
+      eventsSkipped += drained.skipped;
       errors += drained.errors;
       cursor = drained.cursor || cursor;
 
@@ -128,6 +132,7 @@ export class IndexerWorker {
         contractType: contract.contractType,
         eventsFetched,
         eventsProcessed,
+        eventsSkipped,
         errors,
         cursor,
         latestLedger,
@@ -142,6 +147,7 @@ export class IndexerWorker {
         contractType: contract.contractType,
         eventsFetched,
         eventsProcessed,
+        eventsSkipped,
         errors,
         cursor,
         latestLedger: 0,
@@ -158,9 +164,9 @@ export class IndexerWorker {
     start: number | null,
     latestLedger: number,
     prevLedger: number,
-  ): Promise<{ fetched: number; processed: number; errors: number; cursor: string | null }> {
+  ): Promise<{ fetched: number; processed: number; skipped: number; errors: number; cursor: string | null }> {
     if (start === null) {
-      return { fetched: 0, processed: 0, errors: 0, cursor: null };
+      return { fetched: 0, processed: 0, skipped: 0, errors: 0, cursor: null };
     }
 
     const first = await this.reader.fetchEvents({
@@ -173,6 +179,7 @@ export class IndexerWorker {
     return {
       fetched: first.events.length,
       processed: outcome.processed,
+      skipped: outcome.skipped,
       errors: outcome.errors,
       cursor: first.cursor || null,
     };
@@ -185,16 +192,23 @@ export class IndexerWorker {
     contract: IndexerContract,
     startCursor: string | undefined,
     prevLedger: number,
-  ): Promise<{ fetched: number; processed: number; errors: number; cursor: string | null }> {
+  ): Promise<{ fetched: number; processed: number; skipped: number; errors: number; cursor: string | null }> {
     let fetched = 0;
     let processed = 0;
+    let skipped = 0;
     let errors = 0;
     let cursor: string | null = null;
     const seenCursors = new Set<string>();
 
     let pageCursor = startCursor;
     while (pageCursor && !this.stopped) {
-      if (seenCursors.has(pageCursor)) break;
+      if (seenCursors.has(pageCursor)) {
+        logger.warn(
+          { contract: contract.contractType, cursor: pageCursor },
+          'Indexer cursor cycle detected; stopping drain to avoid infinite loop',
+        );
+        break;
+      }
       seenCursors.add(pageCursor);
 
       const page = await this.reader.fetchEvents({
@@ -205,32 +219,52 @@ export class IndexerWorker {
       const outcome = await this.persistProgress(contract, page, prevLedger);
       fetched += page.events.length;
       processed += outcome.processed;
+      skipped += outcome.skipped;
       errors += outcome.errors;
       cursor = page.cursor || cursor;
       pageCursor = page.cursor || undefined;
     }
 
-    return { fetched, processed, errors, cursor };
+    return { fetched, processed, skipped, errors, cursor };
   }
 
   private async persistProgress(
     contract: IndexerContract,
     page: EventsPage,
     prevLedger: number,
-  ): Promise<{ processed: number; errors: number }> {
+  ): Promise<{ processed: number; skipped: number; errors: number }> {
     let processed = 0;
+    let skipped = 0;
     let errors = 0;
 
     for (const event of page.events) {
       const dto = contract.decoder.decode(event);
-      if (!dto) continue;
+      if (!dto) {
+        skipped += 1;
+        logger.warn(
+          {
+            contract: contract.contractType,
+            eventId: event.id,
+            ledger: event.ledger,
+            txHash: event.txHash,
+          },
+          'Indexer skipped event: decoder returned null (unknown or malformed event type)',
+        );
+        continue;
+      }
       try {
         await this.eventService.upsertEvent(dto);
         processed += 1;
       } catch (err) {
         errors += 1;
         logger.error(
-          { contract: contract.contractType, eventId: event.id, err },
+          {
+            contract: contract.contractType,
+            eventId: event.id,
+            ledger: event.ledger,
+            txHash: event.txHash,
+            err,
+          },
           'Failed to persist indexed event',
         );
       }
@@ -247,7 +281,14 @@ export class IndexerWorker {
       this.guardFor(contract.contractType).updateCursor(highestLedger);
     }
 
-    return { processed, errors };
+    if (skipped > 0) {
+      logger.warn(
+        { contract: contract.contractType, skipped, ledgerRange: `${prevLedger}-${highestLedger}` },
+        'Indexer batch contained skipped events',
+      );
+    }
+
+    return { processed, skipped, errors };
   }
 
   /**
