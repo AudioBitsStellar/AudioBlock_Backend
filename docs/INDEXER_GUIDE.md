@@ -9,6 +9,22 @@ The AudioBlock indexer tracks blockchain events from Stellar/Soroban smart contr
 - [ADR-010: Indexer Architecture](./adrs/010-indexer-architecture.md)
 - [Indexer Backfill Runbook](./indexer-backfill-runbook.md)
 
+## Subgraph Queries
+
+Subgraph artist and song queries use ID-cursor pagination and pin every page to
+the same indexed block. The client checks the block number and hash across pages,
+rejects snapshots with indexing errors, and retries an inconsistent snapshot
+before returning an error. Transient connection, timeout, rate-limit, and server
+errors use bounded exponential backoff; GraphQL and client errors are reported
+without retrying.
+
+The query behavior can be tuned with `SUBGRAPH_QUERY_RETRY_ATTEMPTS`,
+`SUBGRAPH_QUERY_TIMEOUT_MS`, `SUBGRAPH_QUERY_RETRY_BASE_DELAY_MS`,
+`SUBGRAPH_QUERY_PAGE_SIZE`, and `SUBGRAPH_QUERY_CONSISTENCY_RETRIES`.
+Defaults are 3 attempts, 5000 ms, 100 ms, 1000 entities, and 1 snapshot retry.
+The entity-level RPC fallback is not implemented, so fallback results report an
+error instead of returning a successful empty list.
+
 ## Quick Start
 
 ### 1. Configure Environment Variables
