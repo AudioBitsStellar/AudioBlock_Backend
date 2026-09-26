@@ -21,9 +21,9 @@ dataSources:
         - name: ArtistFacet
           file: ./abis/ArtistFacet.json
       eventHandlers:
-        - event: ArtistRegistered(indexed string,string)
+        - event: ArtistRegistered(indexed address,string)
           handler: handleArtistRegistered
-        - event: ArtistUpdated(indexed string,string)
+        - event: ArtistUpdated(indexed address,string)
           handler: handleArtistUpdated
       file: ./src/mappings/artist.ts
 
@@ -41,14 +41,26 @@ dataSources:
       entities:
         - Song
         - SongEvent
+        - Like
+        - LikeEvent
+        - Comment
+        - CommentEvent
       abis:
         - name: SongFacet
           file: ./abis/SongFacet.json
       eventHandlers:
-        - event: SongUploaded(indexed string,indexed string,string)
+        - event: SongUploaded(indexed string,indexed address,string,string)
           handler: handleSongUploaded
         - event: SongMetadataUpdated(indexed string,string)
           handler: handleSongMetadataUpdated
+        - event: SongLiked(indexed string,indexed address)
+          handler: handleSongLiked
+        - event: SongUnliked(indexed string,indexed address)
+          handler: handleSongUnliked
+        - event: CommentAdded(indexed string,indexed address,string,string)
+          handler: handleCommentAdded
+        - event: CommentRemoved(indexed string,indexed address,string)
+          handler: handleCommentRemoved
       file: ./src/mappings/song.ts
 
   - kind: ethereum
@@ -65,6 +77,8 @@ dataSources:
       entities:
         - Album
         - AlbumEvent
+        - Song
+        - MintEvent
       abis:
         - name: AlbumFacet
           file: ./abis/AlbumFacet.json
@@ -73,7 +87,32 @@ dataSources:
           handler: handleAlbumCreated
         - event: AlbumUpdated(indexed string,string)
           handler: handleAlbumUpdated
+        - event: SongUploadedSuccessfully(indexed uint256,indexed uint256,indexed address,string)
+          handler: handleSongUploadedSuccessfully
       file: ./src/mappings/album.ts
+
+  - kind: ethereum
+    name: ERC721Facet
+    network: stellar
+    source:
+      address: "${ERC721_FACET_ADDRESS}"
+      abi: ERC721Facet
+      startBlock: ${START_BLOCK}
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Song
+        - TransferEvent
+        - MintEvent
+      abis:
+        - name: ERC721Facet
+          file: ./abis/ERC721Facet.json
+      eventHandlers:
+        - event: Transfer(indexed address,indexed address,indexed uint256)
+          handler: handleTransfer
+      file: ./src/mappings/erc721.ts
 
   - kind: ethereum
     name: RoyaltyFacet
@@ -112,12 +151,15 @@ dataSources:
       language: wasm/assemblyscript
       entities:
         - MarketplaceEvent
+        - Sale
+        - Song
+        - Artist
       abis:
         - name: MarketplaceFacet
           file: ./abis/MarketplaceFacet.json
       eventHandlers:
-        - event: ItemListed(indexed string,indexed string,uint256)
+        - event: ItemListed(indexed address,indexed string,uint256)
           handler: handleItemListed
-        - event: ItemSold(indexed string,indexed string,indexed string)
+        - event: ItemSold(indexed address,indexed address,string)
           handler: handleItemSold
       file: ./src/mappings/marketplace.ts

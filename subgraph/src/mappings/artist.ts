@@ -3,12 +3,15 @@ import { Artist, ArtistEvent } from '../generated/schema';
 import { BigInt } from '@graphprotocol/graph-ts';
 
 export function handleArtistRegistered(event: ArtistRegistered): void {
-  const artistId = event.params.wallet;
+  const artistId = event.params.wallet.toHex();
   let artist = Artist.load(artistId);
 
   if (!artist) {
     artist = new Artist(artistId);
-    artist.wallet = event.params.wallet;
+    artist.wallet = event.params.wallet.toHex();
+    artist.totalTracks = BigInt.fromI32(0);
+    artist.totalSalesCount = BigInt.fromI32(0);
+    artist.totalVolume = BigInt.fromI32(0);
   }
 
   artist.name = event.params.name;
@@ -27,12 +30,15 @@ export function handleArtistRegistered(event: ArtistRegistered): void {
 }
 
 export function handleArtistUpdated(event: ArtistUpdated): void {
-  const artistId = event.params.wallet;
+  const artistId = event.params.wallet.toHex();
   let artist = Artist.load(artistId);
 
   if (!artist) {
     artist = new Artist(artistId);
-    artist.wallet = event.params.wallet;
+    artist.wallet = event.params.wallet.toHex();
+    artist.totalTracks = BigInt.fromI32(0);
+    artist.totalSalesCount = BigInt.fromI32(0);
+    artist.totalVolume = BigInt.fromI32(0);
     artist.createdAt = event.block.timestamp;
   }
 

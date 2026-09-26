@@ -54,6 +54,9 @@ export interface ArtistQueryResult {
   id: string;
   name: string;
   wallet: string;
+  totalTracks?: string;
+  totalSalesCount?: string;
+  totalVolume?: string;
   createdAt: string;
 }
 
@@ -61,7 +64,88 @@ export interface SongQueryResult {
   id: string;
   title: string;
   artist: string;
+  tokenId?: string;
+  owner?: string;
+  price?: string;
+  isListed?: boolean;
+  isMinted?: boolean;
+  salesCount?: string;
+  likeCount?: string;
+  commentCount?: string;
   createdAt: string;
+}
+
+export interface SaleQueryResult {
+  id: string;
+  song: { id: string; title: string } | string;
+  artist: { id: string; name: string } | string;
+  seller: string;
+  buyer: string;
+  price: string;
+  tokenId: string;
+  txHash: string;
+  ledger: string;
+  createdAt: string;
+}
+
+export interface TransferQueryResult {
+  id: string;
+  song?: { id: string; title: string } | null;
+  tokenId: string;
+  from: string;
+  to: string;
+  txHash: string;
+  ledger: string;
+  createdAt: string;
+}
+
+export interface MintQueryResult {
+  id: string;
+  song: { id: string; title: string } | string;
+  artist: { id: string; name: string } | string;
+  minter: string;
+  tokenId: string;
+  tokenUri?: string;
+  txHash: string;
+  ledger: string;
+  createdAt: string;
+}
+
+export interface LikeQueryResult {
+  id: string;
+  song: string;
+  user: string;
+  createdAt: string;
+  txHash: string;
+}
+
+export interface CommentQueryResult {
+  id: string;
+  song: string;
+  author: string;
+  content: string;
+  createdAt: string;
+  txHash: string;
+}
+
+export interface ArtistHierarchyQueryResult {
+  id: string;
+  name: string;
+  wallet: string;
+  totalTracks: string;
+  totalSalesCount: string;
+  totalVolume: string;
+  tracks: Array<{
+    id: string;
+    title: string;
+    tokenId?: string;
+    owner?: string;
+    salesCount?: string;
+    likeCount?: string;
+    commentCount?: string;
+    sales?: SaleQueryResult[];
+  }>;
+  sales: SaleQueryResult[];
 }
 
 export class SubgraphQueryService {
@@ -159,6 +243,237 @@ export class SubgraphQueryService {
     }
     return {
       data: result.data,
+      source: 'subgraph',
+      error: result.error,
+      fallbackUsed: false,
+    };
+  }
+
+  /**
+   * Query full artist hierarchy (Artist -> Tracks -> Sales) from subgraph.
+   */
+  async queryArtistHierarchy(
+    artistId: string,
+  ): Promise<SubgraphQueryResult<ArtistHierarchyQueryResult | null>> {
+    const query = `
+      query GetArtistHierarchy($artistId: ID!) {
+        artist(id: $artistId) {
+          id
+          name
+          wallet
+          totalTracks
+          totalSalesCount
+          totalVolume
+          tracks {
+            id
+            title
+            tokenId
+            owner
+            salesCount
+            likeCount
+            commentCount
+            sales {
+              id
+              price
+              seller
+              buyer
+              createdAt
+            }
+          }
+          sales {
+            id
+            price
+            seller
+            buyer
+            tokenId
+            txHash
+            createdAt
+          }
+        }
+      }
+    `;
+
+    const result = await this.querySubgraph<{ artist: ArtistHierarchyQueryResult | null }>(query, {
+      artistId,
+    });
+
+    return {
+      data: result.data?.artist ?? null,
+      source: 'subgraph',
+      error: result.error,
+      fallbackUsed: false,
+    };
+  }
+
+  /**
+   * Query sales from the subgraph.
+   */
+  async querySales(limit: number = 100): Promise<SubgraphQueryResult<SaleQueryResult[]>> {
+    const query = `
+      query GetSales($first: Int!) {
+        sales(first: $first, orderBy: createdAt, orderDirection: desc) {
+          id
+          price
+          tokenId
+          seller
+          buyer
+          txHash
+          ledger
+          createdAt
+          song {
+            id
+            title
+          }
+          artist {
+            id
+            name
+          }
+        }
+      }
+    `;
+
+    const result = await this.querySubgraph<{ sales: SaleQueryResult[] }>(query, {
+      first: limit,
+    });
+
+    return {
+      data: result.data?.sales ?? null,
+      source: 'subgraph',
+      error: result.error,
+      fallbackUsed: false,
+    };
+  }
+
+  /**
+   * Query transfers from the subgraph.
+   */
+  async queryTransfers(limit: number = 100): Promise<SubgraphQueryResult<TransferQueryResult[]>> {
+    const query = `
+      query GetTransfers($first: Int!) {
+        transferEvents(first: $first, orderBy: createdAt, orderDirection: desc) {
+          id
+          tokenId
+          from
+          to
+          txHash
+          ledger
+          createdAt
+          song {
+            id
+            title
+          }
+        }
+      }
+    `;
+
+    const result = await this.querySubgraph<{ transferEvents: TransferQueryResult[] }>(query, {
+      first: limit,
+    });
+
+    return {
+      data: result.data?.transferEvents ?? null,
+      source: 'subgraph',
+      error: result.error,
+      fallbackUsed: false,
+    };
+  }
+
+  /**
+   * Query NFT mints from the subgraph.
+   */
+  async queryMints(limit: number = 100): Promise<SubgraphQueryResult<MintQueryResult[]>> {
+    const query = `
+      query GetMints($first: Int!) {
+        mintEvents(first: $first, orderBy: createdAt, orderDirection: desc) {
+          id
+          tokenId
+          minter
+          tokenUri
+          txHash
+          ledger
+          createdAt
+          song {
+            id
+            title
+          }
+          artist {
+            id
+            name
+          }
+        }
+      }
+    `;
+
+    const result = await this.querySubgraph<{ mintEvents: MintQueryResult[] }>(query, {
+      first: limit,
+    });
+
+    return {
+      data: result.data?.mintEvents ?? null,
+      source: 'subgraph',
+      error: result.error,
+      fallbackUsed: false,
+    };
+  }
+
+  /**
+   * Query engagement (likes & comments) for a track.
+   */
+  async queryTrackEngagement(songId: string): Promise<
+    SubgraphQueryResult<{
+      likes: LikeQueryResult[];
+      comments: CommentQueryResult[];
+      likeCount: string;
+      commentCount: string;
+    } | null>
+  > {
+    const query = `
+      query GetTrackEngagement($songId: ID!) {
+        song(id: $songId) {
+          likeCount
+          commentCount
+          likes(orderBy: createdAt, orderDirection: desc) {
+            id
+            user
+            createdAt
+            txHash
+          }
+          comments(orderBy: createdAt, orderDirection: desc) {
+            id
+            author
+            content
+            createdAt
+            txHash
+          }
+        }
+      }
+    `;
+
+    const result = await this.querySubgraph<{
+      song: {
+        likeCount: string;
+        commentCount: string;
+        likes: LikeQueryResult[];
+        comments: CommentQueryResult[];
+      } | null;
+    }>(query, { songId });
+
+    if (!result.data?.song) {
+      return {
+        data: null,
+        source: 'subgraph',
+        error: result.error,
+        fallbackUsed: false,
+      };
+    }
+
+    return {
+      data: {
+        likes: result.data.song.likes,
+        comments: result.data.song.comments,
+        likeCount: result.data.song.likeCount,
+        commentCount: result.data.song.commentCount,
+      },
       source: 'subgraph',
       error: result.error,
       fallbackUsed: false,
