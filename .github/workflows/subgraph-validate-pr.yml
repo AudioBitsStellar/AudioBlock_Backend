@@ -83,6 +83,7 @@ jobs:
           [ -f "src/mappings/album.ts" ] || (echo "Error: album.ts mapping not found" && exit 1)
           [ -f "src/mappings/royalty.ts" ] || (echo "Error: royalty.ts mapping not found" && exit 1)
           [ -f "src/mappings/marketplace.ts" ] || (echo "Error: marketplace.ts mapping not found" && exit 1)
+          [ -f "src/mappings/erc721.ts" ] || (echo "Error: erc721.ts mapping not found" && exit 1)
 
       - name: Comment PR on success
         if: success()

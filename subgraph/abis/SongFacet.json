@@ -40,5 +40,84 @@
         "indexed": false
       }
     ]
+  },
+  {
+    "type": "event",
+    "name": "SongLiked",
+    "inputs": [
+      {
+        "type": "string",
+        "name": "songId",
+        "indexed": true
+      },
+      {
+        "type": "address",
+        "name": "user",
+        "indexed": true
+      }
+    ]
+  },
+  {
+    "type": "event",
+    "name": "SongUnliked",
+    "inputs": [
+      {
+        "type": "string",
+        "name": "songId",
+        "indexed": true
+      },
+      {
+        "type": "address",
+        "name": "user",
+        "indexed": true
+      }
+    ]
+  },
+  {
+    "type": "event",
+    "name": "CommentAdded",
+    "inputs": [
+      {
+        "type": "string",
+        "name": "songId",
+        "indexed": true
+      },
+      {
+        "type": "address",
+        "name": "user",
+        "indexed": true
+      },
+      {
+        "type": "string",
+        "name": "commentId",
+        "indexed": false
+      },
+      {
+        "type": "string",
+        "name": "content",
+        "indexed": false
+      }
+    ]
+  },
+  {
+    "type": "event",
+    "name": "CommentRemoved",
+    "inputs": [
+      {
+        "type": "string",
+        "name": "songId",
+        "indexed": true
+      },
+      {
+        "type": "address",
+        "name": "user",
+        "indexed": true
+      },
+      {
+        "type": "string",
+        "name": "commentId",
+        "indexed": false
+      }
+    ]
   }
 ]

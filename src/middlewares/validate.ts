@@ -7,6 +7,7 @@ export interface FieldValidationErrorDetail {
   field: string;
   message: string;
   value?: unknown;
+  [key: string]: unknown;
 }
 
 /**

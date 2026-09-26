@@ -7,6 +7,17 @@ module.exports = {
   moduleNameMapper: {
     "^reflect-metadata$": "<rootDir>/node_modules/reflect-metadata",
   },
+  transform: {
+    "^.+\\.[tj]sx?$": [
+      "ts-jest",
+      {
+        isolatedModules: true,
+      },
+    ],
+  },
+  transformIgnorePatterns: [
+    "node_modules/(?!(@stellar|@noble|@simplewebauthn|uint8array-extras)/)",
+  ],
   // Coverage collection — run with `npm run test:coverage` (#396).
   // CI fails when any metric drops below these thresholds.
   collectCoverageFrom: [
