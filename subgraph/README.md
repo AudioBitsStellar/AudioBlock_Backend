@@ -29,7 +29,11 @@ Environment variables required for deployment (in GitHub Actions secrets):
 ```
 GRAPH_DEPLOY_TOKEN_TESTNET  # The Graph Studio API token for testnet
 GRAPH_DEPLOY_TOKEN_MAINNET  # The Graph Studio API token for mainnet
+GRAPH_DEPLOY_TOKEN          # Optional shared fallback token
 ```
+
+The deploy script reads the environment-specific token first, then falls back to
+`GRAPH_DEPLOY_TOKEN`. Do not commit Studio deploy tokens or query API keys.
 
 Contract addresses are passed via environment variables in subgraph.yaml substitution:
 
@@ -74,6 +78,14 @@ npm run deploy:testnet
 npm run deploy:mainnet
 ```
 
+The deploy commands call `scripts/deploy.js`, which wraps `graph deploy` with
+the correct Studio slug and access token:
+
+```bash
+GRAPH_DEPLOY_TOKEN_TESTNET=... npm run deploy:testnet
+GRAPH_DEPLOY_TOKEN_MAINNET=... npm run deploy:mainnet
+```
+
 ## Architecture
 
 ### Schema
@@ -112,9 +124,16 @@ If the subgraph is unavailable or undeployed, the backend automatically falls ba
 
 ```env
 GRAPH_SUBGRAPH_URL=https://api.studio.thegraph.com/query/...
+GRAPH_SUBGRAPH_API_KEY=... # optional bearer token for endpoints that support it
+GRAPH_SUBGRAPH_ENDPOINT_TEMPLATE=https://gateway.thegraph.com/api/{apiKey}/subgraphs/id/<SUBGRAPH_ID>
 SUBGRAPH_ENABLED=false  # Set to true once deployed
 SUBGRAPH_FALLBACK_ENABLED=true
 ```
+
+Use either `GRAPH_SUBGRAPH_URL` for a complete endpoint or
+`GRAPH_SUBGRAPH_ENDPOINT_TEMPLATE` plus `GRAPH_SUBGRAPH_API_KEY` when the query
+API key must be embedded in the gateway URL. Health reports redact the configured
+API key.
 
 ## Backfill & Historical Data
 
