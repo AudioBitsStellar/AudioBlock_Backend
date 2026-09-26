@@ -25,6 +25,13 @@ Defaults are 3 attempts, 5000 ms, 100 ms, 1000 entities, and 1 snapshot retry.
 The entity-level RPC fallback is not implemented, so fallback results report an
 error instead of returning a successful empty list.
 
+Configure the query endpoint with `GRAPH_SUBGRAPH_URL` when the full URL is
+already available. For gateway-style URLs that include an API key, set
+`GRAPH_SUBGRAPH_ENDPOINT_TEMPLATE` with a `{apiKey}` placeholder and store the
+secret in `GRAPH_SUBGRAPH_API_KEY`. The backend substitutes and redacts the key
+in health output. Deploy tokens are separate from query keys and should live in
+CI secrets as `GRAPH_DEPLOY_TOKEN_TESTNET` and `GRAPH_DEPLOY_TOKEN_MAINNET`.
+
 ## Quick Start
 
 ### 1. Configure Environment Variables

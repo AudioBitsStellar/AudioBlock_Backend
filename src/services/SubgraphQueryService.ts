@@ -22,6 +22,8 @@ interface SubgraphMeta {
 }
 
 interface SubgraphQueryConfig {
+  apiKey?: string;
+  endpointTemplate?: string;
   retryAttempts?: number;
   requestTimeoutMs?: number;
   retryBaseDelayMs?: number;
@@ -64,8 +66,76 @@ export interface SongQueryResult {
   createdAt: string;
 }
 
+export class GraphQLClient {
+  private endpoint: string;
+  private apiKey: string;
+  private timeoutMs: number;
+
+  constructor(endpoint: string, apiKey: string, timeoutMs: number) {
+    this.endpoint = GraphQLClient.resolveEndpoint(endpoint, apiKey);
+    this.apiKey = apiKey;
+    this.timeoutMs = timeoutMs;
+  }
+
+  async request<T>(
+    query: string,
+    variables?: Record<string, number | string>,
+  ): Promise<{ data: T | null; error: string | null }> {
+    if (!this.endpoint) {
+      return { data: null, error: 'Subgraph URL not configured' };
+    }
+
+    const response = await axios.post(
+      this.endpoint,
+      { query, variables },
+      {
+        timeout: this.timeoutMs,
+        headers: this.buildHeaders(),
+      },
+    );
+
+    if (response.data.errors) {
+      return { data: null, error: `GraphQL error: ${JSON.stringify(response.data.errors)}` };
+    }
+
+    if (response.data.data === undefined || response.data.data === null) {
+      return { data: null, error: 'Subgraph response did not contain data' };
+    }
+
+    return { data: response.data.data as T, error: null };
+  }
+
+  getEndpointForHealthReport(): string {
+    if (!this.endpoint) return 'Not configured';
+    if (!this.apiKey) return this.endpoint;
+    return GraphQLClient.replaceAll(
+      GraphQLClient.replaceAll(this.endpoint, this.apiKey, '[redacted]'),
+      encodeURIComponent(this.apiKey),
+      '[redacted]',
+    );
+  }
+
+  private buildHeaders(): Record<string, string> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (this.apiKey && !this.endpoint.includes(this.apiKey)) {
+      headers.Authorization = `Bearer ${this.apiKey}`;
+    }
+    return headers;
+  }
+
+  private static resolveEndpoint(endpoint: string, apiKey: string): string {
+    if (!endpoint) return '';
+    if (!apiKey) return endpoint;
+    return GraphQLClient.replaceAll(endpoint, '{apiKey}', encodeURIComponent(apiKey));
+  }
+
+  private static replaceAll(value: string, search: string, replacement: string): string {
+    return value.split(search).join(replacement);
+  }
+}
+
 export class SubgraphQueryService {
-  private subgraphUrl: string;
+  private graphClient: GraphQLClient;
   private rpcReader: SorobanEventReader;
   private fallbackEnabled: boolean;
   private retryAttempts: number;
@@ -79,7 +149,6 @@ export class SubgraphQueryService {
     rpcReader?: SorobanEventReader,
     config: SubgraphQueryConfig = {},
   ) {
-    this.subgraphUrl = subgraphUrl || process.env.GRAPH_SUBGRAPH_URL || '';
     this.rpcReader = rpcReader || new SorobanEventReader();
     this.fallbackEnabled = process.env.SUBGRAPH_FALLBACK_ENABLED !== 'false';
     this.retryAttempts = Math.max(
@@ -121,6 +190,14 @@ export class SubgraphQueryService {
         ),
       ),
     );
+    const apiKey = config.apiKey ?? process.env.GRAPH_SUBGRAPH_API_KEY ?? '';
+    const endpoint =
+      subgraphUrl ||
+      config.endpointTemplate ||
+      process.env.GRAPH_SUBGRAPH_URL ||
+      process.env.GRAPH_SUBGRAPH_ENDPOINT_TEMPLATE ||
+      '';
+    this.graphClient = new GraphQLClient(endpoint, apiKey, this.requestTimeoutMs);
   }
 
   /**
@@ -290,29 +367,9 @@ export class SubgraphQueryService {
     query: string,
     variables?: Record<string, number | string>,
   ): Promise<{ data: T | null; error: string | null }> {
-    if (!this.subgraphUrl) {
-      return { data: null, error: 'Subgraph URL not configured' };
-    }
-
     for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {
       try {
-        const response = await axios.post(
-          this.subgraphUrl,
-          { query, variables },
-          {
-            timeout: this.requestTimeoutMs,
-            headers: { 'Content-Type': 'application/json' },
-          },
-        );
-
-        if (response.data.errors) {
-          return { data: null, error: `GraphQL error: ${JSON.stringify(response.data.errors)}` };
-        }
-
-        if (response.data.data === undefined || response.data.data === null) {
-          return { data: null, error: 'Subgraph response did not contain data' };
-        }
-        return { data: response.data.data as T, error: null };
+        return await this.graphClient.request<T>(query, variables);
       } catch (error) {
         const axError = error as AxiosError;
         const status = axError.response?.status;
@@ -404,7 +461,7 @@ export class SubgraphQueryService {
     return {
       subgraphHealthy: await this.isSubgraphHealthy(),
       fallbackEnabled: this.fallbackEnabled,
-      subgraphUrl: this.subgraphUrl || 'Not configured',
+      subgraphUrl: this.graphClient.getEndpointForHealthReport(),
     };
   }
 

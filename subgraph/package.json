@@ -4,8 +4,9 @@
   "description": "The Graph subgraph for AudioBlock on Stellar/Soroban",
   "scripts": {
     "build": "graph build",
-    "deploy:testnet": "graph deploy --node https://api.studio.thegraph.com/deploy/ AudioBitsStellar/audioblock-testnet",
-    "deploy:mainnet": "graph deploy --node https://api.studio.thegraph.com/deploy/ AudioBitsStellar/audioblock",
+    "deploy": "node scripts/deploy.js",
+    "deploy:testnet": "node scripts/deploy.js --environment testnet",
+    "deploy:mainnet": "node scripts/deploy.js --environment mainnet",
     "codegen": "graph codegen",
     "test": "graph test"
   },
