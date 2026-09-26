@@ -1,0 +1,44 @@
+[
+  {
+    "type": "event",
+    "name": "SongUploaded",
+    "inputs": [
+      {
+        "type": "string",
+        "name": "songId",
+        "indexed": true
+      },
+      {
+        "type": "address",
+        "name": "artistId",
+        "indexed": true
+      },
+      {
+        "type": "string",
+        "name": "contentHash",
+        "indexed": false
+      },
+      {
+        "type": "string",
+        "name": "metadata",
+        "indexed": false
+      }
+    ]
+  },
+  {
+    "type": "event",
+    "name": "SongMetadataUpdated",
+    "inputs": [
+      {
+        "type": "string",
+        "name": "songId",
+        "indexed": true
+      },
+      {
+        "type": "string",
+        "name": "newMetadata",
+        "indexed": false
+      }
+    ]
+  }
+]

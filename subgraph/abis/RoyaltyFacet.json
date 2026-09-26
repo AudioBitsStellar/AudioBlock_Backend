@@ -1,0 +1,24 @@
+[
+  {
+    "type": "event",
+    "name": "RoyaltySplitCreated",
+    "inputs": [
+      {
+        "type": "string",
+        "name": "royaltyId",
+        "indexed": true
+      }
+    ]
+  },
+  {
+    "type": "event",
+    "name": "RoyaltyPayoutProcessed",
+    "inputs": [
+      {
+        "type": "string",
+        "name": "royaltyId",
+        "indexed": true
+      }
+    ]
+  }
+]
