@@ -1,0 +1,104 @@
+type Artist @entity {
+  id: ID!
+  name: String!
+  wallet: String!
+  coverImageCid: String
+  createdAt: BigInt!
+  updatedAt: BigInt!
+  events: [ArtistEvent!]! @derivedFrom(field: "artist")
+}
+
+type ArtistEvent @entity {
+  id: ID!
+  artist: Artist!
+  eventType: String!
+  data: String!
+  txHash: String!
+  ledger: BigInt!
+  createdAt: BigInt!
+}
+
+type Song @entity {
+  id: ID!
+  title: String!
+  artist: Artist!
+  duration: Int!
+  ipfsHash: String!
+  contentCid: String
+  createdAt: BigInt!
+  updatedAt: BigInt!
+  events: [SongEvent!]! @derivedFrom(field: "song")
+}
+
+type SongEvent @entity {
+  id: ID!
+  song: Song!
+  eventType: String!
+  data: String!
+  txHash: String!
+  ledger: BigInt!
+  createdAt: BigInt!
+}
+
+type Album @entity {
+  id: ID!
+  title: String!
+  artist: Artist!
+  coverCid: String
+  createdAt: BigInt!
+  updatedAt: BigInt!
+  events: [AlbumEvent!]! @derivedFrom(field: "album")
+}
+
+type AlbumEvent @entity {
+  id: ID!
+  album: Album!
+  eventType: String!
+  data: String!
+  txHash: String!
+  ledger: BigInt!
+  createdAt: BigInt!
+}
+
+type Royalty @entity {
+  id: ID!
+  beneficiary: String!
+  percentage: Int!
+  song: String
+  createdAt: BigInt!
+  updatedAt: BigInt!
+  events: [RoyaltyEvent!]! @derivedFrom(field: "royalty")
+}
+
+type RoyaltyEvent @entity {
+  id: ID!
+  royalty: Royalty!
+  eventType: String!
+  data: String!
+  txHash: String!
+  ledger: BigInt!
+  createdAt: BigInt!
+}
+
+type MarketplaceEvent @entity {
+  id: ID!
+  eventType: String!
+  seller: String!
+  buyer: String
+  data: String!
+  txHash: String!
+  ledger: BigInt!
+  createdAt: BigInt!
+}
+
+type IndexerHealth @entity {
+  id: ID!
+  network: String!
+  contractType: String!
+  lastProcessedLedger: BigInt!
+  eventsProcessed: BigInt!
+  errorCount: BigInt!
+  lastError: String
+  lagLedgers: BigInt!
+  updatedAt: BigInt!
+}

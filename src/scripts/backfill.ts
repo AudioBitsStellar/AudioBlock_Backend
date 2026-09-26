@@ -1,16 +1,21 @@
 /**
- * Historical backfill CLI (Issue #235) — `npm run cli -- backfill ...`
+ * Historical backfill CLI (Issues #235, #681) — `npm run cli:reindex -- backfill ...`
  *
  * Commands:
  *   backfill:run    <--contract> <--network> <--start> <--end> [--batch-size] [--type]
+ *   backfill:auto   <--contract> <--network> [--batch-size] [--type]
  *   backfill:status <--contract> <--network>
+ *
+ * backfill:auto discovers the deployment block automatically and backfills from there.
  *
  * See docs/indexer-backfill-runbook.md for the full workflow.
  */
 import 'reflect-metadata';
 import AppDataSource from '../config/db';
 import { BackfillService } from '../services/Soroban/BackfillService';
+import { BackfillEnhancementService } from '../services/Soroban/BackfillEnhancementService';
 import { ContractType } from '../services/Soroban/eventDecoders';
+import { SorobanEventReader } from '../services/Soroban/SorobanEventReader';
 import logger from '../config/logger';
 
 const ALLOWED_TYPES: ContractType[] = ['nft', 'artist', 'catalog', 'royalty', 'marketplace'];
@@ -76,6 +81,54 @@ async function runBackfill(flags: Map<string, string>): Promise<void> {
   console.log(`  Events Imported: ${result.eventsImported.toLocaleString()}`);
 }
 
+async function runAutoBackfill(flags: Map<string, string>): Promise<void> {
+  const contractId = requireFlag(flags, 'contract');
+  const network = requireFlag(flags, 'network');
+  const batchSize = flags.get('batch-size') ? Number(flags.get('batch-size')) : 200;
+  const contractType = (flags.get('type') as ContractType) ?? 'nft';
+
+  if (!ALLOWED_TYPES.includes(contractType)) {
+    throw new Error(`--type must be one of: ${ALLOWED_TYPES.join(', ')}`);
+  }
+
+  logger.info(`Auto-discovering deployment ledger for ${contractId} on ${network}...`);
+
+  const enhancementService = new BackfillEnhancementService();
+  const deploymentLedger = await enhancementService.discoverDeploymentLedger(contractId, network);
+
+  const reader = new SorobanEventReader();
+  const latestLedger = await reader.getLatestLedger();
+  const endLedger = latestLedger.sequence;
+
+  console.log(`\nDiscovered deployment details:`);
+  console.log(`  Deployment Ledger: ${deploymentLedger}`);
+  console.log(`  Current Ledger:    ${endLedger}`);
+  console.log(`  Ledgers to scan:   ${endLedger - deploymentLedger + 1}`);
+
+  const confirm = process.env.SKIP_CONFIRMATION === 'true' ? 'yes' : 'unknown';
+  if (confirm !== 'yes') {
+    console.log('\nTo proceed with backfill, run with SKIP_CONFIRMATION=true or use backfill:run directly.');
+    return;
+  }
+
+  logger.info(`Running auto-backfill from ledger ${deploymentLedger} to ${endLedger}...`);
+  const service = new BackfillService();
+  const result = await service.run({
+    contractId,
+    network,
+    startLedger: deploymentLedger,
+    endLedger,
+    batchSize,
+    contractType,
+  });
+
+  console.log('\nBackfill complete:');
+  console.log(`  Contract:        ${result.contractId}`);
+  console.log(`  Network:         ${result.network}`);
+  console.log(`  Ledger Range:    ${result.startLedger}-${result.endLedger}`);
+  console.log(`  Events Imported: ${result.eventsImported.toLocaleString()}`);
+}
+
 async function printStatus(flags: Map<string, string>): Promise<void> {
   const contractId = requireFlag(flags, 'contract');
   const network = requireFlag(flags, 'network');
@@ -106,15 +159,21 @@ async function main(): Promise<void> {
     case 'backfill:run':
       await runBackfill(flags);
       break;
+    case 'backfill:auto':
+      await runAutoBackfill(flags);
+      break;
     case 'backfill:status':
       await printStatus(flags);
       break;
     default:
       console.log('Usage:');
       console.log(
-        '  npm run cli -- backfill:run    --contract <ID> --network <NET> --start <L> --end <L> [--batch-size N] [--type T]',
+        '  npm run cli:reindex -- backfill:run    --contract <ID> --network <NET> --start <L> --end <L> [--batch-size N] [--type T]',
       );
-      console.log('  npm run cli -- backfill:status --contract <ID> --network <NET>');
+      console.log('  npm run cli:reindex -- backfill:auto   --contract <ID> --network <NET> [--batch-size N] [--type T]');
+      console.log('  npm run cli:reindex -- backfill:status --contract <ID> --network <NET>');
+      console.log('');
+      console.log('backfill:auto auto-discovers deployment block and backfills from there (Issue #681).');
       break;
   }
 }

@@ -1,0 +1,123 @@
+specVersion: 0.0.5
+schema:
+  file: ./schema.graphql
+
+dataSources:
+  - kind: ethereum
+    name: ArtistFacet
+    network: stellar
+    source:
+      address: "${ARTIST_FACET_ADDRESS}"
+      abi: ArtistFacet
+      startBlock: ${START_BLOCK}
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Artist
+        - ArtistEvent
+      abis:
+        - name: ArtistFacet
+          file: ./abis/ArtistFacet.json
+      eventHandlers:
+        - event: ArtistRegistered(indexed string,string)
+          handler: handleArtistRegistered
+        - event: ArtistUpdated(indexed string,string)
+          handler: handleArtistUpdated
+      file: ./src/mappings/artist.ts
+
+  - kind: ethereum
+    name: SongFacet
+    network: stellar
+    source:
+      address: "${SONG_FACET_ADDRESS}"
+      abi: SongFacet
+      startBlock: ${START_BLOCK}
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Song
+        - SongEvent
+      abis:
+        - name: SongFacet
+          file: ./abis/SongFacet.json
+      eventHandlers:
+        - event: SongUploaded(indexed string,indexed string,string)
+          handler: handleSongUploaded
+        - event: SongMetadataUpdated(indexed string,string)
+          handler: handleSongMetadataUpdated
+      file: ./src/mappings/song.ts
+
+  - kind: ethereum
+    name: AlbumFacet
+    network: stellar
+    source:
+      address: "${ALBUM_FACET_ADDRESS}"
+      abi: AlbumFacet
+      startBlock: ${START_BLOCK}
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Album
+        - AlbumEvent
+      abis:
+        - name: AlbumFacet
+          file: ./abis/AlbumFacet.json
+      eventHandlers:
+        - event: AlbumCreated(indexed string,indexed string,string)
+          handler: handleAlbumCreated
+        - event: AlbumUpdated(indexed string,string)
+          handler: handleAlbumUpdated
+      file: ./src/mappings/album.ts
+
+  - kind: ethereum
+    name: RoyaltyFacet
+    network: stellar
+    source:
+      address: "${ROYALTY_FACET_ADDRESS}"
+      abi: RoyaltyFacet
+      startBlock: ${START_BLOCK}
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Royalty
+        - RoyaltyEvent
+      abis:
+        - name: RoyaltyFacet
+          file: ./abis/RoyaltyFacet.json
+      eventHandlers:
+        - event: RoyaltySplitCreated(indexed string)
+          handler: handleRoyaltySplitCreated
+        - event: RoyaltyPayoutProcessed(indexed string)
+          handler: handleRoyaltyPayoutProcessed
+      file: ./src/mappings/royalty.ts
+
+  - kind: ethereum
+    name: MarketplaceFacet
+    network: stellar
+    source:
+      address: "${MARKETPLACE_FACET_ADDRESS}"
+      abi: MarketplaceFacet
+      startBlock: ${START_BLOCK}
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - MarketplaceEvent
+      abis:
+        - name: MarketplaceFacet
+          file: ./abis/MarketplaceFacet.json
+      eventHandlers:
+        - event: ItemListed(indexed string,indexed string,uint256)
+          handler: handleItemListed
+        - event: ItemSold(indexed string,indexed string,indexed string)
+          handler: handleItemSold
+      file: ./src/mappings/marketplace.ts
