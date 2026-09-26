@@ -97,7 +97,11 @@ export class SubgraphQueryService {
     this.retryBaseDelayMs = Math.max(
       0,
       Math.floor(
-        configuredNumber(config.retryBaseDelayMs, process.env.SUBGRAPH_QUERY_RETRY_BASE_DELAY_MS, 100),
+        configuredNumber(
+          config.retryBaseDelayMs,
+          process.env.SUBGRAPH_QUERY_RETRY_BASE_DELAY_MS,
+          100,
+        ),
       ),
     );
     this.pageSize = Math.max(
@@ -120,7 +124,7 @@ export class SubgraphQueryService {
   }
 
   /**
-  * Query artists from the subgraph, reporting when fallback is unavailable.
+   * Query artists from the subgraph, reporting when fallback is unavailable.
    */
   async queryArtists(limit: number = 100): Promise<SubgraphQueryResult<ArtistQueryResult[]>> {
     const result = await this.queryEntities<ArtistQueryResult>(
@@ -141,7 +145,7 @@ export class SubgraphQueryService {
   }
 
   /**
-  * Query songs from the subgraph, reporting when fallback is unavailable.
+   * Query songs from the subgraph, reporting when fallback is unavailable.
    */
   async querySongs(limit: number = 100): Promise<SubgraphQueryResult<SongQueryResult[]>> {
     const result = await this.queryEntities<SongQueryResult>(
@@ -237,7 +241,12 @@ export class SubgraphQueryService {
         }
 
         for (const item of page) {
-          if (typeof item.id !== 'string' || !item.id || item.id <= lastId || seenIds.has(item.id)) {
+          if (
+            typeof item.id !== 'string' ||
+            !item.id ||
+            item.id <= lastId ||
+            seenIds.has(item.id)
+          ) {
             consistencyError = `Subgraph returned a duplicate or out-of-order ${entity} ID`;
             break;
           }
