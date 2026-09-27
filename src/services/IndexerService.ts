@@ -89,16 +89,26 @@ export class IndexerService {
 
   /**
    * Record an indexer error and update metrics.
+   * Accepts either an Error object or a plain string message.
    */
-  async recordError(contractId: string, network: string, error: Error): Promise<void> {
+  async recordError(contractId: string, network: string, error: Error | string): Promise<void> {
     const cursor = await this.getCursor(contractId, network);
     cursor.errorCount += 1;
-    cursor.lastError = error.message;
+    cursor.lastError = error instanceof Error ? error.message : error;
     cursor.lastErrorAt = new Date();
     await this.cursorRepo.save(cursor);
 
     // Update Prometheus metrics
     indexerErrorsTotal.inc({ network, contract: contractId });
+  }
+
+  /**
+   * Advance the cursor to the given ledger and persist.
+   * Convenience alias used by SorobanIndexingService (Issue #658) that wraps
+   * recordProgress without requiring an event count.
+   */
+  async advanceCursor(contractId: string, network: string, ledger: number): Promise<void> {
+    await this.recordProgress(contractId, network, ledger, 0);
   }
 
   /**

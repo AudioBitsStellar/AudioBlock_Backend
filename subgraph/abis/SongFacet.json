@@ -119,5 +119,26 @@
         "indexed": false
       }
     ]
+  },
+  {
+    "type": "event",
+    "name": "SongPlayed",
+    "inputs": [
+      {
+        "type": "string",
+        "name": "songId",
+        "indexed": true
+      },
+      {
+        "type": "address",
+        "name": "listener",
+        "indexed": true
+      },
+      {
+        "type": "uint256",
+        "name": "durationSeconds",
+        "indexed": false
+      }
+    ]
   }
 ]

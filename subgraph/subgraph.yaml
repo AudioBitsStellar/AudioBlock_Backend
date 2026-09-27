@@ -45,6 +45,7 @@ dataSources:
         - LikeEvent
         - Comment
         - CommentEvent
+        - PlayEvent
       abis:
         - name: SongFacet
           file: ./abis/SongFacet.json
@@ -61,6 +62,8 @@ dataSources:
           handler: handleCommentAdded
         - event: CommentRemoved(indexed string,indexed address,string)
           handler: handleCommentRemoved
+        - event: SongPlayed(indexed string,indexed address,uint256)
+          handler: handleSongPlayed
       file: ./src/mappings/song.ts
 
   - kind: ethereum

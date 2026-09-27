@@ -3,6 +3,10 @@
 The Graph subgraph for AudioBlock on Stellar/Soroban. Indexes events from 5 smart contracts (Artist, Song, Album, Royalty, Marketplace) and exposes them via GraphQL.
 
 **Related Issues:**
+- #657: Derived fields for aggregate stats (totalPlays, totalEarnings)
+- #658: Soroban contract event indexing service
+- #659: Local Graph Node via Docker
+- #660: Deployment script for hosted service
 - #677: CI pipeline to validate subgraph build on PR
 - #678: CI pipeline to auto-deploy subgraph on merge to main
 - #679: RPC fallback when subgraph unavailable
@@ -86,6 +90,24 @@ GRAPH_DEPLOY_TOKEN_TESTNET=... npm run deploy:testnet
 GRAPH_DEPLOY_TOKEN_MAINNET=... npm run deploy:mainnet
 ```
 
+
+#### Hosted Service (legacy api.thegraph.com)
+
+```bash
+# Export your hosted-service access token first
+export GRAPH_ACCESS_TOKEN=<your-token>
+
+# Deploy to testnet subgraph
+npm run deploy:hosted:testnet
+
+# Deploy to mainnet subgraph
+npm run deploy:hosted:mainnet
+```
+
+The script (`scripts/deploy-hosted.js`, added in #660) handles `graph auth`, optional
+`codegen` + `build`, and `graph deploy --product hosted-service` in a single step.
+Use `--skip-build` to deploy pre-built artifacts and `--dry-run` to preview the commands.
+
 ## Architecture
 
 ### Schema
@@ -151,6 +173,35 @@ npm run cli:reindex -- backfill:status --contract CXXX... --network testnet
 ```
 
 See [../docs/indexer-backfill-runbook.md](../docs/indexer-backfill-runbook.md) for details.
+
+## Local Graph Node Development (#659)
+
+Run a complete local Graph Node stack (IPFS + PostgreSQL + graph-node) without
+needing a Studio account:
+
+```bash
+# Start the base stack + graph overlay
+docker compose -f docker-compose.yml -f docker-compose.graph.yml up --profile graph
+
+# Wait for graph-node to be healthy, then create and deploy your subgraph locally
+cd subgraph
+npm run codegen && npm run build
+npx graph create --node http://localhost:8020/ audioblock/local
+npx graph deploy \
+  --node http://localhost:8020/ \
+  --ipfs http://localhost:5001/ \
+  audioblock/local
+```
+
+After deployment, the local GraphQL playground is available at
+`http://localhost:8000/subgraphs/name/audioblock/local`.
+
+Set `ETHEREUM_RPC` to a private Soroban RPC endpoint to avoid public rate limits:
+
+```bash
+ETHEREUM_RPC=https://soroban-testnet.stellar.org \
+  docker compose -f docker-compose.yml -f docker-compose.graph.yml up --profile graph
+```
 
 ## CI/CD Pipelines
 
