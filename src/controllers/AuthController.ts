@@ -3,6 +3,7 @@ import { CreateUserDTO } from '../dtos/CreateUserDTO';
 import { JWTDTO } from '../dtos/JWTDTO';
 import { RegisterWithEmailDTO } from '../dtos/RegisterWithEmailDTO';
 import { LoginWithEmailDTO } from '../dtos/LoginWithEmailDTO';
+import { IntrospectTokenDTO } from '../dtos/IntrospectTokenDTO';
 import { AuthService } from '../services/AuthService';
 import { UserService } from './../services/UserService';
 import { Request, Response } from 'express';
@@ -336,6 +337,27 @@ export class AuthController {
       res.status(200).json({ success: true, message: 'Password reset successfully' });
     } catch (error) {
       handleError(req, res, error);
+    }
+  };
+
+  /**
+   * Token introspection endpoint for internal microservices (RFC 7662).
+   * Validates tokens and returns active status along with full user claims.
+   */
+  introspect = async (req: Request, res: Response) => {
+    try {
+      const dto = plainToInstance(IntrospectTokenDTO, req.body);
+      const errors = await validate(dto);
+      if (errors.length > 0) {
+        res.status(200).json({ active: false });
+        return;
+      }
+
+      const result = await this.authService.introspectToken(dto.token);
+      res.status(200).json(result);
+    } catch (error) {
+      // Per RFC 7662 section 2.2, introspection returns 200 with active: false on error
+      res.status(200).json({ active: false });
     }
   };
 

@@ -24,6 +24,8 @@ router.post('/register-email', authRateLimiter, authController.registerWithEmail
 router.post('/login-email', authRateLimiter, authController.loginWithEmail);
 router.post('/refresh', authRateLimiter, authController.refreshToken);
 router.post('/logout', authRateLimiter, authController.logout);
+// Token introspection for internal services (RFC 7662)
+router.post('/introspect', authController.introspect);
 // Issue #328: rate-limited per authenticated user — previously unthrottled.
 router.post('/2fa/enable', requireAuth, twoFactorRateLimiter, authController.enableTwoFactor);
 router.post('/2fa/verify', requireAuth, twoFactorRateLimiter, authController.verifyTwoFactor);

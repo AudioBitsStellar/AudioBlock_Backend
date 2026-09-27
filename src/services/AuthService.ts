@@ -2,6 +2,7 @@ import { validate } from 'class-validator';
 import { JWTDTO } from '../dtos/JWTDTO';
 import { RegisterWithEmailDTO } from '../dtos/RegisterWithEmailDTO';
 import { LoginWithEmailDTO } from '../dtos/LoginWithEmailDTO';
+import { TokenIntrospectionResponse } from '../dtos/IntrospectTokenDTO';
 import { Repository } from 'typeorm';
 import { User } from '../entities/User';
 import { RefreshToken } from '../entities/RefreshToken';
@@ -557,5 +558,54 @@ export class AuthService {
     user.passwordResetToken = undefined;
     user.passwordResetTokenExpiry = undefined;
     await this.userRepo.save(user);
+  }
+
+  /**
+   * Introspect a token for internal services according to RFC 7662.
+   * If the token is valid and user exists, returns active: true with claims.
+   * If invalid, expired, or user not found, returns active: false.
+   */
+  async introspectToken(token: string): Promise<TokenIntrospectionResponse> {
+    if (!token || typeof token !== 'string') {
+      return { active: false };
+    }
+
+    const JWT_SECRET = process.env.JWT_SECRET || 'secret';
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as any;
+
+      if (!decoded || !decoded.id) {
+        return { active: false };
+      }
+
+      const user = await this.userRepo.findOne({
+        where: { id: decoded.id },
+      });
+
+      if (!user) {
+        return { active: false };
+      }
+
+      return {
+        active: true,
+        scope: 'read write internal',
+        client_id: 'audioblock-internal',
+        token_type: 'Bearer',
+        sub: user.id,
+        user_id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        wallet_address: user.walletAddress,
+        stellar_public_key: user.stellarPublicKey,
+        name: user.name,
+        email_verified: user.emailVerified,
+        exp: decoded.exp,
+        iat: decoded.iat,
+        iss: 'AudioBlock',
+      };
+    } catch {
+      return { active: false };
+    }
   }
 }
