@@ -43,7 +43,28 @@ export const corsOptions: CorsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Authorization', 'Content-Type', 'X-Request-ID'],
+  allowedHeaders: ['Authorization', 'Content-Type', 'X-Request-ID', 'X-Privy-ID-Token'],
   exposedHeaders: ['X-Request-ID'],
   maxAge: 86400,
+};
+
+export const privyAuthCorsOptions: CorsOptions = {
+  origin: (origin, callback) => {
+    if (!origin || originIsAllowed(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Origin not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: [
+    'Authorization',
+    'Content-Type',
+    'X-Request-ID',
+    'X-Privy-ID-Token',
+    'X-Client-ID',
+  ],
+  exposedHeaders: ['X-Request-ID', 'X-Refresh-Token-Family'],
+  maxAge: 3600,
 };

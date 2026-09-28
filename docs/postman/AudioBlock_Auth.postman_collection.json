@@ -1,0 +1,586 @@
+{
+  "info": {
+    "name": "AudioBlock Auth API",
+    "description": "End-to-end walkthrough of every endpoint under `/api/auth` (issue #640).\n\n**Suggested order** (folders below): Registration & Nonce → Login & Sessions → Email Verification & Password Reset → Two-Factor (TOTP) → Privy MFA.\n\n**How to use**\n1. Set `baseUrl` and your test account values in the collection variables (or a Postman/Insomnia environment).\n2. Run **Register with email/password** (or the wallet flow if you can produce signatures).\n3. **Login with email/password** stores `accessToken`; **Refresh** rotates it and stores `refreshToken`.\n4. Protected requests (Two-Factor folder) send `Authorization: Bearer {{accessToken}}`.\n5. The wallet-signature requests need an off-band signature over the nonce message — see the folder description.\n\n**Notes**\n- Auth routes are rate-limited (see `AUTH_RATE_LIMIT_*` in `.env.example`); repeated failed runs return 429.\n- Error responses use `{ \"success\": false, \"message\": ..., \"type\": ... }`.\n- The Privy MFA folder requires a Privy access token (issue #639).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:4000/api/auth" },
+    { "key": "email", "value": "tester@example.com" },
+    { "key": "username", "value": "tester" },
+    { "key": "password", "value": "Str0ngPass!" },
+    { "key": "role", "value": "listener" },
+    { "key": "dynamixUserId", "value": "dyn_test_0001" },
+    { "key": "walletAddress", "value": "0x0000000000000000000000000000000000000001" },
+    {
+      "key": "walletMessage",
+      "value": "Audioblocks Login\nNonce: REPLACE_ME\nEmail: tester@example.com"
+    },
+    { "key": "walletSignature", "value": "0xREPLACE_WITH_WALLET_SIGNATURE" },
+    { "key": "accessToken", "value": "" },
+    { "key": "refreshToken", "value": "" },
+    { "key": "partialToken", "value": "" },
+    { "key": "totpCode", "value": "" },
+    { "key": "totpSecret", "value": "" },
+    { "key": "verifyEmailToken", "value": "" },
+    { "key": "resetPasswordToken", "value": "" },
+    { "key": "privyAccessToken", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Registration & Nonce",
+      "description": "Account creation. Email/password is self-contained; the wallet-signature flow requires signing the nonce message with the wallet key off-band (e.g. in a script or the frontend) and setting `{{walletMessage}}` + `{{walletSignature}}`.",
+      "item": [
+        {
+          "name": "Get login nonce",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Returns the message to sign for wallet registration/login. The nonce is embedded in the `message` response field (`Audioblocks Login\\nNonce: ...\\nEmail: ...`) — copy it into `{{walletMessage}}` before signing.\n\nRate-limited strictly to prevent email enumeration.",
+            "url": {
+              "raw": "{{baseUrl}}/nonce/{{email}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["nonce", "{{email}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Nonce issued (200)', () => pm.response.to.have.status(200));",
+                  "pm.test('Message contains nonce', () => pm.expect(pm.response.json().message).to.include('Nonce:'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register with wallet signature",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"{{role}}\",\n  \"walletAddress\": \"{{walletAddress}}\",\n  \"signature\": \"{{walletSignature}}\",\n  \"message\": \"{{walletMessage}}\",\n  \"email\": \"{{email}}\",\n  \"username\": \"{{username}}\",\n  \"dynamixUserId\": \"{{dynamixUserId}}\",\n  \"name\": \"{{username}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Full registration with wallet signature. Required: `role`, `walletAddress`, `signature`, `message`, `email`, `username` plus DTO-validated `dynamixUserId`.\n\nReturns **201** `{ success, message, user }`.",
+            "url": {
+              "raw": "{{baseUrl}}/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["register"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('User created (201)', () => pm.response.to.have.status(201));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register listener with wallet signature",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"listener\",\n  \"walletAddress\": \"{{walletAddress}}\",\n  \"signature\": \"{{walletSignature}}\",\n  \"message\": \"{{walletMessage}}\",\n  \"email\": \"{{email}}\",\n  \"dynamixUserId\": \"{{dynamixUserId}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Same as `/register` but without `username` in the required set — used for listener sign-up. Returns **201**.",
+            "url": {
+              "raw": "{{baseUrl}}/register-listener",
+              "host": ["{{baseUrl}}"],
+              "path": ["register-listener"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Listener created (201)', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register with email/password",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"role\": \"{{role}}\",\n  \"username\": \"{{username}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Email + password registration (no wallet required). Password must be ≥ 8 characters.\n\nReturns **201** `{ success, message, user, token, refreshToken }` — the test script stores the tokens automatically. The account still needs `GET /verify-email/:token` before login in most configurations.",
+            "url": {
+              "raw": "{{baseUrl}}/register-email",
+              "host": ["{{baseUrl}}"],
+              "path": ["register-email"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Registered (201)', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "if (json.token) pm.collectionVariables.set('accessToken', json.token);",
+                  "if (json.refreshToken) pm.collectionVariables.set('refreshToken', json.refreshToken);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Login & Sessions",
+      "description": "Token issuance and session lifecycle. Successful logins store `accessToken`/`refreshToken` collection variables used by the later folders.",
+      "item": [
+        {
+          "name": "Login with wallet signature",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"{{role}}\",\n  \"walletAddress\": \"{{walletAddress}}\",\n  \"signature\": \"{{walletSignature}}\",\n  \"message\": \"{{walletMessage}}\",\n  \"email\": \"{{email}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Nonce + signature login. Required: `role`, `walletAddress`, `signature`, `message` (plus `email` in the validated DTO).\n\nReturns 200 with the session payload nested under `user` (`$.user.token`, `$.user.refreshToken`).",
+            "url": {
+              "raw": "{{baseUrl}}/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Wallet login (200)', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "const payload = json.user && json.user.token ? json.user : json;",
+                  "if (payload.token) pm.collectionVariables.set('accessToken', payload.token);",
+                  "if (payload.refreshToken) pm.collectionVariables.set('refreshToken', payload.refreshToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login with email/password",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Email + password login. Returns 200 `{ success, message, user, token }`.\n\nIf the account has local TOTP enabled and no code is supplied, the response is `{ twoFactorRequired: true, partialToken, user }` instead — continue with **Complete login with 2FA code** (`POST /2fa/validate`).",
+            "url": {
+              "raw": "{{baseUrl}}/login-email",
+              "host": ["{{baseUrl}}"],
+              "path": ["login-email"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Login accepted (200)', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "if (json.token) pm.collectionVariables.set('accessToken', json.token);",
+                  "if (json.partialToken) {",
+                  "  pm.collectionVariables.set('partialToken', json.partialToken);",
+                  "  console.log('2FA required — run POST /2fa/validate with partialToken + totpCode');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh access token",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Rotates the refresh token (old one is revoked; reuse of a rotated token revokes the whole family). Stores the new `accessToken` + `refreshToken`.",
+            "url": {
+              "raw": "{{baseUrl}}/refresh",
+              "host": ["{{baseUrl}}"],
+              "path": ["refresh"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Refreshed (200)', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('accessToken', json.token);",
+                  "pm.collectionVariables.set('refreshToken', json.refreshToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Revokes the refresh token server-side. The access token remains valid until it expires (15 min).",
+            "url": {
+              "raw": "{{baseUrl}}/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["logout"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Logged out (200)', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Introspect token (RFC 7662)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{accessToken}}\",\n  \"token_type_hint\": \"access_token\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Internal-services token introspection. Always returns **200**; `active: true` includes the user claims, invalid/expired tokens return `{ \"active\": false }` (RFC 7662 §2.2). See `docs/TOKEN_INTROSPECTION.md`.",
+            "url": {
+              "raw": "{{baseUrl}}/introspect",
+              "host": ["{{baseUrl}}"],
+              "path": ["introspect"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 with active flag', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json()).to.have.property('active');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Email Verification & Password Reset",
+      "description": "Token-in-URL flows. The tokens come from transactional emails — copy them from the mailbox (or the local email sink in dev) into the collection variables.",
+      "item": [
+        {
+          "name": "Verify email",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Confirms the email verification token sent at registration. Set `{{verifyEmailToken}}` from the email link.",
+            "url": {
+              "raw": "{{baseUrl}}/verify-email/{{verifyEmailToken}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["verify-email", "{{verifyEmailToken}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Verified (200)', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Forgot password",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Requests a password-reset link. Throttled to 3 requests/hour/email (issue #102). The response is identical whether or not the email exists (no enumeration).",
+            "url": {
+              "raw": "{{baseUrl}}/forgot-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["forgot-password"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Accepted (200)', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reset password",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"password\": \"{{password}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Sets a new password using the emailed reset token (single-use).",
+            "url": {
+              "raw": "{{baseUrl}}/reset-password/{{resetPasswordToken}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["reset-password", "{{resetPasswordToken}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Password reset (200)', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Two-Factor (TOTP)",
+      "description": "Local TOTP second factor for email/password accounts (unchanged legacy flow). All requests require `Authorization: Bearer {{accessToken}}` except **Complete login with 2FA code**, which runs with a `partialToken` instead.",
+      "item": [
+        {
+          "name": "Enable 2FA",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Enables TOTP for the authenticated email/password account. Returns `{ secret, otpauthUrl, qrCodeDataUrl, backupCodes[] }` — scan the QR (or use the otpauth URL) in an authenticator app and **store the backup codes**. Sets `{{totpSecret}}` from the response.",
+            "url": {
+              "raw": "{{baseUrl}}/2fa/enable",
+              "host": ["{{baseUrl}}"],
+              "path": ["2fa", "enable"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Enrollment returned (200)', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.expect(json).to.have.property('secret');",
+                  "pm.expect(json).to.have.property('backupCodes');",
+                  "pm.collectionVariables.set('totpSecret', json.secret);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify 2FA code",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{totpCode}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Confirms a live TOTP code for the authenticated user (rate-limited per user, issue #328). Set `{{totpCode}}` to the current 6-digit code from the authenticator app.",
+            "url": {
+              "raw": "{{baseUrl}}/2fa/verify",
+              "host": ["{{baseUrl}}"],
+              "path": ["2fa", "verify"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Verified (200)', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Complete login with 2FA code",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"partialToken\": \"{{partialToken}}\",\n  \"code\": \"{{totpCode}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Second step of login when `POST /login-email` answered `twoFactorRequired: true`. No bearer header needed — the `partialToken` carries the pending session. Returns `{ token, refreshToken }`.\n\nA recovery code may be used instead of `code` at the login step (`recoveryCode` field).",
+            "url": {
+              "raw": "{{baseUrl}}/2fa/validate",
+              "host": ["{{baseUrl}}"],
+              "path": ["2fa", "validate"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('2FA login completed (200)', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "if (json.token) pm.collectionVariables.set('accessToken', json.token);",
+                  "if (json.refreshToken) pm.collectionVariables.set('refreshToken', json.refreshToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Disable 2FA",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{totpCode}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Turns TOTP off; requires a current code (or use a backup recovery code at login and call this).",
+            "url": {
+              "raw": "{{baseUrl}}/2fa/disable",
+              "host": ["{{baseUrl}}"],
+              "path": ["2fa", "disable"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Disabled (200)', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Privy MFA",
+      "description": "Privy-backed MFA endpoints (issue #639). These authenticate with a **Privy access token** (ES256, issued by Privy after its login/MFA flow), not the legacy JWT — set `{{privyAccessToken}}` accordingly. See `docs/PRIVY_MFA.md`.",
+      "item": [
+        {
+          "name": "Get MFA status",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{privyAccessToken}}" }],
+            "description": "Returns the Privy user's MFA enrollment: `{ privyUserId, enrolledInMfa, mfaMethods, sessionId }`.\n\nRequires `PRIVY_APP_ID`, `PRIVY_APP_SECRET`, `PRIVY_JWT_VERIFICATION_KEY` to be configured.",
+            "url": {
+              "raw": "{{baseUrl}}/mfa/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["mfa", "status"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('MFA status (200)', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json()).to.have.property('enrolledInMfa');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Revoke all Privy sessions",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{privyAccessToken}}" }],
+            "description": "Emergency revocation of every active Privy session for the authenticated user (lost device / suspicious activity). The client must log out and re-authenticate afterwards.",
+            "url": {
+              "raw": "{{baseUrl}}/mfa/sessions/revoke",
+              "host": ["{{baseUrl}}"],
+              "path": ["mfa", "sessions", "revoke"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Sessions revoked (200)', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

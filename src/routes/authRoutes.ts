@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { AuthController } from '../controllers/AuthController';
+import { privyMfaController } from '../controllers/PrivyMfaController';
 import { requireAuth } from '../middlewares/authMiddleware';
+import { requirePrivyAuth } from '../middlewares/privyMiddleware';
 import {
   authRateLimiter,
   nonceRateLimiter,
@@ -32,6 +34,11 @@ router.post('/2fa/verify', requireAuth, twoFactorRateLimiter, authController.ver
 router.post('/2fa/disable', requireAuth, twoFactorRateLimiter, authController.disableTwoFactor);
 router.post('/2fa/validate', authRateLimiter, authController.validateTwoFactor);
 
+// Privy MFA (issue #639): authenticated with a Privy access token in the
+// Authorization header (ES256/EdDSA), not the legacy HS256 JWT.
+router.get('/mfa/status', authRateLimiter, privyMfaController.status);
+router.post('/mfa/sessions/revoke', authRateLimiter, privyMfaController.revokeSessions);
+
 // Email verification
 router.get('/verify-email/:token', authController.verifyEmail);
 
@@ -40,5 +47,15 @@ router.get('/verify-email/:token', authController.verifyEmail);
 // inbox flooding and reset-token brute-forcing.
 router.post('/forgot-password', passwordResetRateLimiter, authController.forgotPassword);
 router.post('/reset-password/:token', authRateLimiter, authController.resetPassword);
+
+// Privy authentication endpoints (Issues #627, #628, #629, #630)
+router.post('/privy/login', authRateLimiter, authController.privyLogin);
+router.post(
+  '/privy/refresh-token',
+  authRateLimiter,
+  requirePrivyAuth,
+  authController.privyRefreshToken,
+);
+router.post('/privy/logout', authRateLimiter, requirePrivyAuth, authController.privyLogout);
 
 export default router;
