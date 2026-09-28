@@ -24,6 +24,30 @@ import { songsUploadedTotal } from './MetricsService';
 
 const activityService = new ActivityService();
 
+/**
+ * Parameters for {@link SongService.finalizeUpload}.
+ */
+export interface FinalizeUploadOptions {
+  /** Unique identifier for the upload session. */
+  fileId: string;
+  /** Expected number of chunks to merge. */
+  totalChunks: number;
+  /** Song title. */
+  title: string;
+  /** ID of the artist User record. */
+  artistId: string;
+  /** Ethereum wallet address of the artist. */
+  artistAddress: string;
+  /** Song description. */
+  description: string;
+  /** Genre label. */
+  genre: string;
+  /** Path to the cover art image on disk. */
+  coverArtPath: string;
+  /** Comma-separated list of composer names. */
+  composers: string;
+}
+
 export class SongService {
   async getSong(id: string) {
     const song = await this.songRepo.findOne({ where: { id } });
@@ -176,30 +200,6 @@ export class SongService {
   }
 
   /**
-   * Parameters for {@link SongService.finalizeUpload}.
-   */
-  export interface FinalizeUploadOptions {
-    /** Unique identifier for the upload session. */
-    fileId: string;
-    /** Expected number of chunks to merge. */
-    totalChunks: number;
-    /** Song title. */
-    title: string;
-    /** ID of the artist User record. */
-    artistId: string;
-    /** Ethereum wallet address of the artist. */
-    artistAddress: string;
-    /** Song description. */
-    description: string;
-    /** Genre label. */
-    genre: string;
-    /** Path to the cover art image on disk. */
-    coverArtPath: string;
-    /** Comma-separated list of composer names. */
-    composers: string;
-  }
-
-  /**
    * Merge all uploaded chunks, run a malware scan, upload to S3, persist the
    * song record, and enqueue background processing (HLS transcoding + IPFS pinning).
    *
@@ -208,7 +208,17 @@ export class SongService {
    * @throws {Error} If chunk count mismatch, malware detected, or S3 upload fails.
    */
   async finalizeUpload(options: FinalizeUploadOptions): Promise<Song> {
-    const { fileId, totalChunks, title, artistId, artistAddress, description, genre, coverArtPath, composers } = options;
+    const {
+      fileId,
+      totalChunks,
+      title,
+      artistId,
+      artistAddress,
+      description,
+      genre,
+      coverArtPath,
+      composers,
+    } = options;
     const s3Location = await this.mergeScanAndUpload(fileId, totalChunks);
 
     //  Save song record to DB
@@ -878,11 +888,7 @@ async function mergeChunks(chunks: Buffer[]): Promise<ChunkMergeResult> {
   return { mergedBuffer, totalSize, checksum, chunkCount: chunks.length };
 }
 
-async function uploadToS3(
-  ctx: UploadContext,
-  data: Buffer,
-  key: string
-): Promise<string> {
+async function uploadToS3(ctx: UploadContext, data: Buffer, key: string): Promise<string> {
   const s3Client = createS3Client(ctx.region);
   await s3Client.putObject({
     Bucket: ctx.bucket,
@@ -901,7 +907,7 @@ async function uploadToS3(
 async function persistSongRecord(
   ctx: UploadContext,
   fileUrl: string,
-  mergeResult: ChunkMergeResult
+  mergeResult: ChunkMergeResult,
 ): Promise<Song> {
   const song = await prisma.song.update({
     where: { id: ctx.songId },
@@ -917,10 +923,7 @@ async function persistSongRecord(
   return song;
 }
 
-async function submitToProcessingQueue(
-  ctx: UploadContext,
-  song: Song
-): Promise<void> {
+async function submitToProcessingQueue(ctx: UploadContext, song: Song): Promise<void> {
   const queueClient = createQueueClient();
   await queueClient.enqueue('song-processing', {
     songId: song.id,
@@ -956,7 +959,7 @@ function calculateRetryDelay(attempt: number, baseMs: number): number {
 async function withRetry<T>(
   fn: () => Promise<T>,
   maxAttempts: number = 3,
-  baseDelay: number = 1000
+  baseDelay: number = 1000,
 ): Promise<T> {
   let lastError: Error;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -966,7 +969,7 @@ async function withRetry<T>(
       lastError = err as Error;
       if (attempt < maxAttempts - 1) {
         const delay = calculateRetryDelay(attempt, baseDelay);
-        await new Promise(resolve => setTimeout(resolve, delay));
+        await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
   }

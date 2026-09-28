@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { DataSource } from 'typeorm';
+import { DataSource, getMetadataArgsStorage } from 'typeorm';
 import dotenv from 'dotenv';
 import { User } from '../entities/User';
 import { Song } from '../entities/Song';

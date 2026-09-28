@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { AppDataSource } from '../config/data-source';
+import AppDataSource from '../config/db';
 import { CommentReaction, ReactionType } from '../entities/CommentReaction';
 import { Comment } from '../entities/Comment';
 import { handleError } from '../utils/helpers';
