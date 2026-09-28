@@ -8,7 +8,10 @@
     "deploy:testnet": "node scripts/deploy.js --environment testnet",
     "deploy:mainnet": "node scripts/deploy.js --environment mainnet",
     "codegen": "graph codegen",
-    "test": "graph test"
+    "test": "graph test",
+    "deploy:hosted": "node scripts/deploy-hosted.js",
+    "deploy:hosted:testnet": "node scripts/deploy-hosted.js --subgraph AudioBitsStellar/audioblock-testnet",
+    "deploy:hosted:mainnet": "node scripts/deploy-hosted.js --subgraph AudioBitsStellar/audioblock"
   },
   "devDependencies": {
     "@graphprotocol/graph-cli": "^0.68.4",

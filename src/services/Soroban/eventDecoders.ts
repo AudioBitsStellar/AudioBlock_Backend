@@ -9,7 +9,7 @@
  * Contract types (matching `docs/database-schema.md`):
  *   - nft           (mint, transfer)
  *   - artist        (artist_registered, profile_updated)
- *   - catalog       (song_registered, album_created)
+ *   - catalog       (song_registered, album_created, song_played)
  *   - royalty       (royalty_payout)
  *   - marketplace   (listing_created, sale, listing_cancelled)
  */
@@ -139,6 +139,25 @@ const catalogDecoder: SorobanEventDecoder = {
           albumId: event.topic[1] ?? null,
           data: event.value,
         }),
+        address: addressOf(event.topic[2] ?? event.value),
+      };
+    }
+    if (symbol === 'song_played') {
+      // Issue #658: index SongPlayed events emitted by the catalog/song contract.
+      // topic[1] = songId (string), topic[2] = listener (address)
+      // value    = { durationSeconds: u64 } or a bare u64
+      const payload: Record<string, unknown> = {
+        songId: event.topic[1] ?? null,
+        listener: addressOf(event.topic[2] ?? event.value),
+      };
+      const val = event.value as Record<string, unknown> | null;
+      if (typeof val?.durationSeconds === 'number') {
+        payload.durationSeconds = val.durationSeconds;
+      } else if (typeof event.value === 'number') {
+        payload.durationSeconds = event.value;
+      }
+      return {
+        ...baseDTO(event, this, 'song_played', payload),
         address: addressOf(event.topic[2] ?? event.value),
       };
     }

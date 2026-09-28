@@ -6,6 +6,8 @@ type Artist @entity {
   totalTracks: BigInt!
   totalSalesCount: BigInt!
   totalVolume: BigInt!
+  totalPlays: BigInt!
+  totalEarnings: BigInt!
   createdAt: BigInt!
   updatedAt: BigInt!
   tracks: [Song!]! @derivedFrom(field: "artist")
@@ -41,6 +43,8 @@ type Song @entity {
   salesCount: BigInt!
   likeCount: BigInt!
   commentCount: BigInt!
+  playCount: BigInt!
+  royaltyEarnings: BigInt!
   createdAt: BigInt!
   updatedAt: BigInt!
   sales: [Sale!]! @derivedFrom(field: "song")
@@ -48,6 +52,7 @@ type Song @entity {
   mints: [MintEvent!]! @derivedFrom(field: "song")
   likes: [Like!]! @derivedFrom(field: "song")
   comments: [Comment!]! @derivedFrom(field: "song")
+  plays: [PlayEvent!]! @derivedFrom(field: "song")
   events: [SongEvent!]! @derivedFrom(field: "song")
 }
 
@@ -131,6 +136,16 @@ type CommentEvent @entity {
   author: String!
   eventType: String! # "CommentAdded" | "CommentRemoved"
   content: String
+  txHash: String!
+  ledger: BigInt!
+  createdAt: BigInt!
+}
+
+type PlayEvent @entity {
+  id: ID! # txHash-logIndex
+  song: Song!
+  listener: String!
+  durationSeconds: Int
   txHash: String!
   ledger: BigInt!
   createdAt: BigInt!

@@ -217,3 +217,38 @@ export function handleCommentRemoved(event: CommentRemoved): void {
   commentEvent.createdAt = event.block.timestamp;
   commentEvent.save();
 }
+
+export function handleSongPlayed(event: SongPlayed): void {
+  const songId = event.params.songId;
+  const listener = event.params.listener.toHex();
+  const durationSeconds = event.params.durationSeconds.toI32();
+
+  let song = Song.load(songId);
+  if (!song) {
+    return;
+  }
+
+  // Increment play count on Song
+  song.playCount = song.playCount.plus(BigInt.fromI32(1));
+  song.updatedAt = event.block.timestamp;
+  song.save();
+
+  // Increment aggregate plays on the Artist
+  let artist = Artist.load(song.artist);
+  if (artist) {
+    artist.totalPlays = artist.totalPlays.plus(BigInt.fromI32(1));
+    artist.updatedAt = event.block.timestamp;
+    artist.save();
+  }
+
+  // Record the immutable PlayEvent
+  const playEventId = event.transaction.hash.toHex() + '-' + event.logIndex.toString();
+  const playEvent = new PlayEvent(playEventId);
+  playEvent.song = songId;
+  playEvent.listener = listener;
+  playEvent.durationSeconds = durationSeconds;
+  playEvent.txHash = event.transaction.hash.toHex();
+  playEvent.ledger = event.block.number;
+  playEvent.createdAt = event.block.timestamp;
+  playEvent.save();
+}
