@@ -21,12 +21,7 @@ export const privyConfig = {
 export function applyPrivyCorsToRouter(router: Router, corsOptions: any): void {
   if (!isPrivyEnabled) return;
 
-  const privyEndpoints = [
-    '/privy/login',
-    '/privy/verify',
-    '/privy/refresh-token',
-    '/privy/logout',
-  ];
+  const privyEndpoints = ['/privy/login', '/privy/verify', '/privy/refresh-token', '/privy/logout'];
 
   privyEndpoints.forEach((endpoint) => {
     router.options(endpoint, (req, res) => {

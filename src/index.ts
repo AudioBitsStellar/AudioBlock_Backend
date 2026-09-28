@@ -7,6 +7,7 @@ import fs from 'fs';
 import { runSeeders } from './seeders';
 import { validateSorobanConfig } from './config/soroban';
 import { validateEnvironment } from './config/env';
+import { checkAuthFlagConfig, listAuthFlags } from './config/authFlags';
 import { startDbPoolMonitor } from './services/DbPoolMonitor';
 import { startJobQueueWorker, startJobQueueMonitor } from './workers/JobQueueWorker';
 import { registerAiJobHandlers } from './workers/AiJobHandlers';
@@ -33,6 +34,17 @@ async function main() {
   try {
     validateEnvironment();
     validateSorobanConfig();
+
+    // Auth mode is a runtime flag, not a startup-validated env var, because an
+    // unset value is a valid configuration (legacy-only). So surface the current
+    // mode at boot and refuse to start on a combination that cannot work, rather
+    // than leaving it to surface later as a stream of puzzling 401s (#636).
+    const authFlagWarning = checkAuthFlagConfig();
+    if (authFlagWarning) {
+      logger.error(authFlagWarning);
+      process.exit(1);
+    }
+    logger.info({ auth: listAuthFlags() }, 'Authentication mode resolved');
 
     await AppDataSource.initialize();
     logger.info('Database connected successfully');
