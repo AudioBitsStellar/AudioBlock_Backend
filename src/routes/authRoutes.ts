@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { AuthController } from '../controllers/AuthController';
+import { privyMfaController } from '../controllers/PrivyMfaController';
 import { requireAuth } from '../middlewares/authMiddleware';
 import {
   authRateLimiter,
@@ -31,6 +32,11 @@ router.post('/2fa/enable', requireAuth, twoFactorRateLimiter, authController.ena
 router.post('/2fa/verify', requireAuth, twoFactorRateLimiter, authController.verifyTwoFactor);
 router.post('/2fa/disable', requireAuth, twoFactorRateLimiter, authController.disableTwoFactor);
 router.post('/2fa/validate', authRateLimiter, authController.validateTwoFactor);
+
+// Privy MFA (issue #639): authenticated with a Privy access token in the
+// Authorization header (ES256/EdDSA), not the legacy HS256 JWT.
+router.get('/mfa/status', authRateLimiter, privyMfaController.status);
+router.post('/mfa/sessions/revoke', authRateLimiter, privyMfaController.revokeSessions);
 
 // Email verification
 router.get('/verify-email/:token', authController.verifyEmail);
