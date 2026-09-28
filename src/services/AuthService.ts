@@ -4,7 +4,7 @@ import { RegisterWithEmailDTO } from '../dtos/RegisterWithEmailDTO';
 import { LoginWithEmailDTO } from '../dtos/LoginWithEmailDTO';
 import { TokenIntrospectionResponse } from '../dtos/IntrospectTokenDTO';
 import { Repository } from 'typeorm';
-import { User } from '../entities/User';
+import { User, UserRole } from '../entities/User';
 import { RefreshToken } from '../entities/RefreshToken';
 import AppDataSource from '../config/db';
 import jwt, { JwtPayload } from 'jsonwebtoken';
@@ -642,21 +642,63 @@ export class AuthService {
       throw AppError.authentication('Invalid or malformed Privy ID token');
     }
 
-    const userId = payload.sub || payload.id || 'privy-user-' + Date.now();
-    const email = payload.email || 'user@privy.example.com';
-    const walletAddress = payload.walletAddress;
+    const privyUserId = payload.sub || payload.id;
+    if (!privyUserId) {
+      throw AppError.authentication('Privy user ID (sub) is required in token');
+    }
 
-    const accessToken = this.generateAccessToken({
-      id: userId,
-      email,
-      walletAddress,
+    const email = payload.email;
+    const walletAddress = payload.wallet_address || payload.walletAddress;
+
+    // Sync or create local user based on Privy user ID
+    let user = await this.userRepo.findOne({ where: { privyUserId } });
+
+    if (!user) {
+      // Create new user for first-time Privy login
+      user = this.userRepo.create({
+        privyUserId,
+        email: email || null,
+        walletAddress: walletAddress || null,
+        role: UserRole.LISTENER,
+        emailVerified: !!email,
+      });
+      await this.userRepo.save(user);
+    } else {
+      // Update existing user with latest data from Privy
+      if (email && !user.email) {
+        user.email = email;
+      }
+      if (walletAddress && !user.walletAddress) {
+        user.walletAddress = walletAddress;
+      }
+      await this.userRepo.save(user);
+    }
+
+    const accessToken = this.signToken(user);
+    const refreshToken = this.signRefreshToken(user);
+    const refreshTokenFamily = randomUUID();
+
+    // Store refresh token in database
+    const refreshTokenEntity = this.refreshTokenRepo.create({
+      token: refreshToken,
+      userId: user.id,
+      family: refreshTokenFamily,
+      expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRY_SECONDS * 1000),
     });
+    await this.refreshTokenRepo.save(refreshTokenEntity);
 
     return {
       accessToken,
-      refreshToken: 'refresh-token-' + Date.now(),
-      refreshTokenFamily: 'family-' + Date.now(),
-      user: { id: userId, email, walletAddress },
+      refreshToken,
+      refreshTokenFamily,
+      user: {
+        id: user.id,
+        email: user.email,
+        walletAddress: user.walletAddress,
+        role: user.role,
+        username: user.username,
+        profileImage: user.profileImage,
+      },
     };
   }
 
