@@ -546,6 +546,8 @@ Additional in-repo docs live under [`docs/`](docs/):
 - [Architecture](docs/ARCHITECTURE.md) — high-level module layout
 - [AI Feature Set](docs/AI_FEATURES.md) — AI capabilities, what data is sent
   where, and the per-artist opt-in/opt-out story
+- [Privy Migration Guide](docs/PRIVY_MIGRATION_GUIDE.md) — how existing
+  accounts and sessions move to Privy-backed authentication (Issue #637)
 - [Database Schema](docs/database-schema.md) & [Migrations](docs/migrations.md)
 - [Conventions](docs/conventions.md), [ADR catalog](docs/adrs/), and the
   [OpenAPI spec](docs/openapi.yaml)
