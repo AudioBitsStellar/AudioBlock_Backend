@@ -25,11 +25,14 @@ export const requirePrivyAuth = (req: Request, res: Response, next: NextFunction
   try {
     const authHeader = req.headers.authorization;
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!authHeader || typeof authHeader !== 'string' || !authHeader.startsWith('Bearer ')) {
       return handleError(req, res, AppError.authentication('Privy token required'));
     }
 
-    const token = authHeader.split(' ')[1];
+    const token = authHeader.substring(7).trim();
+    if (!token) {
+      return handleError(req, res, AppError.authentication('Invalid Privy token'));
+    }
 
     if (!privyConfig.verificationKey) {
       console.error('Privy verification key not configured');
@@ -49,19 +52,62 @@ export const requirePrivyAuth = (req: Request, res: Response, next: NextFunction
   }
 };
 
-function decodePrivyToken(token: string, verificationKey: string): PrivyUser | null {
+export function decodePrivyToken(token: string, verificationKey?: string): PrivyUser | null {
   try {
-    const parts = token.split('.');
+    if (!token || typeof token !== 'string') {
+      return null;
+    }
+
+    const trimmedToken = token.trim();
+    const parts = trimmedToken.split('.');
     if (parts.length !== 3) {
       return null;
     }
 
-    const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
+    let headerStr: string;
+    let payloadStr: string;
+    try {
+      headerStr = Buffer.from(parts[0], 'base64').toString('utf-8');
+      payloadStr = Buffer.from(parts[1], 'base64').toString('utf-8');
+    } catch {
+      return null;
+    }
+
+    if (!payloadStr || !headerStr) {
+      return null;
+    }
+
+    let payload: any;
+    try {
+      payload = JSON.parse(payloadStr);
+    } catch {
+      return null;
+    }
+
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return null;
+    }
+
+    const userId = payload.sub || payload.id;
+    if (!userId || typeof userId !== 'string' || userId.trim() === '') {
+      return null;
+    }
+
+    // Check expiration if exp claim is present
+    if (payload.exp !== undefined) {
+      if (typeof payload.exp !== 'number' || isNaN(payload.exp)) {
+        return null;
+      }
+      const now = Math.floor(Date.now() / 1000);
+      if (payload.exp < now) {
+        return null;
+      }
+    }
 
     return {
-      id: payload.sub || payload.id,
-      email: payload.email,
-      walletAddress: payload.walletAddress,
+      id: userId.trim(),
+      email: typeof payload.email === 'string' && payload.email.trim() ? payload.email.trim() : undefined,
+      walletAddress: typeof payload.walletAddress === 'string' && payload.walletAddress.trim() ? payload.walletAddress.trim() : undefined,
     };
   } catch (error) {
     console.error('Failed to decode Privy token:', error);
