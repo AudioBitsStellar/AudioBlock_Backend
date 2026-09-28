@@ -89,3 +89,24 @@ export const twoFactorRateLimiter = createSlidingWindowLimiter(
     return `2fa:rl:${userId}`;
   },
 );
+
+// GDPR account lifecycle (issue #633). Keyed by authenticated user, since these
+// routes always run after requireAuth. The limit is deliberately tight: they are
+// the most consequential endpoints in the account system — an attacker holding a
+// stolen session could otherwise immediately schedule an irreversible erasure —
+// while legitimate use is a handful of requests per user per day.
+const accountLifecycleWindowMs = parseInt(
+  process.env.ACCOUNT_LIFECYCLE_RATE_LIMIT_WINDOW_MS || String(60 * 60 * 1000),
+  10,
+);
+const accountLifecycleMax = parseInt(process.env.ACCOUNT_LIFECYCLE_RATE_LIMIT_MAX || '5', 10);
+
+export const accountLifecycleRateLimiter = createSlidingWindowLimiter(
+  accountLifecycleWindowMs,
+  accountLifecycleMax,
+  'account:rl',
+  (req) => {
+    const userId = (req as any).user?.id || 'unknown';
+    return `account:rl:${userId}`;
+  },
+);

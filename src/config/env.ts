@@ -21,6 +21,9 @@ export interface ValidatedEnv {
   ALLOWED_ORIGINS?: string;
   LOG_LEVEL: string;
   ERROR_DEDUP_WINDOW_MS: string;
+  PRIVY_APP_ID?: string;
+  PRIVY_APP_SECRET?: string;
+  PRIVY_VERIFICATION_KEY?: string;
 }
 
 const requiredVars: (keyof ValidatedEnv)[] = [
@@ -36,6 +39,12 @@ const requiredVars: (keyof ValidatedEnv)[] = [
   'AWS_BUCKET_NAME',
   'PINATA_JWT',
   'PINATA_GATEWAY',
+];
+
+const optionalPrivyVars: (keyof ValidatedEnv)[] = [
+  'PRIVY_APP_ID',
+  'PRIVY_APP_SECRET',
+  'PRIVY_VERIFICATION_KEY',
 ];
 
 export function validateEnvironment(): ValidatedEnv {
@@ -56,6 +65,8 @@ export function validateEnvironment(): ValidatedEnv {
     process.exit(1);
   }
 
+  validatePrivyKeys();
+
   return {
     NODE_ENV: process.env.NODE_ENV || 'development',
     PORT: process.env.PORT || '4000',
@@ -74,5 +85,38 @@ export function validateEnvironment(): ValidatedEnv {
     PINATA_GATEWAY: process.env.PINATA_GATEWAY!,
     LOG_LEVEL: process.env.LOG_LEVEL || 'info',
     ERROR_DEDUP_WINDOW_MS: process.env.ERROR_DEDUP_WINDOW_MS || String(5 * 60 * 1000),
+    PRIVY_APP_ID: process.env.PRIVY_APP_ID,
+    PRIVY_APP_SECRET: process.env.PRIVY_APP_SECRET,
+    PRIVY_VERIFICATION_KEY: process.env.PRIVY_VERIFICATION_KEY,
   };
+}
+
+function validatePrivyKeys(): void {
+  const hasAny = Boolean(
+    process.env.PRIVY_APP_ID || process.env.PRIVY_APP_SECRET || process.env.PRIVY_VERIFICATION_KEY,
+  );
+
+  if (!hasAny) {
+    console.warn(
+      '⚠️  Privy authentication keys not configured. Privy features will not work. Set PRIVY_APP_ID, PRIVY_APP_SECRET, and PRIVY_VERIFICATION_KEY to enable Privy auth.',
+    );
+    return;
+  }
+
+  const missing: string[] = [];
+  optionalPrivyVars.forEach((varName) => {
+    if (!process.env[varName]) {
+      missing.push(varName);
+    }
+  });
+
+  if (missing.length > 0) {
+    console.error('❌ Incomplete Privy configuration. All of these must be set together:');
+    optionalPrivyVars.forEach((varName) => {
+      const status = process.env[varName] ? '✓' : '✗';
+      console.error(`   [${status}] ${varName}`);
+    });
+    console.error('\nEither set all Privy keys or none at all.');
+    process.exit(1);
+  }
 }

@@ -93,6 +93,53 @@ export const indexerLagLedgers = new client.Gauge({
   registers: [register],
 });
 
+// ── Privy auth metrics (Issues #634, #635) ─────────────────────────────────────
+
+export const privyJwkFetchesTotal = new client.Counter({
+  name: 'privy_jwk_fetches_total',
+  help: 'Total JWKS fetches from the Privy API, by outcome',
+  labelNames: ['outcome'] as const, // 'success' | 'failure' | 'stale_served'
+  registers: [register],
+});
+
+export const privyJwkCacheHitsTotal = new client.Counter({
+  name: 'privy_jwk_cache_hits_total',
+  help: 'Total Privy public key lookups served from the local cache',
+  registers: [register],
+});
+
+export const privyJwkCacheMissesTotal = new client.Counter({
+  name: 'privy_jwk_cache_misses_total',
+  help: 'Total Privy public key lookups that required a JWKS fetch',
+  registers: [register],
+});
+
+export const privyJwkUnknownKidTotal = new client.Counter({
+  name: 'privy_jwk_unknown_kid_total',
+  help: 'Total token verifications rejected because the signing key id was absent from the JWKS',
+  registers: [register],
+});
+
+export const privyTokenVerificationsTotal = new client.Counter({
+  name: 'privy_token_verifications_total',
+  help: 'Total Privy access token verification attempts, by outcome',
+  labelNames: ['outcome'] as const, // 'success' | 'invalid' | 'unavailable'
+  registers: [register],
+});
+
+export const privyAuthFallbacksTotal = new client.Counter({
+  name: 'privy_auth_fallbacks_total',
+  help: 'Total requests that fell back to legacy auth after a Privy availability failure',
+  registers: [register],
+});
+
+export const privyCircuitState = new client.Gauge({
+  name: 'privy_circuit_state',
+  help: 'Current state of the Privy circuit breaker (1 for the active state, 0 otherwise)',
+  labelNames: ['state'] as const, // 'closed' | 'open' | 'half_open'
+  registers: [register],
+});
+
 export const indexerEventsProcessedTotal = new client.Counter({
   name: 'indexer_events_processed_total',
   help: 'Total number of blockchain events processed by the indexer',

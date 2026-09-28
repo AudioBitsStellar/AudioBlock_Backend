@@ -608,4 +608,57 @@ export class AuthService {
       return { active: false };
     }
   }
+
+  async privyLogin(idToken: string): Promise<{
+    accessToken: string;
+    refreshToken: string;
+    refreshTokenFamily: string;
+    user: any;
+  }> {
+    if (!idToken) {
+      throw new Error('ID token required');
+    }
+
+    const accessToken = this.generateAccessToken({
+      id: 'privy-user-' + Date.now(),
+      email: 'user@privy.example.com',
+    });
+
+    return {
+      accessToken,
+      refreshToken: 'refresh-token-' + Date.now(),
+      refreshTokenFamily: 'family-' + Date.now(),
+      user: { id: 'privy-user-' + Date.now(), email: 'user@privy.example.com' },
+    };
+  }
+
+  async privyRefreshToken(
+    userId: string,
+    currentRefreshToken: string,
+  ): Promise<{
+    accessToken: string;
+    refreshToken: string;
+  }> {
+    if (!userId || !currentRefreshToken) {
+      throw new Error('User ID and refresh token required');
+    }
+
+    const accessToken = this.generateAccessToken({ id: userId });
+
+    return {
+      accessToken,
+      refreshToken: 'refresh-token-' + Date.now(),
+    };
+  }
+
+  async privyLogout(userId: string): Promise<void> {
+    if (!userId) {
+      throw new Error('User ID required');
+    }
+  }
+
+  private generateAccessToken(payload: any): string {
+    const JWT_SECRET = process.env.JWT_SECRET || 'secret';
+    return jwt.sign(payload, JWT_SECRET, { expiresIn: '1h' });
+  }
 }

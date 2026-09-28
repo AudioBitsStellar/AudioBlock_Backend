@@ -1,29 +1,35 @@
-export interface PrivyConfig {
-  appId: string;
-  appSecret: string;
-  verificationKey: string;
-  apiUrl: string;
-}
+import { Router } from 'express';
+import { validateEnvironment } from './env';
 
-/**
- * Read Privy credentials from the environment (issue #595).
- * Read lazily on every call so tests and restarts never see stale values.
- */
-export function getPrivyConfig(): PrivyConfig {
-  return {
-    appId: process.env.PRIVY_APP_ID || '',
-    appSecret: process.env.PRIVY_APP_SECRET || '',
-    verificationKey: process.env.PRIVY_JWT_VERIFICATION_KEY || '',
-    apiUrl: (process.env.PRIVY_API_URL || 'https://api.privy.io').replace(/\/+$/, ''),
-  };
-}
+const env = validateEnvironment();
 
-/**
- * True when App ID, App Secret, and verification key are all present.
- * Privy-backed endpoints stay disabled (502) until this is true; legacy
- * JWT authentication is unaffected either way.
- */
-export function isPrivyConfigured(): boolean {
-  const { appId, appSecret, verificationKey } = getPrivyConfig();
-  return Boolean(appId && appSecret && verificationKey);
+export const isPrivyEnabled = Boolean(env.PRIVY_APP_ID && env.PRIVY_APP_SECRET);
+
+export const privyAuthEndpoints = [
+  '/api/auth/privy/login',
+  '/api/auth/privy/verify',
+  '/api/auth/privy/refresh-token',
+  '/api/auth/privy/logout',
+];
+
+export const privyConfig = {
+  appId: env.PRIVY_APP_ID,
+  appSecret: env.PRIVY_APP_SECRET,
+  verificationKey: env.PRIVY_VERIFICATION_KEY,
+};
+
+export function applyPrivyCorsToRouter(router: Router, corsOptions: any): void {
+  if (!isPrivyEnabled) return;
+
+  const privyEndpoints = ['/privy/login', '/privy/verify', '/privy/refresh-token', '/privy/logout'];
+
+  privyEndpoints.forEach((endpoint) => {
+    router.options(endpoint, (req, res) => {
+      res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+      res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Privy-ID-Token');
+      res.header('Access-Control-Allow-Credentials', 'true');
+      res.sendStatus(200);
+    });
+  });
 }
