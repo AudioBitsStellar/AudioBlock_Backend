@@ -4,6 +4,7 @@ import { Permission } from '../types/Permissions';
 import { validateDTO } from '../middlewares/validate';
 import { AssignRoleDTO } from '../dtos/AssignRoleDTO';
 import { RejectVerificationDTO } from '../dtos/RejectVerificationDTO';
+import { BulkModerateSongsDTO } from '../dtos/BulkModerateSongsDTO';
 import { SongController } from '../controllers/SongController';
 import { JobController } from '../controllers/JobController';
 import { AdminController } from '../controllers/AdminController';

@@ -66,7 +66,13 @@ export class AuthService {
 
   private signRefreshToken(user: User): string {
     const REFRESH_SECRET = process.env.REFRESH_TOKEN_SECRET || process.env.JWT_SECRET || 'secret';
-    return jwt.sign({ id: user.id }, REFRESH_SECRET, { expiresIn: '7d' });
+    // jti guarantees uniqueness: without it, two refresh tokens issued for the
+    // same user within the same second are byte-identical, which collides on
+    // the refresh_tokens.token unique index and defeats rotation.
+    return jwt.sign({ id: user.id }, REFRESH_SECRET, {
+      expiresIn: '7d',
+      jwtid: randomUUID(),
+    });
   }
 
   private async verifyRefreshToken(token: string): Promise<JwtPayload | null> {

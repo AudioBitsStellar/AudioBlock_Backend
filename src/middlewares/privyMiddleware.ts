@@ -1,7 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 import { AppError } from '../errors/AppError';
 import { handleError } from '../utils/helpers';
-import { privyConfig, isPrivyEnabled } from '../config/privy';
+import logger from '../config/logger';
+import { isPrivyEnabled } from '../config/privy';
+import { getPrivyJwksCacheSafe } from '../services/privy/PrivyJwksCache';
+import { isPrivyAvailabilityFailure } from '../services/privy/PrivyErrors';
+import { verifyPrivyAccessToken } from '../services/privy/PrivyTokenVerifier';
+import { privyUnavailableError } from './authMiddleware';
 
 export interface PrivyUser {
   id: string;
@@ -10,6 +15,7 @@ export interface PrivyUser {
 }
 
 declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
       privyUser?: PrivyUser;
@@ -17,100 +23,57 @@ declare global {
   }
 }
 
+/**
+ * Authenticate a request with a Privy access token.
+ *
+ * **Security note — this previously did not verify anything.** The original
+ * implementation (merged in #703) base64-decoded the token payload and read
+ * `sub` straight out of it, accepting the `verificationKey` argument and never
+ * using it. Since it is wired to `POST /api/auth/privy/refresh-token`, which mints
+ * a `JWT_SECRET`-signed access token for `privyUser.id`, anyone could mint a
+ * valid session for an arbitrary user id by sending a hand-crafted token such as
+ * `x.eyJzdWIiOiJ2aWN0aW0ifQ.y` — a full account takeover. Fixed here by routing
+ * through the real verifier.
+ *
+ * Verification is signature + claim based, using the cached Privy JWKS
+ * (`PrivyTokenVerifier`). A rejected token is a 401 and never falls back to any
+ * other credential; only an availability failure produces a retryable 503.
+ */
 export const requirePrivyAuth = (req: Request, res: Response, next: NextFunction) => {
-  if (!isPrivyEnabled) {
-    return handleError(req, res, AppError.authentication('Privy authentication is not enabled'));
-  }
+  void (async () => {
+    if (!isPrivyEnabled) {
+      return handleError(req, res, AppError.authentication('Privy authentication is not enabled'));
+    }
 
-  try {
     const authHeader = req.headers.authorization;
-
-    if (!authHeader || typeof authHeader !== 'string' || !authHeader.startsWith('Bearer ')) {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return handleError(req, res, AppError.authentication('Privy token required'));
     }
+    const token = authHeader.slice('Bearer '.length).trim();
 
-    const token = authHeader.substring(7).trim();
-    if (!token) {
+    const cache = getPrivyJwksCacheSafe();
+    if (!cache) {
+      // Configured for Privy but the key set cannot be resolved, so nothing can
+      // be verified. Fail closed rather than accepting an unverified token.
+      return handleError(
+        req,
+        res,
+        AppError.authentication('Privy authentication is misconfigured (no PRIVY_APP_ID)'),
+      );
+    }
+
+    try {
+      const verified = await verifyPrivyAccessToken(token, cache);
+      req.privyUser = { id: verified.userId };
+      return next();
+    } catch (error) {
+      if (isPrivyAvailabilityFailure(error)) {
+        // Privy is unreachable. 503 + retryable, not 401, so a client does not
+        // discard a perfectly valid session over a transient blip.
+        logger.error({ err: error, route: req.path }, 'Privy verification unavailable');
+        return handleError(req, res, privyUnavailableError((error as Error).message));
+      }
       return handleError(req, res, AppError.authentication('Invalid Privy token'));
     }
-
-    if (!privyConfig.verificationKey) {
-      console.error('Privy verification key not configured');
-      return handleError(req, res, AppError.authentication('Privy configuration error'));
-    }
-
-    const decodedUser = decodePrivyToken(token, privyConfig.verificationKey);
-    if (!decodedUser) {
-      return handleError(req, res, AppError.authentication('Invalid Privy token'));
-    }
-
-    req.privyUser = decodedUser;
-    next();
-  } catch (error) {
-    console.error('Privy auth middleware error:', error);
-    return handleError(req, res, AppError.authentication('Privy authentication failed'));
-  }
+  })();
 };
-
-export function decodePrivyToken(token: string, verificationKey?: string): PrivyUser | null {
-  try {
-    if (!token || typeof token !== 'string') {
-      return null;
-    }
-
-    const trimmedToken = token.trim();
-    const parts = trimmedToken.split('.');
-    if (parts.length !== 3) {
-      return null;
-    }
-
-    let headerStr: string;
-    let payloadStr: string;
-    try {
-      headerStr = Buffer.from(parts[0], 'base64').toString('utf-8');
-      payloadStr = Buffer.from(parts[1], 'base64').toString('utf-8');
-    } catch {
-      return null;
-    }
-
-    if (!payloadStr || !headerStr) {
-      return null;
-    }
-
-    let payload: any;
-    try {
-      payload = JSON.parse(payloadStr);
-    } catch {
-      return null;
-    }
-
-    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-      return null;
-    }
-
-    const userId = payload.sub || payload.id;
-    if (!userId || typeof userId !== 'string' || userId.trim() === '') {
-      return null;
-    }
-
-    // Check expiration if exp claim is present
-    if (payload.exp !== undefined) {
-      if (typeof payload.exp !== 'number' || isNaN(payload.exp)) {
-        return null;
-      }
-      const now = Math.floor(Date.now() / 1000);
-      if (payload.exp < now) {
-        return null;
-      }
-    }
-
-    return {
-      id: userId.trim(),
-      email: typeof payload.email === 'string' && payload.email.trim() ? payload.email.trim() : undefined,
-      walletAddress: typeof payload.walletAddress === 'string' && payload.walletAddress.trim() ? payload.walletAddress.trim() : undefined,
-    };
-  } catch (error) {
-    console.error('Failed to decode Privy token:', error);
-    return null;
-  }
-}

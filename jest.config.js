@@ -6,6 +6,10 @@ module.exports = {
   testMatch: ["**/__tests__/**/*.test.ts", "**/*.test.ts"],
   moduleNameMapper: {
     "^reflect-metadata$": "<rootDir>/node_modules/reflect-metadata",
+    // wasm-attestation-bindings is ESM-only and uses `import.meta`, which
+    // cannot be transpiled into a CommonJS Jest run; the Dynamic Labs wallet
+    // client only needs it for enclave attestation, never in tests.
+    "^@evervault/wasm-attestation-bindings$": "<rootDir>/tests/stubs/emptyModule.js",
   },
   transform: {
     "^.+\\.[tj]sx?$": [
@@ -16,7 +20,11 @@ module.exports = {
     ],
   },
   transformIgnorePatterns: [
-    "node_modules/(?!(@stellar|@noble|@simplewebauthn|uint8array-extras)/)",
+    // Transpile every scoped package (plus known unscoped ESM deps such as
+    // uint8array-extras): otplib 13 (@otplib, @scure), @dynamic-labs-wallet
+    // (@evervault) and friends ship ESM .js files that Jest otherwise rejects
+    // with "Unexpected token 'export'" the moment a test imports the Express app.
+    "node_modules/(?!(@|uint8array-extras))",
   ],
   // Coverage collection — run with `npm run test:coverage` (#396).
   // CI fails when any metric drops below these thresholds.

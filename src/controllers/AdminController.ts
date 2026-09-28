@@ -12,6 +12,7 @@ import { routeParam } from '../utils/routeParams';
 import { VerificationStatus } from '../entities/ArtistVerification';
 import { TransactionLogService } from '../services/TransactionLogService';
 import { IndexerService } from '../services/IndexerService';
+import { SongModerationService } from '../services/Song/SongModerationService';
 
 /**
  * Admin-facing user & role management (Issue #100) and artist verification
@@ -49,6 +50,33 @@ export class AdminController {
         success: true,
         songReports,
         commentReports,
+      });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  /**
+   * POST /api/admin/songs/moderate — apply a moderation action to a batch of
+   * songs (Issue #85). The route enforces permission, rate limiting, and DTO
+   * validation; each song outcome is reported individually so partial failures
+   * are visible to the caller.
+   */
+  static bulkModerateSongs = async (req: Request, res: Response) => {
+    try {
+      const adminId = (req as any).user?.id;
+
+      if (!adminId) {
+        return handleError(req, res, AppError.authentication('Moderator not authenticated'));
+      }
+
+      const { songIds, action } = req.body;
+      const moderationService = new SongModerationService();
+      const result = await moderationService.bulkModerate(songIds, action, adminId);
+
+      return res.status(HTTP_STATUS.OK).json({
+        success: true,
+        ...result,
       });
     } catch (error) {
       handleError(req, res, error);
