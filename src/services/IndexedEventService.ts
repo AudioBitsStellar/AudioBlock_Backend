@@ -89,4 +89,16 @@ export class IndexedEventService {
   async getEventsByTxHash(txHash: string): Promise<IndexedEvent[]> {
     return this.repo.find({ where: { txHash } });
   }
+
+  /**
+   * Get indexed events by event type (e.g., 'artist_registered', 'song_registered').
+   * Used for RPC fallback queries when the subgraph is unavailable.
+   */
+  async getEventsByType(eventType: string, limit: number = 100): Promise<IndexedEvent[]> {
+    return this.repo.find({
+      where: { eventType },
+      order: { createdAt: 'DESC' },
+      take: limit,
+    });
+  }
 }

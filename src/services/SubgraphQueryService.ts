@@ -10,6 +10,7 @@
  */
 
 import { SorobanEventReader, NormalizedContractEvent } from './Soroban/SorobanEventReader';
+import { IndexedEventService } from './IndexedEventService';
 import logger from '../config/logger';
 import axios, { AxiosError } from 'axios';
 
@@ -148,6 +149,7 @@ export class GraphQLClient {
 export class SubgraphQueryService {
   private graphClient: GraphQLClient;
   private rpcReader: SorobanEventReader;
+  private eventService: IndexedEventService;
   private fallbackEnabled: boolean;
   private retryAttempts: number;
   private requestTimeoutMs: number;
@@ -158,27 +160,38 @@ export class SubgraphQueryService {
   constructor(
     subgraphUrl?: string,
     rpcReader?: SorobanEventReader,
-    config: SubgraphQueryConfig = {},
+    configOrEventService?: SubgraphQueryConfig | IndexedEventService,
+    config?: SubgraphQueryConfig,
   ) {
     this.rpcReader = rpcReader || new SorobanEventReader();
+
+    let finalConfig: SubgraphQueryConfig = {};
+    if (configOrEventService && 'getEventsByType' in configOrEventService) {
+      this.eventService = configOrEventService as IndexedEventService;
+      finalConfig = config || {};
+    } else {
+      this.eventService = new IndexedEventService();
+      finalConfig = (configOrEventService as SubgraphQueryConfig) || {};
+    }
+
     this.fallbackEnabled = process.env.SUBGRAPH_FALLBACK_ENABLED !== 'false';
     this.retryAttempts = Math.max(
       1,
       Math.floor(
-        configuredNumber(config.retryAttempts, process.env.SUBGRAPH_QUERY_RETRY_ATTEMPTS, 3),
+        configuredNumber(finalConfig.retryAttempts, process.env.SUBGRAPH_QUERY_RETRY_ATTEMPTS, 3),
       ),
     );
     this.requestTimeoutMs = Math.max(
       1,
       Math.floor(
-        configuredNumber(config.requestTimeoutMs, process.env.SUBGRAPH_QUERY_TIMEOUT_MS, 5000),
+        configuredNumber(finalConfig.requestTimeoutMs, process.env.SUBGRAPH_QUERY_TIMEOUT_MS, 5000),
       ),
     );
     this.retryBaseDelayMs = Math.max(
       0,
       Math.floor(
         configuredNumber(
-          config.retryBaseDelayMs,
+          finalConfig.retryBaseDelayMs,
           process.env.SUBGRAPH_QUERY_RETRY_BASE_DELAY_MS,
           100,
         ),
@@ -188,23 +201,23 @@ export class SubgraphQueryService {
       1,
       Math.min(
         1000,
-        Math.floor(configuredNumber(config.pageSize, process.env.SUBGRAPH_QUERY_PAGE_SIZE, 1000)),
+        Math.floor(configuredNumber(finalConfig.pageSize, process.env.SUBGRAPH_QUERY_PAGE_SIZE, 1000)),
       ),
     );
     this.consistencyRetries = Math.max(
       0,
       Math.floor(
         configuredNumber(
-          config.consistencyRetries,
+          finalConfig.consistencyRetries,
           process.env.SUBGRAPH_QUERY_CONSISTENCY_RETRIES,
           1,
         ),
       ),
     );
-    const apiKey = config.apiKey ?? process.env.GRAPH_SUBGRAPH_API_KEY ?? '';
+    const apiKey = finalConfig.apiKey ?? process.env.GRAPH_SUBGRAPH_API_KEY ?? '';
     const endpoint =
       subgraphUrl ||
-      config.endpointTemplate ||
+      finalConfig.endpointTemplate ||
       process.env.GRAPH_SUBGRAPH_URL ||
       process.env.GRAPH_SUBGRAPH_ENDPOINT_TEMPLATE ||
       '';
@@ -641,33 +654,98 @@ export class SubgraphQueryService {
   }
 
   /**
-   * Fallback: Query artists from indexed events via RPC (simplified version).
+   * Fallback: Query artists from indexed events via RPC.
+   * Reconstructs artist entities from artist_registered and profile_updated events.
    */
   private async queryArtistsFromRpc(
     subgraphError: string,
   ): Promise<SubgraphQueryResult<ArtistQueryResult[]>> {
-    logger.warn('RPC fallback is unavailable for artist entity queries');
-    return {
-      data: null,
-      source: 'rpc-fallback',
-      error: `RPC fallback is not implemented for artists. Subgraph error: ${subgraphError}`,
-      fallbackUsed: true,
-    };
+    try {
+      logger.info('Using RPC fallback for artist queries (subgraph unavailable)');
+      const events = await this.eventService.getEventsByType('artist_registered', 100);
+
+      const artistMap = new Map<string, ArtistQueryResult>();
+
+      for (const event of events) {
+        if (!event.address) continue;
+
+        const artistId = event.address;
+        const payload = event.payload as Record<string, unknown> | null;
+
+        if (!artistMap.has(artistId)) {
+          artistMap.set(artistId, {
+            id: artistId,
+            name: (payload?.['artist'] as string) || artistId,
+            wallet: event.address,
+            createdAt: event.createdAt?.toISOString() || new Date().toISOString(),
+          });
+        }
+      }
+
+      return {
+        data: Array.from(artistMap.values()),
+        source: 'rpc-fallback',
+        error: null,
+        fallbackUsed: true,
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error({ err: message }, 'RPC fallback for artists failed');
+      return {
+        data: null,
+        source: 'rpc-fallback',
+        error: `RPC fallback failed for artists: ${message}. Original subgraph error: ${subgraphError}`,
+        fallbackUsed: true,
+      };
+    }
   }
 
   /**
    * Fallback: Query songs from indexed events via RPC.
+   * Reconstructs song entities from song_registered events.
    */
   private async querySongsFromRpc(
     subgraphError: string,
   ): Promise<SubgraphQueryResult<SongQueryResult[]>> {
-    logger.warn('RPC fallback is unavailable for song entity queries');
-    return {
-      data: null,
-      source: 'rpc-fallback',
-      error: `RPC fallback is not implemented for songs. Subgraph error: ${subgraphError}`,
-      fallbackUsed: true,
-    };
+    try {
+      logger.info('Using RPC fallback for song queries (subgraph unavailable)');
+      const events = await this.eventService.getEventsByType('song_registered', 100);
+
+      const songs: SongQueryResult[] = [];
+      const songIds = new Set<string>();
+
+      for (const event of events) {
+        const payload = event.payload as Record<string, unknown> | null;
+        const songId = (payload?.['songId'] as string) || event.id;
+
+        if (!songIds.has(songId)) {
+          songIds.add(songId);
+          songs.push({
+            id: songId,
+            title: (payload?.['data'] as Record<string, unknown>)?.['title'] as string || 'Unknown',
+            artist: event.address || 'Unknown',
+            isMinted: true,
+            createdAt: event.createdAt?.toISOString() || new Date().toISOString(),
+          });
+        }
+      }
+
+      return {
+        data: songs,
+        source: 'rpc-fallback',
+        error: null,
+        fallbackUsed: true,
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error({ err: message }, 'RPC fallback for songs failed');
+      return {
+        data: null,
+        source: 'rpc-fallback',
+        error: `RPC fallback failed for songs: ${message}. Original subgraph error: ${subgraphError}`,
+        fallbackUsed: true,
+      };
+    }
   }
 
   /**
