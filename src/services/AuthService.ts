@@ -615,20 +615,42 @@ export class AuthService {
     refreshTokenFamily: string;
     user: any;
   }> {
-    if (!idToken) {
-      throw new Error('ID token required');
+    if (!idToken || typeof idToken !== 'string' || idToken.trim() === '') {
+      throw AppError.validation('Privy ID token is required');
     }
 
+    const parts = idToken.trim().split('.');
+    if (parts.length !== 3) {
+      throw AppError.authentication('Invalid or malformed Privy ID token');
+    }
+
+    let payload: any;
+    try {
+      const payloadStr = Buffer.from(parts[1], 'base64').toString('utf-8');
+      payload = JSON.parse(payloadStr);
+    } catch {
+      throw AppError.authentication('Invalid or malformed Privy ID token');
+    }
+
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      throw AppError.authentication('Invalid or malformed Privy ID token');
+    }
+
+    const userId = payload.sub || payload.id || 'privy-user-' + Date.now();
+    const email = payload.email || 'user@privy.example.com';
+    const walletAddress = payload.walletAddress;
+
     const accessToken = this.generateAccessToken({
-      id: 'privy-user-' + Date.now(),
-      email: 'user@privy.example.com',
+      id: userId,
+      email,
+      walletAddress,
     });
 
     return {
       accessToken,
       refreshToken: 'refresh-token-' + Date.now(),
       refreshTokenFamily: 'family-' + Date.now(),
-      user: { id: 'privy-user-' + Date.now(), email: 'user@privy.example.com' },
+      user: { id: userId, email, walletAddress },
     };
   }
 
