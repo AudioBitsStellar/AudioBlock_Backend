@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { AuthController } from '../controllers/AuthController';
 import { requireAuth } from '../middlewares/authMiddleware';
+import { requirePrivyAuth } from '../middlewares/privyMiddleware';
 import {
   authRateLimiter,
   nonceRateLimiter,
@@ -40,5 +41,15 @@ router.get('/verify-email/:token', authController.verifyEmail);
 // inbox flooding and reset-token brute-forcing.
 router.post('/forgot-password', passwordResetRateLimiter, authController.forgotPassword);
 router.post('/reset-password/:token', authRateLimiter, authController.resetPassword);
+
+// Privy authentication endpoints (Issues #627, #628, #629, #630)
+router.post('/privy/login', authRateLimiter, authController.privyLogin);
+router.post(
+  '/privy/refresh-token',
+  authRateLimiter,
+  requirePrivyAuth,
+  authController.privyRefreshToken,
+);
+router.post('/privy/logout', authRateLimiter, requirePrivyAuth, authController.privyLogout);
 
 export default router;

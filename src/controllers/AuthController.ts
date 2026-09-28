@@ -361,6 +361,50 @@ export class AuthController {
     }
   };
 
+  privyLogin = async (req: Request, res: Response) => {
+    try {
+      const { idToken } = req.body;
+      if (!idToken) {
+        throw AppError.validation('Privy ID token is required');
+      }
+
+      const result = await this.authService.privyLogin(idToken);
+      res.status(200).json({ success: true, message: 'Privy login successful', ...result });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  privyRefreshToken = async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).privyUser?.id;
+      const { refreshToken } = req.body;
+
+      if (!userId || !refreshToken) {
+        throw AppError.authentication('User ID and refresh token required');
+      }
+
+      const result = await this.authService.privyRefreshToken(userId, refreshToken);
+      res.status(200).json({ success: true, message: 'Token rotated successfully', ...result });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  privyLogout = async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).privyUser?.id;
+      if (!userId) {
+        throw AppError.authentication('User ID required');
+      }
+
+      await this.authService.privyLogout(userId);
+      res.status(200).json({ success: true, message: 'Privy logout successful' });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
   private handleError(res: Response, error: unknown): void {
     if (error instanceof AppError) {
       logger.error({ err: error }, error.message);
