@@ -26,6 +26,7 @@ import commentRoutes from "./routes/commentRoutes";
 import commentReactionRoutes from "./routes/commentReactionRoutes";
 import subscriptionRoutes from "./routes/subscriptionRoutes";
 import aiRoutes from "./routes/aiRoutes";
+import aiStudioRoutes from "./routes/aiStudioRoutes";
 import activityRoutes from "./routes/activityRoutes";
 import activityStreamRoutes from "./routes/activityStreamRoutes";
 import accountRoutes from "./routes/accountRoutes";
@@ -148,6 +149,9 @@ app.use("/api/subscriptions", subscriptionRoutes);
 
 // AI-assisted generation (cover art, descriptions) — async, queued via JobQueueService
 app.use("/api/ai", aiRoutes);
+
+// AI Studio: grouped AI-assisted upload tools, gated by per-artist enable flag
+app.use("/api/ai-studio", aiStudioRoutes);
 
 // On-chain activity & feeds (REST queries + live SSE stream)
 app.use("/api/activity", activityRoutes);
