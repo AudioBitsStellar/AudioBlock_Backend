@@ -3,17 +3,50 @@
  *
  * Initializes the database, starts the concurrent per-contract pollers, and
  * keeps the process alive until it receives SIGINT/SIGTERM.
+ *
+ * Projection of raw events into read models runs as its own loop, decoupled
+ * from ingestion (Issue #261): a projector failure never blocks raw event
+ * storage, and projections can be rebuilt with `npm run cli:project`.
  */
 import 'reflect-metadata';
 import AppDataSource from '../../config/db';
 import { IndexerWorker } from './IndexerWorker';
+import { EventProjector } from '../../services/EventProjector';
 import logger from '../../config/logger';
 
+const PROJECTOR_INTERVAL_MS = parseInt(process.env.INDEXER_PROJECTOR_INTERVAL_MS || '15000', 10);
+
 let worker: IndexerWorker | null = null;
+let projectorTimer: NodeJS.Timeout | null = null;
+
+/**
+ * Periodically apply new raw events to all projections. Skips a tick if the
+ * previous run is still in flight.
+ */
+export function startProjectorLoop(
+  projector: EventProjector,
+  intervalMs: number = PROJECTOR_INTERVAL_MS,
+): NodeJS.Timeout {
+  let running = false;
+  const tick = async (): Promise<void> => {
+    if (running) return;
+    running = true;
+    try {
+      await projector.catchUp();
+    } catch (err) {
+      logger.error({ err }, 'Event projector run failed');
+    } finally {
+      running = false;
+    }
+  };
+  void tick();
+  return setInterval(() => void tick(), intervalMs);
+}
 
 function shutdown(signal: string): void {
   logger.info({ signal }, 'Shutting down indexer worker');
   worker?.stop();
+  if (projectorTimer) clearInterval(projectorTimer);
   const finish = async (): Promise<void> => {
     if (AppDataSource.isInitialized) {
       await AppDataSource.destroy().catch(() => undefined);
@@ -29,6 +62,7 @@ export async function main(): Promise<void> {
 
   worker = new IndexerWorker();
   worker.start();
+  projectorTimer = startProjectorLoop(new EventProjector());
 
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));
