@@ -53,8 +53,14 @@ describe('PrivyWebhookService', () => {
     });
 
     it('should return false if signature is missing', () => {
-      const timestamp = Math.floor(D
-e = generateValidSignature(testPayload, oldTimestamp, testSecret);
+      const timestamp = Math.floor(Date.now() / 1000);
+      const result = service.verifySignature(`t=${timestamp}`, testPayload);
+      expect(result).toBe(false);
+    });
+
+    it('should return false if webhook is too old', () => {
+      const oldTimestamp = Math.floor(Date.now() / 1000) - 400; // > 5 minutes ago
+      const signature = generateValidSignature(testPayload, oldTimestamp, testSecret);
       const result = service.verifySignature(signature, testPayload);
       expect(result).toBe(false);
     });

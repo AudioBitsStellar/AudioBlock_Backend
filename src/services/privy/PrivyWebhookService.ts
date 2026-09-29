@@ -50,8 +50,24 @@ export class PrivyWebhookService {
    * }
    */
   verifySignature(signature: string | undefined, rawBody: Buffer | string): boolean {
-    if (!signat
- signature }, 'Malformed webhook signature header');
+    if (!signature) {
+      logger.warn('Missing privy-webhook-signature header');
+      return false;
+    }
+
+    // Parse signature header: t=timestamp,v1=signature
+    const parts = signature.split(',');
+    let timestamp: string | undefined;
+    let providedSignature: string | undefined;
+
+    for (const part of parts) {
+      const [key, value] = part.split('=');
+      if (key === 't') timestamp = value;
+      if (key === 'v1') providedSignature = value;
+    }
+
+    if (!timestamp || !providedSignature) {
+      logger.warn({ signature }, 'Malformed webhook signature header');
       return false;
     }
 
@@ -103,9 +119,8 @@ export class PrivyWebhookService {
       }
       return isValid;
     } catch (error) {
-      logger.error({ err: error }, 'Error dur
-ayload');
-      return null;
+      logger.error({ err: error }, 'Error during webhook signature verification');
+      return false;
     }
   }
 }

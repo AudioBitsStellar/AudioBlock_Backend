@@ -23,7 +23,20 @@ jest.mock('../config/logger', () => ({
 
 describe('Reindex CLI', () => {
   let mockEventService: jest.Mocked<IndexedEventService>;
-       to: 100,
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockEventService = new IndexedEventService() as jest.Mocked<IndexedEventService>;
+  });
+
+  describe('parameter validation', () => {
+    it('should reject negative start ledger', async () => {
+      await expect(
+        reindexRange({
+          contract: 'CXXX123',
+          network: 'mainnet',
+          from: -1,
+          to: 100,
         })
       ).rejects.toThrow('Start ledger (--from) must be >= 0');
     });

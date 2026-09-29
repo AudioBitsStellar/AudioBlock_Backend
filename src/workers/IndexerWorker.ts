@@ -26,8 +26,33 @@ const POLL_INTERVAL_MS = parseInt(process.env.INDEXER_POLL_INTERVAL_MS || '5000'
 const BATCH_SIZE = parseInt(process.env.INDEXER_BATCH_SIZE || '100', 10);
 
 // Overlap window for reorg protection
-const OVERLAP_WINDOW = parseInt(process.env.INDEXER_OVERLAP_WINDOW || '10', 1
-t'
+const OVERLAP_WINDOW = parseInt(process.env.INDEXER_OVERLAP_WINDOW || '10', 10);
+
+interface ContractConfig {
+  contractId: string;
+  network: string;
+  name: string;
+}
+
+interface SorobanEvent {
+  id: string;
+  ledger: number;
+  contractId: string;
+  type: string;
+  value: Record<string, unknown>;
+  txHash?: string;
+}
+
+/**
+ * Mock Soroban RPC client for fetching events
+ * TODO: Replace with actual SorobanService integration
+ */
+class SorobanRpcClient {
+  private rpcUrl: string;
+
+  constructor(network: string) {
+    this.rpcUrl =
+      network === 'mainnet'
         ? process.env.SOROBAN_RPC_URL_MAINNET || 'https://soroban-mainnet.stellar.org'
         : process.env.SOROBAN_RPC_URL_TESTNET || 'https://soroban-testnet.stellar.org';
   }
