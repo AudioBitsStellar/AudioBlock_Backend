@@ -173,7 +173,7 @@ export class AuthController {
         throw AppError.validation('Validation failed', toValidationDetails(errors));
       }
 
-      const result = await this.authService.loginWithEmail(dto);
+      const result = await this.authService.loginWithEmail(dto, req);
       res.status(200).json({ success: true, message: 'User logged in successfully', ...result });
     } catch (error) {
       handleError(req, res, error);
@@ -187,7 +187,7 @@ export class AuthController {
         return res.status(400).json({ success: false, message: 'Refresh token is required' });
       }
 
-      const result = await this.authService.refreshToken(refreshToken);
+      const result = await this.authService.refreshToken(refreshToken, req);
       res.status(200).json({ success: true, message: 'Token refreshed successfully', ...result });
     } catch (error) {
       logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'refreshToken error');
@@ -202,7 +202,7 @@ export class AuthController {
         return res.status(400).json({ success: false, message: 'Refresh token is required' });
       }
 
-      await this.authService.logout(refreshToken);
+      await this.authService.logout(refreshToken, req);
       res.status(200).json({ success: true, message: 'Logged out successfully' });
     } catch (error) {
       logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'logout error');
@@ -217,7 +217,7 @@ export class AuthController {
         throw AppError.authentication('Unauthorized');
       }
 
-      const enrollment = await this.authService.enableTwoFactor(userId);
+      const enrollment = await this.authService.enableTwoFactor(userId, req);
       res.status(200).json({
         success: true,
         message: 'Two-factor authentication enabled',
@@ -265,7 +265,7 @@ export class AuthController {
           .json({ success: false, message: 'Two-factor code is required to disable' });
       }
 
-      await this.authService.disableTwoFactor(userId, code);
+      await this.authService.disableTwoFactor(userId, code, req);
       res.status(200).json({ success: true, message: 'Two-factor authentication disabled' });
     } catch (error) {
       logger.error(
@@ -317,7 +317,7 @@ export class AuthController {
       if (!email) {
         throw AppError.validation('Email is required');
       }
-      await this.authService.forgotPassword(email);
+      await this.authService.forgotPassword(email, req);
       res
         .status(200)
         .json({ success: true, message: 'If the email exists, a reset link has been sent' });
@@ -368,7 +368,7 @@ export class AuthController {
         throw AppError.validation('Privy ID token is required');
       }
 
-      const result = await this.authService.privyLogin(idToken);
+      const result = await this.authService.privyLogin(idToken, req);
       res.status(200).json({ success: true, message: 'Privy login successful', ...result });
     } catch (error) {
       handleError(req, res, error);
@@ -384,7 +384,7 @@ export class AuthController {
         throw AppError.authentication('User ID and refresh token required');
       }
 
-      const result = await this.authService.privyRefreshToken(userId, refreshToken);
+      const result = await this.authService.privyRefreshToken(userId, refreshToken, req);
       res.status(200).json({ success: true, message: 'Token rotated successfully', ...result });
     } catch (error) {
       handleError(req, res, error);
