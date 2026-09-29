@@ -647,32 +647,65 @@ export class AuthService {
       throw AppError.authentication('Privy user ID (sub) is required in token');
     }
 
+    // Extract authentication data from token
     const email = payload.email;
     const walletAddress = payload.wallet_address || payload.walletAddress;
+    const linkedAccounts = payload.linked_accounts || [];
 
-    // Sync or create local user based on Privy user ID
+    // Support for social login providers (Issue #610)
+    const googleAccount = linkedAccounts.find((acc: any) => acc.type === 'google');
+    const twitterAccount = linkedAccounts.find((acc: any) => acc.type === 'twitter');
+
+    // Support for external wallet connections (Issue #613)
+    const externalWallets = linkedAccounts.filter((acc: any) =>
+      acc.type === 'wallet' && (acc.wallet_client === 'metamask' || acc.wallet_client === 'walletconnect' || acc.connector_type === 'injected' || acc.connector_type === 'wallet_connect')
+    );
+
+    // Support for phone/SMS OTP (Issue #611)
+    const phone = payload.phone || payload.phone_number;
+
+    // Account linking logic (Issue #609)
+    // Try to find existing user by Privy ID first
     let user = await this.userRepo.findOne({ where: { privyUserId } });
 
     if (!user) {
-      // Create new user for first-time Privy login
-      user = this.userRepo.create({
-        privyUserId,
-        email: email || null,
-        walletAddress: walletAddress || null,
-        role: UserRole.LISTENER,
-        emailVerified: !!email,
-      });
-      await this.userRepo.save(user);
-    } else {
-      // Update existing user with latest data from Privy
-      if (email && !user.email) {
-        user.email = email;
+      // Try to link with existing account by verified email (if email-verified)
+      if (email && payload.email_verified) {
+        user = await this.userRepo.findOne({ where: { email } });
+        if (user) {
+          // Link existing email account with Privy
+          user.privyUserId = privyUserId;
+          logger.info({ userId: user.id, privyUserId, email }, 'Linked existing email account with Privy');
+        }
       }
-      if (walletAddress && !user.walletAddress) {
-        user.walletAddress = walletAddress;
+
+      // Try to link with existing account by wallet address
+      if (!user && walletAddress) {
+        user = await this.userRepo.findOne({ where: { walletAddress } });
+        if (user) {
+          // Link existing wallet account with Privy
+          user.privyUserId = privyUserId;
+          logger.info({ userId: user.id, privyUserId, walletAddress }, 'Linked existing wallet account with Privy');
+        }
       }
-      await this.userRepo.save(user);
+
+      // Create new user if no existing account found
+      if (!user) {
+        user = this.userRepo.create({
+          privyUserId,
+          email: email || null,
+          walletAddress: walletAddress || externalWallets[0]?.address || null,
+          role: UserRole.LISTENER,
+          emailVerified: payload.email_verified || !!email,
+        });
+        logger.info({ privyUserId, email, walletAddress }, 'Created new user from Privy login');
+      }
     }
+
+    // Update user with latest data from Privy (supports all authentication methods)
+    let updated = false;
+
+    // Update email if pr
 
     const accessToken = this.signToken(user);
     const refreshToken = this.signRefreshToken(user);
@@ -683,7 +716,41 @@ export class AuthService {
       token: refreshToken,
       userId: user.id,
       family: refreshTokenFamily,
-      expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRY_SECONDS * 1000),
+      expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRY_SECONDS * 1000), 'Linked external wallet');
+    } else if (walletAddress && !user.walletAddress) {
+      user.walletAddress = walletAddress;
+      updated = true;
+    }
+
+    // Update social account info (Issue #610)
+    if (googleAccount) {
+      // Google profile data might include email, name, etc.
+      if (!user.email && googleAccount.email) {
+        user.email = googleAccount.email;
+        user.emailVerified = googleAccount.verified_email || false;
+        updated = true;
+      }
+      logger.info({ userId: user.id, provider: 'google' }, 'Google account linked via Privy');
+    }
+
+    if (twitterAccount) {
+      // Update Twitter profile information
+      if (twitterAccount.username && !user.twitterUsername) {
+        user.twitterUsername = twitterAccount.username;
+        user.twitterId = twitterAccount.subject || twitterAccount.id;
+        user.twitterDisplayName = twitterAccount.name;
+        user.twitterProfileImage = twitterAccount.profile_picture_url;
+        user.twitterVerified = twitterAccount.verified || false;
+        user.twitterConnected = true;
+        updated = true;
+        logger.info({ userId: user.id, twitterUsername: user.twitterUsername }, 'Twitter account linked via Privy');
+      }
+    }
+
+    // Save user if updated
+    if (updated || !user.id) {
+      await this.userRepo.save(user);
+    }
     });
     await this.refreshTokenRepo.save(refreshTokenEntity);
 

@@ -78,15 +78,18 @@ export class WebhookController {
     }
   };
 
-  // Privy webhook handlers (Issues #603, #604, #605)
+  // Privy webhook handlers (Issues #603, #604, #605, #609, #610, #611, #613)
   static privyUserCreated = async (req: Request, res: Response) => {
     try {
-      const { user_id, email, linked_accounts } = req.body;
+      const { user_id, email, linked_accounts, phone } = req.body;
       if (!user_id) {
         return res.status(400).json({ success: false, message: 'user_id is required' });
       }
 
-      logger.info({ privyUserId: user_id, email }, 'Privy user.created webhook received');
+      logger.info(
+        { privyUserId: user_id, email, phone, linked_accounts },
+        'Privy user.created webhook received',
+      );
 
       // Check if user already exists
       const existingUser = await userRepo.findOne({ where: { privyUserId: user_id } });
@@ -94,18 +97,38 @@ export class WebhookController {
         return res.status(200).json({ success: true, message: 'User already exists' });
       }
 
-      // Create new user from Privy data
-      const walletAddress = linked_accounts?.find((acc: any) => acc.type === 'wallet')?.address;
+      // Extract account information from linked_accounts (Issues #609, #610, #611, #613)
+      const walletAccount = linked_accounts?.find((acc: any) => acc.type === 'wallet');
+      const googleAccount = linked_accounts?.find((acc: any) => acc.type === 'google');
+      const twitterAccount = linked_accounts?.find((acc: any) => acc.type === 'twitter');
+
+      // Create new user from Privy data with support for all authentication methods
       const newUser = userRepo.create({
         privyUserId: user_id,
-        email: email || null,
-        walletAddress: walletAddress || null,
+        email: email || googleAccount?.email || null,
+        walletAddress: walletAccount?.address || null,
         role: UserRole.LISTENER,
-        emailVerified: !!email,
+        emailVerified: !!email || googleAccount?.verified_email || false,
+        // Social login data (Issue #610)
+        twitterUsername: twitterAccount?.username || null,
+        twitterId: twitterAccount?.subject || twitterAccount?.id || null,
+        twitterDisplayName: twitterAccount?.name || null,
+        twitterProfileImage: twitterAccount?.profile_picture_url || null,
+        twitterVerified: twitterAccount?.verified || false,
+        twitterConnected: !!twitterAccount,
       });
       await userRepo.save(newUser);
 
-      logger.info({ userId: newUser.id, privyUserId: user_id }, 'User created from Privy webhook');
+      logger.info(
+        {
+          userId: newUser.id,
+          privyUserId: user_id,
+          hasEmail: !!newUser.email,
+          hasWallet: !!newUser.walletAddress,
+          hasTwitter: !!newUser.twitterConnected,
+        },
+        'User created from Privy webhook with linked accounts',
+      );
       return res.status(201).json({ success: true, message: 'User created successfully' });
     } catch (error) {
       logger.error({ err: error }, 'Error in privyUserCreated webhook');
@@ -146,7 +169,7 @@ export class WebhookController {
 
   static privyUserLinkedAccount = async (req: Request, res: Response) => {
     try {
-      const { user_id, account_type, account_address } = req.body;
+      const { user_id, account_type, account_address, account } = req.body;
       if (!user_id || !account_type) {
         return res
           .status(400)
@@ -154,7 +177,7 @@ export class WebhookController {
       }
 
       logger.info(
-        { privyUserId: user_id, account_type, account_address },
+        { privyUserId: user_id, account_type, account_address, account },
         'Privy user.linked_account webhook received',
       );
 
@@ -163,14 +186,79 @@ export class WebhookController {
         return res.status(404).json({ success: false, message: 'User not found' });
       }
 
-      // Update wallet address if wallet account is linked
-      if (account_type === 'wallet' && account_address && !user.walletAddress) {
-        user.walletAddress = account_address;
-        await userRepo.save(user);
+      let updated = false;
+
+      // Issue #613: Handle external wallet connections (MetaMask, WalletConnect)
+      if (account_type === 'wallet' && account_address) {
+        if (!user.walletAddress) {
+          user.walletAddress = account_address;
+          updated = true;
+          logger.info(
+            {
+              userId: user.id,
+              privyUserId: user_id,
+              walletAddress: account_address,
+              walletClient: account?.wallet_client || account?.connector_type,
+            },
+            'External wallet linked from Privy webhook',
+          );
+        }
+      }
+
+      // Issue #610: Handle social login providers (Google, Twitter/X)
+      if (account_type === 'google' && account) {
+        if (account.email && !user.email) {
+          user.email = account.email;
+          user.emailVerified = account.verified_email || false;
+          updated = true;
+          logger.info(
+            { userId: user.id, privyUserId: user_id, email: account.email },
+            'Google account linked from Privy webhook',
+          );
+        }
+      }
+
+      if (account_type === 'twitter' && account) {
+        if (account.username && !user.twitterUsername) {
+          user.twitterUsername = account.username;
+          user.twitterId = account.subject || account.id;
+          user.twitterDisplayName = account.name;
+          user.twitterProfileImage = account.profile_picture_url;
+          user.twitterVerified = account.verified || false;
+          user.twitterConnected = true;
+          updated = true;
+          logger.info(
+            { userId: user.id, privyUserId: user_id, twitterUsername: account.username },
+            'Twitter account linked from Privy webhook',
+          );
+        }
+      }
+
+      // Issue #611: Handle phone/SMS linking
+      if (account_type === 'phone' && account?.phone_number) {
+        // Phone numbers are stored as verified contact info but not in a dedicated column yet
+        // This webhook acknowledges the linking for future enhancement
         logger.info(
-          { userId: user.id, privyUserId: user_id, walletAddress: account_address },
-          'User wallet linked from Privy webhook',
+          { userId: user.id, privyUserId: user_id, phone: account.phone_number },
+          'Phone number linked from Privy webhook',
         );
+      }
+
+      // Issue #611: Handle email OTP linking
+      if (account_type === 'email' && account?.address) {
+        if (!user.email || user.email !== account.address) {
+          user.email = account.address;
+          user.emailVerified = true; // Email via OTP is verified by default
+          updated = true;
+          logger.info(
+            { userId: user.id, privyUserId: user_id, email: account.address },
+            'Email (OTP) linked from Privy webhook',
+          );
+        }
+      }
+
+      if (updated) {
+        await userRepo.save(user);
       }
 
       return res.status(200).json({ success: true, message: 'Account linked successfully' });
