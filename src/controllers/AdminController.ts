@@ -317,4 +317,49 @@ export class AdminController {
       handleError(req, res, error);
     }
   };
+
+  /**
+   * GET /api/admin/users/:id/linked-accounts — view Privy linked accounts for a user (Issue #632).
+   *
+   * Returns all authentication methods linked to the user's Privy account:
+   * wallets, emails, social providers, etc. Requires admin permission.
+   * Returns 404 if user has no Privy identity linked.
+   */
+  static getLinkedAccounts = async (req: Request, res: Response) => {
+    try {
+      const userId = routeParam(req.params.id);
+
+      // Get user and their Privy ID
+      const user = await AdminController.userService.findById(userId);
+      if (!user) {
+        return handleError(req, res, AppError.notFound('User not found'));
+      }
+
+      if (!user.privyUserId) {
+        return res.status(HTTP_STATUS.OK).json({
+          success: true,
+          message: 'User has no Privy account linked',
+          userId: user.id,
+          privyUserId: null,
+          linkedAccounts: [],
+        });
+      }
+
+      // Fetch linked accounts from Privy API
+      const { privyService } = await import('../services/PrivyService');
+      const privyUserData = await privyService.getUserData(user.privyUserId);
+
+      return res.status(HTTP_STATUS.OK).json({
+        success: true,
+        userId: user.id,
+        email: user.email,
+        privyUserId: user.privyUserId,
+        linkedAccounts: privyUserData.linked_accounts || [],
+        mfaEnabled: privyUserData.mfa_methods?.length > 0,
+        createdAt: privyUserData.created_at,
+      });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
 }

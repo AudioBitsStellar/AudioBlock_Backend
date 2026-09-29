@@ -6,6 +6,8 @@ import { PlaylistCollaborator, PlaylistCollaboratorRole } from '../entities/Play
 import { PlaylistFollow } from '../entities/PlaylistFollow';
 import { Song } from '../entities/Song';
 import { AppError } from '../errors/AppError';
+import { getAIProviderService } from './AI/AIProviderService';
+import logger from '../config/logger';
 
 export interface CreatePlaylistInput {
   name: string;
@@ -14,6 +16,20 @@ export interface CreatePlaylistInput {
   coverImageUrl?: string;
   isRuleBased?: boolean;
   rule?: PlaylistRule | null;
+}
+
+export interface PlaylistCurationInput {
+  prompt: string;
+  limit?: number;
+}
+
+export interface CandidatePlaylistResult {
+  prompt: string;
+  suggestedName: string;
+  suggestedDescription: string;
+  matchedTags: string[];
+  matchedGenres: string[];
+  candidateTracks: Song[];
 }
 
 export interface UpdatePlaylistInput {
@@ -707,5 +723,121 @@ export class PlaylistService {
         'PLAYLIST_RULE_INVALID',
       );
     }
+  }
+
+  /**
+   * AI-powered mood/prompt-based playlist curation (Issue #275).
+   * Takes a free-text prompt and returns a candidate track list for the user
+   * to review and save.
+   *
+   * Crucial safety: Does NOT silently save or create a playlist entity in DB.
+   */
+  async curateCandidatePlaylist(
+    userId: string,
+    input: PlaylistCurationInput,
+  ): Promise<CandidatePlaylistResult> {
+    if (!input.prompt || !input.prompt.trim()) {
+      throw AppError.validation(
+        'A curation prompt is required',
+        undefined,
+        'CURATION_PROMPT_REQUIRED',
+      );
+    }
+
+    const limit = Math.min(Math.max(1, input.limit || 20), 50);
+    const aiService = getAIProviderService();
+
+    let suggestedName = 'AI Curated Mix';
+    let suggestedDescription = `Curated based on prompt: "${input.prompt.trim()}"`;
+    let targetGenres: string[] = [];
+    let targetTags: string[] = [];
+
+    try {
+      const aiPrompt = `You are an AI music playlist curator. A user wants a curated playlist for the prompt: "${input.prompt}". Suggest a creative playlist title, a brief description, target music genres, and relevant mood/vibe tags. Respond strictly in JSON format: {"playlistName": string, "description": string, "targetGenres": string[], "targetTags": string[]}.`;
+
+      const aiResponse = await aiService.generateText({
+        prompt: aiPrompt,
+        temperature: 0.5,
+        maxTokens: 200,
+      });
+
+      let parsed: any;
+      try {
+        parsed = JSON.parse(aiResponse.text);
+      } catch {
+        const jsonMatch = aiResponse.text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) parsed = JSON.parse(jsonMatch[0]);
+      }
+
+      if (parsed) {
+        if (parsed.playlistName) suggestedName = String(parsed.playlistName);
+        if (parsed.description) suggestedDescription = String(parsed.description);
+        if (Array.isArray(parsed.targetGenres)) targetGenres = parsed.targetGenres.map(String);
+        if (Array.isArray(parsed.targetTags)) targetTags = parsed.targetTags.map(String);
+      }
+    } catch (error) {
+      logger.warn(
+        { err: error },
+        'AI playlist curation analysis encountered error; falling back to prompt keywords',
+      );
+      const words = input.prompt
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((w) => w.length > 2);
+      targetTags = words;
+      targetGenres = words;
+    }
+
+    // Query candidate tracks from database based on genres, tags, title, description
+    const queryBuilder = this.songRepo
+      .createQueryBuilder('song')
+      .leftJoinAndSelect('song.user', 'user')
+      .leftJoinAndSelect('song.genreEntity', 'genreEntity')
+      .where('song.status = :status', { status: 'ready' });
+
+    const conditions: string[] = [];
+    const params: Record<string, any> = {};
+
+    if (targetGenres.length > 0) {
+      conditions.push('LOWER(song.genre) IN (:...genres)');
+      params.genres = targetGenres.map((g) => g.toLowerCase());
+    }
+
+    const tokens = input.prompt
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((t) => t.length > 2);
+    tokens.forEach((token, idx) => {
+      conditions.push(
+        `(LOWER(song.title) LIKE :tok${idx} OR LOWER(song.description) LIKE :tok${idx})`,
+      );
+      params[`tok${idx}`] = `%${token}%`;
+    });
+
+    if (conditions.length > 0) {
+      queryBuilder.andWhere(`(${conditions.join(' OR ')})`, params);
+    }
+
+    queryBuilder.orderBy('song.playCount', 'DESC').take(limit);
+
+    let candidateTracks = await queryBuilder.getMany();
+
+    if (candidateTracks.length === 0) {
+      candidateTracks = await this.songRepo.find({
+        where: { status: 'ready' },
+        relations: ['user', 'genreEntity'],
+        order: { playCount: 'DESC' },
+        take: limit,
+      });
+    }
+
+    return {
+      prompt: input.prompt.trim(),
+      suggestedName,
+      suggestedDescription,
+      matchedTags: targetTags,
+      matchedGenres: targetGenres,
+      candidateTracks,
+    };
   }
 }

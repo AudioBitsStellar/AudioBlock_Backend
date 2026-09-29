@@ -10,7 +10,7 @@ import {
   isLegacyFallbackEnabled,
   isPrivyAuthEnabled,
 } from '../config/authFlags';
-import { privyAuthFallbacksTotal } from '../services/MetricsService';
+import { privyAuthFallbacksTotal, authFailuresTotal } from '../services/MetricsService';
 import { looksLikePrivyToken, verifyPrivyAccessToken } from '../services/privy/PrivyTokenVerifier';
 import { getPrivyJwksCacheSafe, type PrivyJwksCache } from '../services/privy/PrivyJwksCache';
 import {
@@ -18,6 +18,7 @@ import {
   PrivyInvalidTokenError,
   PrivyKeyUnavailableError,
   PrivyMalformedTokenError,
+  PrivySessionRevokedError,
   PrivyUnknownKeyError,
   PrivyUserNotSyncedError,
 } from '../services/privy/PrivyErrors';
@@ -67,12 +68,22 @@ function authenticateLegacyToken(token: string): JwtPayload {
     throw AppError.businessLogic('JWT_SECRET is not configured');
   }
 
-  const decoded = jwt.verify(token, secret) as JwtPayload;
-  if (!decoded || !decoded.id) {
+  try {
+    const decoded = jwt.verify(token, secret) as JwtPayload;
+    if (!decoded || !decoded.id) {
+      authFailuresTotal.inc({ auth_method: 'legacy', failure_type: 'invalid_token' });
+      throw AppError.authentication('Unauthorized: Invalid token');
+    }
+
+    return { ...decoded, authMethod: 'legacy' };
+  } catch (error) {
+    if (error instanceof jwt.TokenExpiredError) {
+      authFailuresTotal.inc({ auth_method: 'legacy', failure_type: 'expired' });
+      throw AppError.authentication('Unauthorized: Token expired');
+    }
+    authFailuresTotal.inc({ auth_method: 'legacy', failure_type: 'invalid_token' });
     throw AppError.authentication('Unauthorized: Invalid token');
   }
-
-  return { ...decoded, authMethod: 'legacy' };
 }
 
 /**
@@ -151,7 +162,22 @@ function toAuthError(error: unknown): AppError {
     );
   }
 
+  if (error instanceof PrivySessionRevokedError) {
+    // 401 for a revoked session: the credential was valid once but has been
+    // intentionally invalidated. Client should discard it and re-authenticate.
+    authFailuresTotal.inc({ auth_method: 'privy', failure_type: 'revoked' });
+    return new AppError(
+      'Session has been revoked',
+      ErrorType.AUTHENTICATION_ERROR,
+      401,
+      true,
+      { sessionId: error.sessionId },
+      'SESSION_REVOKED',
+    );
+  }
+
   if (isPrivyAvailabilityFailure(error)) {
+    authFailuresTotal.inc({ auth_method: 'privy', failure_type: 'unavailable' });
     return privyUnavailableError((error as Error).message);
   }
 
@@ -160,12 +186,14 @@ function toAuthError(error: unknown): AppError {
     error instanceof PrivyUnknownKeyError ||
     error instanceof PrivyMalformedTokenError
   ) {
+    authFailuresTotal.inc({ auth_method: 'privy', failure_type: 'invalid_token' });
     return AppError.authentication('Unauthorized: Invalid or expired Privy token');
   }
 
   // Anything unrecognised fails closed as a 401. Availability must be positively
   // identified, never assumed — otherwise an unexpected error shape would
   // silently downgrade a rejection into a retryable 503, or worse.
+  authFailuresTotal.inc({ auth_method: 'unknown', failure_type: 'unknown' });
   return AppError.authentication('Unauthorized: Invalid or expired token');
 }
 

@@ -57,30 +57,31 @@ function parseArgs(): ReindexOptions | null {
     } else if (arg === '--from' && i + 1 < args.length) {
       options.from = parseInt(args[++i], 10);
     } else if (arg === '--to' && i + 1 < args.length) {
-      opt
-  // Validate parameters
-  if (from < 0) {
-    throw new Error('Start ledger (--from) must be >= 0');
+      options.to = parseInt(args[++i], 10);
+    } else if (arg === '--dry-run') {
+      options.dryRun = true;
+    } else if (arg === '--help' || arg === '-h') {
+      return null;
+    }
   }
 
-  if (to < from) {
-    throw new Error('End ledger (--to) must be >= start ledger (--from)');
+  if (!options.contract || !options.network || options.from === undefined || options.to === undefined) {
+    return null;
   }
 
-  const ledgerRange = to - from;
-  if (ledgerRange > 10000) {
-    logger.warn(
-      { ledgerRange },
-      'Large ledger range detected. Consider breaking into smaller batches.',
-    );
-  }
+  return options as ReindexOptions;
+}
 
-  // Initialize database connection
-  if (!AppDataSource.isInitialized) {
-    await AppDataSource.initialize();
-  }
+/**
+ * Print CLI usage instructions
+ */
+function printUsage(): void {
+  console.log(`
+Usage: npm run cli:reindex -- [options]
 
-  const eventSerWORK>         Network (mainnet or testnet)
+Required:
+  --contract <ID>            Target Soroban contract address
+  --network <NETWORK>        Network (mainnet or testnet)
   --from <LEDGER>            Start ledger number
   --to <LEDGER>              End ledger number
 
