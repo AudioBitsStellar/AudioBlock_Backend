@@ -42,3 +42,68 @@ groups:
             behind the tip and needs immediate attention.
           runbook: "https://github.com/AudioBitsStellar/AudioBlock_Backend/blob/main/docs/indexer-backfill-runbook.md"
           dashboard: "http://localhost:3001/d/audioblock-indexer"
+
+  # Authentication failure monitoring (Issue #631)
+  - name: audioblock-auth
+    rules:
+      # Fires when authentication failure rate is high
+      - alert: HighAuthenticationFailureRate
+        expr: |
+          rate(auth_failures_total[5m]) > 10
+        for: 10m
+        labels:
+        severity: warning
+          team: backend
+        annotations:
+          summary: "High authentication failure rate detected"
+          description: >
+            Authentication failures are occurring at {{ $value | humanize }} per second
+            for auth_method={{ $labels.auth_method }}, failure_type={{ $labels.failure_type }}.
+            This could indicate credential stuffing, expired tokens, or a service issue.
+          dashboard: "http://localhost:3001/d/audioblock-app"
+
+      # Fires when Privy circuit breaker opens (Issue #635)
+      - alert: PrivyCircuitBreakerOpen
+        expr: |
+          privy_circuit_state{state="open"} == 1
+        for: 5m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "Privy circuit breaker is open"
+          description: >
+            The Privy authentication service circuit breaker has been open for over 5 minutes.
+            Privy authentication is degraded and serving stale keys if available.
+          dashboard: "http://localhost:3001/d/audioblock-app"
+
+      # Fires when Privy is serving stale keys frequently (Issue #634)
+      - alert: PrivyServingStaleKeys
+        expr: |
+          rate(privy_jwk_fetches_total{outcome="stale_served"}[5m]) > 0
+        for: 15m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "Privy is serving stale signing keys"
+          description: >
+            Privy JWKS refreshes have been failing and stale keys are being served.
+            This indicates Privy API connectivity issues.
+          dashboard: "http://localhost:3001/d/audioblock-app"
+
+      # Fires when session revocations spike (Issue #625)
+      - alert: HighSessionRevocationRate
+        expr: |
+          rate(privy_token_verifications_total{outcome="revoked"}[5m]) > 5
+        for: 10m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "High rate of revoked session attempts"
+          description: >
+            {{ $value | humanize }} revoked sessions per second are being rejected.
+            This could indicate users attempting to reuse revoked tokens or a session management issue.
+          dashboard: "http://localhost:3001/d/audioblock-app"
+

@@ -20,8 +20,13 @@
 import jwt, { type JwtHeader, type JwtPayload, type VerifyOptions } from 'jsonwebtoken';
 import { getPrivyConfig, PRIVY_TOKEN_ALGORITHM, PRIVY_TOKEN_ISSUER } from '../../config/privyAuth';
 import { privyTokenVerificationsTotal } from '../MetricsService';
-import { PrivyInvalidTokenError, PrivyMalformedTokenError } from './PrivyErrors';
+import {
+  PrivyInvalidTokenError,
+  PrivyMalformedTokenError,
+  PrivySessionRevokedError,
+} from './PrivyErrors';
 import { getPrivyJwksCache, type PrivyJwksCache } from './PrivyJwksCache';
+import { privySessionService } from './PrivySessionService';
 
 /** Verified, normalised claims from a Privy access token. */
 export interface VerifiedPrivyToken {
@@ -158,6 +163,12 @@ export async function verifyPrivyAccessToken(
   } catch (error) {
     privyTokenVerificationsTotal.inc({ outcome: 'invalid' });
     throw error;
+  }
+
+  // Check if the session has been explicitly revoked (Issue #625)
+  if (privySessionService.isSessionRevoked(result.sessionId)) {
+    privyTokenVerificationsTotal.inc({ outcome: 'revoked' });
+    throw new PrivySessionRevokedError(result.sessionId);
   }
 
   privyTokenVerificationsTotal.inc({ outcome: 'success' });
