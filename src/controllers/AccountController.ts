@@ -5,6 +5,11 @@ import { AppError } from '../errors/AppError';
 import { handleError } from '../utils/helpers';
 import { RequestAccountDeletionDTO } from '../dtos/AccountDeletionDTO';
 import { AccountDeletionService } from '../services/AccountDeletionService';
+import { UpdateProfileDTO } from '../dtos/UpdateProfileDTO';
+import { Repository } from 'typeorm';
+import { User } from '../entities/User';
+import AppDataSource from '../config/db';
+import { AccountMergeService } from '../services/AccountMergeService';
 
 /** Turn class-validator errors into the standard `{ field, message }` detail shape. */
 function toValidationDetails(errors: { property: string; constraints?: Record<string, string> }[]) {
@@ -24,9 +29,13 @@ function toValidationDetails(errors: { property: string; constraints?: Record<st
  */
 export class AccountController {
   private service: AccountDeletionService;
+  private userRepo: Repository<User>;
+  private mergeService: AccountMergeService;
 
   constructor(service: AccountDeletionService = new AccountDeletionService()) {
     this.service = service;
+    this.userRepo = AppDataSource.getRepository(User);
+    this.mergeService = new AccountMergeService();
   }
 
   /**
@@ -116,6 +125,143 @@ export class AccountController {
 
       const status = await this.service.getStatus(userId);
       res.status(200).json({ success: true, ...status });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  /**
+   * `GET /api/account/profile` — fetch current authenticated user's profile (Issue #617).
+   * Returns full profile data for the authenticated user.
+   */
+  getProfile = async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        throw AppError.authentication('Unauthorized');
+      }
+
+      const user = await this.userRepo.findOne({ where: { id: userId } });
+      if (!user) {
+        throw AppError.notFound('User not found');
+      }
+
+      // Exclude sensitive fields
+      const { passwordHash, twoFactorSecret, twoFactorRecoveryCodeHashes, ...profile } = user;
+
+      res.status(200).json({ success: true, profile });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  /**
+   * `PUT /api/account/profile` — update user profile after authentication (Issue #618).
+   * Allows updating profile fields like username, bio, website, etc.
+   */
+  updateProfile = async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        throw AppError.authentication('Unauthorized');
+      }
+
+      const dto = plainToInstance(UpdateProfileDTO, req.body ?? {}, {
+        enableImplicitConversion: true,
+      });
+      const errors = await validate(dto);
+      if (errors.length > 0) {
+        throw AppError.validation('Validation failed', toValidationDetails(errors));
+      }
+
+      const user = await this.userRepo.findOne({ where: { id: userId } });
+      if (!user) {
+        throw AppError.notFound('User not found');
+      }
+
+      // Check for unique constraint violations before updating
+      if (dto.username && dto.username !== user.username) {
+        const existingUser = await this.userRepo.findOne({ where: { username: dto.username } });
+        if (existingUser) {
+          throw AppError.conflict('Username already taken');
+        }
+      }
+
+      // Update allowed fields
+      if (dto.username !== undefined) user.username = dto.username;
+      if (dto.name !== undefined) user.name = dto.name;
+      if (dto.bio !== undefined) user.bio = dto.bio;
+      if (dto.website !== undefined) user.website = dto.website;
+      if (dto.profileImage !== undefined) user.profileImage = dto.profileImage;
+      if (dto.pageCover !== undefined) user.pageCover = dto.pageCover;
+      if (dto.isProfilePublic !== undefined) user.isProfilePublic = dto.isProfilePublic;
+
+      await this.userRepo.save(user);
+
+      const { passwordHash, twoFactorSecret, twoFactorRecoveryCodeHashes, ...profile } = user;
+
+      res.status(200).json({
+        success: true,
+        message: 'Profile updated successfully',
+        profile,
+      });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  /**
+   * `GET /api/account/duplicates` — detect potential duplicate accounts (Issue #619).
+   * Returns accounts that could potentially be merged based on email/wallet matches.
+   */
+  detectDuplicates = async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        throw AppError.authentication('Unauthorized');
+      }
+
+      const duplicates = await this.mergeService.detectDuplicates(userId);
+
+      res.status(200).json({
+        success: true,
+        duplicates: duplicates.map((u) => ({
+          id: u.id,
+          email: u.email,
+          walletAddress: u.walletAddress,
+          privyUserId: u.privyUserId,
+          username: u.username,
+          createdAt: u.createdAt,
+        })),
+      });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  /**
+   * `POST /api/account/merge` — merge duplicate accounts (Issue #619).
+   * Merges a secondary account into the primary (authenticated) account.
+   */
+  mergeAccounts = async (req: Request, res: Response) => {
+    try {
+      const primaryUserId = (req as any).user?.id;
+      if (!primaryUserId) {
+        throw AppError.authentication('Unauthorized');
+      }
+
+      const { secondaryUserId } = req.body;
+      if (!secondaryUserId) {
+        throw AppError.validation('secondaryUserId is required');
+      }
+
+      const result = await this.mergeService.mergeAccounts(primaryUserId, secondaryUserId, req);
+
+      res.status(200).json({
+        success: true,
+        message: 'Accounts merged successfully',
+        result,
+      });
     } catch (error) {
       handleError(req, res, error);
     }

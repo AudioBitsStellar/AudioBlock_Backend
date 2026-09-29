@@ -25,4 +25,14 @@ router.post('/deletion-request', accountController.requestDeletion);
 router.delete('/deletion-request', accountController.cancelDeletion);
 router.get('/deletion-status', accountController.getDeletionStatus);
 
+/** Issue #617 — fetch current authenticated user profile. */
+router.get('/profile', accountController.getProfile);
+
+/** Issue #618 — update user profile after authentication. */
+router.put('/profile', accountController.updateProfile);
+
+/** Issue #619 — detect and merge duplicate accounts. */
+router.get('/duplicates', accountController.detectDuplicates);
+router.post('/merge', accountController.mergeAccounts);
+
 export default router;
