@@ -739,6 +739,7 @@ npm run dev
 | `npm run build`                                       | Compiles TypeScript to `dist/`                                                                                                  |
 | `npm start`                                           | Runs the compiled build (`dist/index.js`)                                                                                       |
 | `npm run worker`                                      | Runs the song-processing worker as a standalone process, independent of the API process — useful for scaling workers separately |
+| `npm run indexer`                                     | Runs the on-chain event indexer as a standalone process, independent of the API — scales the same way as `npm run worker` (alias of `worker:indexer`). Also runs as its own `indexer` service in `docker-compose.yml`. |
 | `npm run seed:genres`                                 | Manually re-runs the genre seeder (also runs automatically on every boot)                                                       |
 | `npm run migration:generate -- -n DescribeYourChange` | Generates a new migration file based on entity changes                                                                          |
 | `npm run migration:run`                               | Applies pending migrations to the database                                                                                      |

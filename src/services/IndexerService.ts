@@ -16,6 +16,7 @@ export interface IndexerStatus {
   contractId: string;
   network: string;
   lastProcessedLedger: number;
+  lastProcessedEventId: string | null;
   eventsProcessed: number;
   errorCount: number;
   lastError: string | null;
@@ -58,6 +59,7 @@ export class IndexerService {
         contractId,
         network,
         lastProcessedLedger: 0,
+        lastProcessedEventId: null,
         eventsProcessed: 0,
         errorCount: 0,
         lastError: null,
@@ -71,15 +73,24 @@ export class IndexerService {
 
   /**
    * Record progress for an indexer after successfully processing a ledger.
+   * `eventId` is the last individual event applied within that ledger (e.g.
+   * `"<ledger>-<txHash>-<opIndex>"`), so a restart can resume after that
+   * exact event instead of re-processing or skipping the rest of the ledger
+   * it was in (issue #232). Callers that only track ledger-level progress
+   * can omit it — the cursor keeps whatever event ID it already had.
    */
   async recordProgress(
     contractId: string,
     network: string,
     ledger: number,
     eventCount = 1,
+    eventId?: string,
   ): Promise<void> {
     const cursor = await this.getCursor(contractId, network);
     cursor.lastProcessedLedger = ledger;
+    if (eventId !== undefined) {
+      cursor.lastProcessedEventId = eventId;
+    }
     cursor.eventsProcessed += eventCount;
     await this.cursorRepo.save(cursor);
 
@@ -134,6 +145,7 @@ export class IndexerService {
       contractId: cursor.contractId,
       network: cursor.network,
       lastProcessedLedger: cursor.lastProcessedLedger,
+      lastProcessedEventId: cursor.lastProcessedEventId,
       eventsProcessed: cursor.eventsProcessed,
       errorCount: cursor.errorCount,
       lastError: cursor.lastError,
@@ -157,6 +169,7 @@ export class IndexerService {
       contractId: cursor.contractId,
       network: cursor.network,
       lastProcessedLedger: cursor.lastProcessedLedger,
+      lastProcessedEventId: cursor.lastProcessedEventId,
       eventsProcessed: cursor.eventsProcessed,
       errorCount: cursor.errorCount,
       lastError: cursor.lastError,

@@ -26,6 +26,12 @@ export class IndexerCursor {
   @Column({ type: 'bigint', default: 0 })
   lastProcessedLedger!: number;
 
+  // The last individual event applied within lastProcessedLedger, so a
+  // restart resumes after that specific event rather than re-processing (or
+  // skipping) the rest of the ledger it was in (issue #232).
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  lastProcessedEventId!: string | null;
+
   @Column({ type: 'bigint', default: 0 })
   eventsProcessed!: number;
 
