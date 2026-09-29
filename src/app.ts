@@ -31,6 +31,8 @@ import activityStreamRoutes from "./routes/activityStreamRoutes";
 import accountRoutes from "./routes/accountRoutes";
 import subgraphRoutes from "./routes/subgraphRoutes";
 import metricsRoutes from "./routes/metricsRoutes";
+import privyWebhookRoutes from "./routes/privyWebhookRoutes";
+import accountTypeRoutes from "./routes/accountTypeRoutes";
 
 // Route imports
 
@@ -155,6 +157,12 @@ app.use("/api/activity", activityStreamRoutes);
 
 // GDPR account lifecycle: data export, deletion request/cancel, status (#633)
 app.use("/api/account", accountRoutes);
+
+// Privy webhooks: embedded wallet, Stellar linking, profile sync (#603-606, #612, #614)
+app.use("/api", privyWebhookRoutes);
+
+// Account type management: artist vs listener distinction (#616)
+app.use("/api", accountTypeRoutes);
 
 app.use("/api/subgraph", subgraphRoutes);
 
