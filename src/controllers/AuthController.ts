@@ -393,12 +393,13 @@ export class AuthController {
 
   privyLogout = async (req: Request, res: Response) => {
     try {
-      const userId = (req as any).privyUser?.id;
-      if (!userId) {
+      // req.user is set by requireAuth middleware, contains decoded JWT payload
+      const user = (req as any).user;
+      if (!user || !user.id) {
         throw AppError.authentication('User ID required');
       }
 
-      await this.authService.privyLogout(userId);
+      await this.authService.privyLogout(user.id);
       res.status(200).json({ success: true, message: 'Privy logout successful' });
     } catch (error) {
       handleError(req, res, error);

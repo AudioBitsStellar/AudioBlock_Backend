@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import { AppError } from '../errors/AppError';
 import { handleError } from '../utils/helpers';
 import { privyService, PrivyService } from '../services/PrivyService';
+import { privySessionService } from '../services/privy/PrivySessionService';
+import logger from '../config/logger';
 
 function extractBearerToken(req: Request): string {
   const authHeader = req.headers.authorization;
@@ -49,7 +51,15 @@ export class PrivyMfaController {
   revokeSessions = async (req: Request, res: Response) => {
     try {
       const claims = this.service.verifyAccessToken(extractBearerToken(req));
+
+      // Revoke on Privy's side (server-side, affects all sessions)
       await this.service.revokeAllSessions(claims.sub);
+
+      // Track revocation locally for early rejection (Issue #625)
+      privySessionService.revokeUserSessions(claims.sub);
+
+      logger.info({ privyUserId: claims.sub }, 'Revoked all Privy sessions');
+
       res.status(200).json({
         success: true,
         message: 'All Privy sessions revoked',
