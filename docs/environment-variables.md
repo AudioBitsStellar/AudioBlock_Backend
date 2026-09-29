@@ -134,13 +134,25 @@ _\* Required for the selected network. All five IDs must be set for the chosen `
 
 ## Indexer Worker
 
-| Variable                          | Required | Default | Description                                  |
-| --------------------------------- | -------- | ------- | -------------------------------------------- |
-| `INDEXER_POLL_INTERVAL_MS`        | No       | `5000`  | Poll interval for the Soroban event indexer  |
-| `INDEXER_PAGE_SIZE`               | No       | `100`   | Max events fetched per `getEvents` page      |
-| `INDEXER_LAG_MONITOR_INTERVAL_MS` | No       | `60000` | Interval for computing/exporting indexer lag |
-| `INDEXER_OVERLAP_WINDOW`          | No       | `10`    | Ledger overlap window back from head         |
-| `INDEXER_GAP_THRESHOLD`           | No       | `50`    | Ledger gap threshold that triggers a warning |
+| Variable                          | Required | Default | Description                                                         |
+| --------------------------------- | -------- | ------- | ------------------------------------------------------------------- |
+| `INDEXER_POLL_INTERVAL_MS`        | No       | `5000`  | Poll interval for the Soroban event indexer                         |
+| `INDEXER_PAGE_SIZE`               | No       | `100`   | Max events fetched per `getEvents` page                             |
+| `INDEXER_LAG_MONITOR_INTERVAL_MS` | No       | `60000` | Interval for computing/exporting indexer lag                        |
+| `INDEXER_OVERLAP_WINDOW`          | No       | `10`    | Ledger overlap window back from head                                |
+| `INDEXER_GAP_THRESHOLD`           | No       | `50`    | Ledger gap threshold that triggers a warning                        |
+| `INDEXER_METRICS_PORT`            | No       | `9464`  | HTTP port used to expose the standalone worker's Prometheus metrics |
+
+### Subgraph queries
+
+| Variable                           | Required | Default | Description                                                                  |
+| ---------------------------------- | -------- | ------- | ---------------------------------------------------------------------------- |
+| `GRAPH_SUBGRAPH_URL`               | No       | —       | Direct GraphQL URL for the deployed subgraph                                 |
+| `GRAPH_SUBGRAPH_ENDPOINT_TEMPLATE` | No       | —       | Gateway URL template containing `{apiKey}`                                   |
+| `GRAPH_SUBGRAPH_API_KEY`           | No       | —       | API key for the Graph gateway                                                |
+| `SUBGRAPH_CACHE_TTL_MS`            | No       | `30000` | Redis cache lifetime for successful subgraph responses; `0` disables caching |
+
+**Sensitive:** `GRAPH_SUBGRAPH_API_KEY` — never log or commit.
 
 ---
 

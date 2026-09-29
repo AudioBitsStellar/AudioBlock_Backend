@@ -22,8 +22,8 @@ The query behavior can be tuned with `SUBGRAPH_QUERY_RETRY_ATTEMPTS`,
 `SUBGRAPH_QUERY_TIMEOUT_MS`, `SUBGRAPH_QUERY_RETRY_BASE_DELAY_MS`,
 `SUBGRAPH_QUERY_PAGE_SIZE`, and `SUBGRAPH_QUERY_CONSISTENCY_RETRIES`.
 Defaults are 3 attempts, 5000 ms, 100 ms, 1000 entities, and 1 snapshot retry.
-The entity-level RPC fallback is not implemented, so fallback results report an
-error instead of returning a successful empty list.
+Artist and song queries can fall back to persisted indexed events when enabled;
+queries without an event-backed fallback return an error if the subgraph fails.
 
 Configure the query endpoint with `GRAPH_SUBGRAPH_URL` when the full URL is
 already available. For gateway-style URLs that include an API key, set
@@ -31,6 +31,26 @@ already available. For gateway-style URLs that include an API key, set
 secret in `GRAPH_SUBGRAPH_API_KEY`. The backend substitutes and redacts the key
 in health output. Deploy tokens are separate from query keys and should live in
 CI secrets as `GRAPH_DEPLOY_TOKEN_TESTNET` and `GRAPH_DEPLOY_TOKEN_MAINNET`.
+
+Frequently queried successful subgraph responses are cached in Redis for 30
+seconds by default. Set `SUBGRAPH_CACHE_TTL_MS` to change the lifetime or `0` to
+disable this cache. Failed responses and RPC fallback results are not cached.
+
+Authenticated clients can use `GET /api/subgraph` for the typed proxy endpoints:
+`/artists`, `/songs`, `/sales`, `/transfers`, `/mints`, `/artists/:artistId`,
+and `/songs/:songId/engagement`. List endpoints accept `limit` from 1 to 1000
+(default 100). `GET /api/subgraph/aggregate` fetches the five list resources in
+parallel, and `/api/subgraph/health` reports subgraph health. These endpoints
+require the standard bearer-token authentication middleware; arbitrary GraphQL
+documents are not accepted.
+
+Prometheus scrapes `GET /metrics`. The indexer exports `indexer_lag_ledgers`
+with `network` and contract-ID labels; `monitoring/prometheus-alerts.yml`
+raises warning and critical alerts for sustained lag above 1000 and 10000
+ledgers respectively, plus a warning if lag metrics disappear. The standalone
+worker serves its own registry on `INDEXER_METRICS_PORT` (default `9464`); the
+Compose `monitoring`, `observability`, and `full` profiles start the worker and
+scrape it on the private service network.
 
 ## Quick Start
 

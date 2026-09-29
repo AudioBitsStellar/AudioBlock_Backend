@@ -9,10 +9,12 @@
  * storage, and projections can be rebuilt with `npm run cli:project`.
  */
 import 'reflect-metadata';
+import { createServer, Server } from 'http';
 import AppDataSource from '../../config/db';
 import { IndexerWorker } from './IndexerWorker';
 import { EventProjector } from '../../services/EventProjector';
 import logger from '../../config/logger';
+import { getMetrics, getMetricsContentType } from '../../services/MetricsService';
 
 const PROJECTOR_INTERVAL_MS = parseInt(process.env.INDEXER_PROJECTOR_INTERVAL_MS || '15000', 10);
 
@@ -48,6 +50,10 @@ function shutdown(signal: string): void {
   worker?.stop();
   if (projectorTimer) clearInterval(projectorTimer);
   const finish = async (): Promise<void> => {
+    if (metricsServer) {
+      await new Promise<void>((resolve) => metricsServer?.close(() => resolve()));
+      metricsServer = null;
+    }
     if (AppDataSource.isInitialized) {
       await AppDataSource.destroy().catch(() => undefined);
     }
@@ -60,6 +66,7 @@ export async function main(): Promise<void> {
   await AppDataSource.initialize();
   logger.info('Indexer worker connected to database');
 
+  startMetricsServer();
   worker = new IndexerWorker();
   worker.start();
   projectorTimer = startProjectorLoop(new EventProjector());

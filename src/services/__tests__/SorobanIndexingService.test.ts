@@ -3,6 +3,7 @@
  */
 
 import { SorobanIndexingService } from '../../services/Soroban/SorobanIndexingService';
+import { indexerEventsProcessedTotal, indexerLagLedgers } from '../../services/MetricsService';
 
 // ---- mocks ----
 const mockFetchEvents = jest.fn();
@@ -65,8 +66,22 @@ describe('SorobanIndexingService (Issue #658)', () => {
   it('persists decoded events and advances cursor', async () => {
     mockFetchEvents.mockResolvedValue({
       events: [
-        { id: 'e1', ledger: 101, txHash: '0xtx1', contractId: 'CSONG_TEST', topic: ['song_registered', 'song-42'], value: null },
-        { id: 'e2', ledger: 105, txHash: '0xtx2', contractId: 'CSONG_TEST', topic: ['song_registered', 'song-43'], value: null },
+        {
+          id: 'e1',
+          ledger: 101,
+          txHash: '0xtx1',
+          contractId: 'CSONG_TEST',
+          topic: ['song_registered', 'song-42'],
+          value: null,
+        },
+        {
+          id: 'e2',
+          ledger: 105,
+          txHash: '0xtx2',
+          contractId: 'CSONG_TEST',
+          topic: ['song_registered', 'song-43'],
+          value: null,
+        },
       ],
       cursor: '',
       latestLedger: 110,
@@ -85,6 +100,14 @@ describe('SorobanIndexingService (Issue #658)', () => {
 
     // Cursor should advance to the highest ledger seen (105)
     expect(mockAdvanceCursor).toHaveBeenCalledWith('CSONG_TEST', 'testnet', 105);
+    expect(indexerLagLedgers.set).toHaveBeenCalledWith(
+      { contract: 'CSONG_TEST', network: 'testnet' },
+      10,
+    );
+    expect(indexerEventsProcessedTotal.inc).toHaveBeenCalledWith(
+      { contract: 'CSONG_TEST', network: 'testnet' },
+      2,
+    );
   });
 
   it('does nothing and does not advance cursor when there are no events', async () => {
