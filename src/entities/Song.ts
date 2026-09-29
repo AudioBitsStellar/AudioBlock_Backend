@@ -129,6 +129,22 @@ export class Song {
   @Column({ type: 'text', nullable: true })
   aiGeneratedCoverUrl?: string | null;
 
+  /** Issue #272: Acoustic audio fingerprint for duplicate/plagiarism detection */
+  @Column({ type: 'text', nullable: true })
+  fingerprint?: string | null;
+
+  /** Issue #272: Flag indicating track was detected as near-duplicate */
+  @Column({ default: false })
+  isNearDuplicate!: boolean;
+
+  /** Issue #272: ID of the existing song this track is similar to */
+  @Column({ nullable: true })
+  duplicateOfSongId?: string | null;
+
+  /** Issue #272: Similarity score (0.0 - 1.0) with matched song */
+  @Column({ type: 'float', nullable: true })
+  duplicateSimilarityScore?: number | null;
+
   @CreateDateColumn()
   createdAt!: Date;
 

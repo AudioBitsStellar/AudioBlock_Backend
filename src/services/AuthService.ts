@@ -15,6 +15,11 @@ import { generateSecret, generateURI, verifySync } from 'otplib';
 import QRCode from 'qrcode';
 import { EmailService } from './EmailService';
 import { AppError } from '../errors/AppError';
+import { AuthAuditService } from './AuthAuditService';
+import { AuthEventType } from '../entities/AuthAuditLog';
+import { AccountMergeService } from './AccountMergeService';
+import { Request } from 'express';
+import logger from '../config/logger';
 
 const PASSWORD_SALT_ROUNDS = 12;
 const RECOVERY_CODE_COUNT = 8;
@@ -31,11 +36,15 @@ export class AuthService {
   private userRepo: Repository<User>;
   private refreshTokenRepo: Repository<RefreshToken>;
   private emailService: EmailService;
+  private auditService: AuthAuditService;
+  private mergeService: AccountMergeService;
 
   constructor() {
     this.userRepo = AppDataSource.getRepository(User);
     this.refreshTokenRepo = AppDataSource.getRepository(RefreshToken);
     this.emailService = new EmailService();
+    this.auditService = new AuthAuditService();
+    this.mergeService = new AccountMergeService();
   }
 
   private signToken(user: User): string {
@@ -130,7 +139,7 @@ export class AuthService {
   }
 
   /** Logs in a user with email + password instead of a wallet signature. */
-  async loginWithEmail(data: LoginWithEmailDTO): Promise<LoginWithEmailResult> {
+  async loginWithEmail(data: LoginWithEmailDTO, req?: Request): Promise<LoginWithEmailResult> {
     const dto = Object.assign(new LoginWithEmailDTO(), data);
     const errors = await validate(dto);
     if (errors.length > 0) {
@@ -141,11 +150,26 @@ export class AuthService {
 
     const user = await this.userRepo.findOneBy({ email: dto.email });
     if (!user || !user.passwordHash) {
+      if (req) {
+        await this.auditService.logAuthEvent(AuthEventType.LOGIN_FAILED, req, {
+          email: dto.email,
+          success: false,
+          failureReason: 'Invalid credentials',
+        });
+      }
       throw AppError.authentication('Invalid email or password');
     }
 
     const matches = await bcrypt.compare(dto.password, user.passwordHash);
     if (!matches) {
+      if (req) {
+        await this.auditService.logAuthEvent(AuthEventType.LOGIN_FAILED, req, {
+          userId: user.id,
+          email: dto.email,
+          success: false,
+          failureReason: 'Invalid password',
+        });
+      }
       throw AppError.authentication('Invalid email or password');
     }
 
@@ -163,11 +187,28 @@ export class AuthService {
         : await this.verifyAndConsumeRecoveryCode(user, dto.recoveryCode as string);
 
       if (!verified) {
+        if (req) {
+          await this.auditService.logAuthEvent(AuthEventType.LOGIN_FAILED, req, {
+            userId: user.id,
+            email: dto.email,
+            success: false,
+            failureReason: 'Invalid 2FA code',
+          });
+        }
         throw AppError.authentication('Invalid two-factor code');
       }
     }
 
     const token = this.signToken(user);
+
+    if (req) {
+      await this.auditService.logAuthEvent(AuthEventType.LOGIN_SUCCESS, req, {
+        userId: user.id,
+        email: user.email,
+        success: true,
+      });
+    }
+
     return { user, token };
   }
 
@@ -180,7 +221,10 @@ export class AuthService {
    * @returns Secret, otpauth URL, QR code data URL, and plaintext backup codes.
    * @throws {Error} If user not found or not an email/password account.
    */
-  async enableTwoFactor(userId: string): Promise<{
+  async enableTwoFactor(
+    userId: string,
+    req?: Request,
+  ): Promise<{
     secret: string;
     otpauthUrl: string;
     qrCodeDataUrl: string;
@@ -210,6 +254,14 @@ export class AuthService {
     user.twoFactorSecret = secret;
     user.twoFactorRecoveryCodeHashes = recoveryCodeHashes;
     await this.userRepo.save(user);
+
+    if (req) {
+      await this.auditService.logAuthEvent(AuthEventType.TWO_FACTOR_ENABLED, req, {
+        userId: user.id,
+        email: user.email,
+        success: true,
+      });
+    }
 
     return {
       secret,
@@ -356,7 +408,7 @@ export class AuthService {
    * Disable 2FA for a user. Requires a valid TOTP code or recovery code
    * to confirm the request is legitimate.
    */
-  async disableTwoFactor(userId: string, code: string): Promise<void> {
+  async disableTwoFactor(userId: string, code: string, req?: Request): Promise<void> {
     const user = await this.userRepo.findOneBy({ id: userId });
     if (!user) {
       throw AppError.notFound('User not found');
@@ -376,6 +428,14 @@ export class AuthService {
     user.twoFactorSecret = undefined;
     user.twoFactorRecoveryCodeHashes = undefined;
     await this.userRepo.save(user);
+
+    if (req) {
+      await this.auditService.logAuthEvent(AuthEventType.TWO_FACTOR_DISABLED, req, {
+        userId: user.id,
+        email: user.email,
+        success: true,
+      });
+    }
   }
 
   /**
@@ -443,23 +503,57 @@ export class AuthService {
     await this.refreshTokenRepo.save(rt);
   }
 
-  async refreshToken(token: string): Promise<{ token: string; refreshToken: string }> {
+  async refreshToken(
+    token: string,
+    req?: Request,
+  ): Promise<{ token: string; refreshToken: string }> {
     const payload = await this.verifyRefreshToken(token);
     const userId = payload?.id as string;
-    if (!userId) throw AppError.authentication('Invalid refresh token');
+    if (!userId) {
+      if (req) {
+        await this.auditService.logAuthEvent(AuthEventType.TOKEN_REFRESH_FAILED, req, {
+          success: false,
+          failureReason: 'Invalid token payload',
+        });
+      }
+      throw AppError.authentication('Invalid refresh token');
+    }
 
     const rt = await this.refreshTokenRepo.findOne({ where: { token } });
-    if (!rt) throw AppError.authentication('Invalid refresh token');
+    if (!rt) {
+      if (req) {
+        await this.auditService.logAuthEvent(AuthEventType.TOKEN_REFRESH_FAILED, req, {
+          userId,
+          success: false,
+          failureReason: 'Token not found',
+        });
+      }
+      throw AppError.authentication('Invalid refresh token');
+    }
 
     if (rt.revoked) {
       // Reuse detected! Invalidate family
       if (rt.familyId) {
         await this.refreshTokenRepo.update({ familyId: rt.familyId }, { revoked: true });
       }
+      if (req) {
+        await this.auditService.logAuthEvent(AuthEventType.TOKEN_REFRESH_FAILED, req, {
+          userId,
+          success: false,
+          failureReason: 'Token reuse detected',
+        });
+      }
       throw AppError.authentication('Refresh token reuse detected');
     }
 
     if (rt.expiresAt < new Date()) {
+      if (req) {
+        await this.auditService.logAuthEvent(AuthEventType.TOKEN_REFRESH_FAILED, req, {
+          userId,
+          success: false,
+          failureReason: 'Token expired',
+        });
+      }
       throw AppError.authentication('Refresh token expired');
     }
 
@@ -474,15 +568,30 @@ export class AuthService {
     const newRefreshToken = this.signRefreshToken(user);
     await this.storeRefreshToken(user.id, newRefreshToken, rt.familyId);
 
+    if (req) {
+      await this.auditService.logAuthEvent(AuthEventType.TOKEN_REFRESH, req, {
+        userId: user.id,
+        email: user.email,
+        success: true,
+      });
+    }
+
     return { token: newToken, refreshToken: newRefreshToken };
   }
 
-  async logout(refreshToken: string): Promise<void> {
+  async logout(refreshToken: string, req?: Request): Promise<void> {
     const payload = await this.verifyRefreshToken(refreshToken);
     const userId = payload?.id as string;
     if (userId) {
       // Invalidate all for user
       await this.refreshTokenRepo.update({ userId }, { revoked: true });
+
+      if (req) {
+        await this.auditService.logAuthEvent(AuthEventType.LOGOUT, req, {
+          userId,
+          success: true,
+        });
+      }
     }
   }
 
@@ -519,7 +628,7 @@ export class AuthService {
    *
    * @param email - Email address of the account to reset.
    */
-  async forgotPassword(email: string): Promise<void> {
+  async forgotPassword(email: string, req?: Request): Promise<void> {
     const user = await this.userRepo.findOneBy({ email });
     if (!user) return;
 
@@ -615,18 +724,33 @@ export class AuthService {
     }
   }
 
-  async privyLogin(idToken: string): Promise<{
+  async privyLogin(
+    idToken: string,
+    req?: Request,
+  ): Promise<{
     accessToken: string;
     refreshToken: string;
     refreshTokenFamily: string;
     user: any;
   }> {
     if (!idToken || typeof idToken !== 'string' || idToken.trim() === '') {
+      if (req) {
+        await this.auditService.logAuthEvent(AuthEventType.PRIVY_LOGIN_FAILED, req, {
+          success: false,
+          failureReason: 'Missing ID token',
+        });
+      }
       throw AppError.validation('Privy ID token is required');
     }
 
     const parts = idToken.trim().split('.');
     if (parts.length !== 3) {
+      if (req) {
+        await this.auditService.logAuthEvent(AuthEventType.PRIVY_LOGIN_FAILED, req, {
+          success: false,
+          failureReason: 'Malformed token',
+        });
+      }
       throw AppError.authentication('Invalid or malformed Privy ID token');
     }
 
@@ -635,42 +759,134 @@ export class AuthService {
       const payloadStr = Buffer.from(parts[1], 'base64').toString('utf-8');
       payload = JSON.parse(payloadStr);
     } catch {
+      if (req) {
+        await this.auditService.logAuthEvent(AuthEventType.PRIVY_LOGIN_FAILED, req, {
+          success: false,
+          failureReason: 'Token decode failed',
+        });
+      }
       throw AppError.authentication('Invalid or malformed Privy ID token');
     }
 
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      if (req) {
+        await this.auditService.logAuthEvent(AuthEventType.PRIVY_LOGIN_FAILED, req, {
+          success: false,
+          failureReason: 'Invalid token payload',
+        });
+      }
       throw AppError.authentication('Invalid or malformed Privy ID token');
     }
 
     const privyUserId = payload.sub || payload.id;
     if (!privyUserId) {
+      if (req) {
+        await this.auditService.logAuthEvent(AuthEventType.PRIVY_LOGIN_FAILED, req, {
+          success: false,
+          failureReason: 'Missing user ID',
+        });
+      }
       throw AppError.authentication('Privy user ID (sub) is required in token');
     }
 
+    // Extract authentication data from token
     const email = payload.email;
     const walletAddress = payload.wallet_address || payload.walletAddress;
+    const linkedAccounts = payload.linked_accounts || [];
 
-    // Sync or create local user based on Privy user ID
-    let user = await this.userRepo.findOne({ where: { privyUserId } });
+    // Support for social login providers (Issue #610)
+    const googleAccount = linkedAccounts.find((acc: any) => acc.type === 'google');
+    const twitterAccount = linkedAccounts.find((acc: any) => acc.type === 'twitter');
+
+    // Support for external wallet connections (Issue #613)
+    const externalWallets = linkedAccounts.filter(
+      (acc: any) =>
+        acc.type === 'wallet' &&
+        (acc.wallet_client === 'metamask' ||
+          acc.wallet_client === 'walletconnect' ||
+          acc.connector_type === 'injected' ||
+          acc.connector_type === 'wallet_connect'),
+    );
+
+    // Support for phone/SMS OTP (Issue #611)
+    const phone = payload.phone || payload.phone_number;
+
+    // Issue #619: Auto-merge duplicate accounts during login
+    let user: User | null = null;
+    if (req) {
+      user = await this.mergeService.autoMergeDuringLogin(privyUserId, email, walletAddress, req);
+    }
 
     if (!user) {
-      // Create new user for first-time Privy login
+      // Try to find existing user by Privy ID
+      user = await this.userRepo.findOne({ where: { privyUserId } });
+    }
+
+    if (!user) {
+      // Create new user if no existing account found
       user = this.userRepo.create({
         privyUserId,
         email: email || null,
-        walletAddress: walletAddress || null,
+        walletAddress: walletAddress || externalWallets[0]?.address || null,
         role: UserRole.LISTENER,
-        emailVerified: !!email,
+        emailVerified: payload.email_verified || !!email,
       });
-      await this.userRepo.save(user);
-    } else {
-      // Update existing user with latest data from Privy
-      if (email && !user.email) {
-        user.email = email;
+      logger.info({ privyUserId, email, walletAddress }, 'Created new user from Privy login');
+    }
+
+    // Update user with latest data from Privy (supports all authentication methods)
+    let updated = false;
+
+    // Update email if changed
+    if (email && email !== user.email && payload.email_verified) {
+      user.email = email;
+      user.emailVerified = true;
+      updated = true;
+    }
+
+    // Update wallet if external wallet linked (Issue #613)
+    if (externalWallets.length > 0 && !user.walletAddress) {
+      user.walletAddress = externalWallets[0].address;
+      updated = true;
+      logger.info(
+        { userId: user.id, wallet: externalWallets[0].address },
+        'Linked external wallet',
+      );
+    } else if (walletAddress && !user.walletAddress) {
+      user.walletAddress = walletAddress;
+      updated = true;
+    }
+
+    // Update social account info (Issue #610)
+    if (googleAccount) {
+      // Google profile data might include email, name, etc.
+      if (!user.email && googleAccount.email) {
+        user.email = googleAccount.email;
+        user.emailVerified = googleAccount.verified_email || false;
+        updated = true;
       }
-      if (walletAddress && !user.walletAddress) {
-        user.walletAddress = walletAddress;
+      logger.info({ userId: user.id, provider: 'google' }, 'Google account linked via Privy');
+    }
+
+    if (twitterAccount) {
+      // Update Twitter profile information
+      if (twitterAccount.username && !user.twitterUsername) {
+        user.twitterUsername = twitterAccount.username;
+        user.twitterId = twitterAccount.subject || twitterAccount.id;
+        user.twitterDisplayName = twitterAccount.name;
+        user.twitterProfileImage = twitterAccount.profile_picture_url;
+        user.twitterVerified = twitterAccount.verified || false;
+        user.twitterConnected = true;
+        updated = true;
+        logger.info(
+          { userId: user.id, twitterUsername: user.twitterUsername },
+          'Twitter account linked via Privy',
+        );
       }
+    }
+
+    // Save user if updated
+    if (updated || !user.id) {
       await this.userRepo.save(user);
     }
 
@@ -682,10 +898,26 @@ export class AuthService {
     const refreshTokenEntity = this.refreshTokenRepo.create({
       token: refreshToken,
       userId: user.id,
-      family: refreshTokenFamily,
+      familyId: refreshTokenFamily,
       expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRY_SECONDS * 1000),
     });
     await this.refreshTokenRepo.save(refreshTokenEntity);
+
+    if (req) {
+      await this.auditService.logAuthEvent(AuthEventType.PRIVY_LOGIN_SUCCESS, req, {
+        userId: user.id,
+        email: user.email,
+        privyUserId,
+        success: true,
+        metadata: {
+          hasEmail: !!email,
+          hasWallet: !!walletAddress,
+          hasGoogle: !!googleAccount,
+          hasTwitter: !!twitterAccount,
+          externalWalletCount: externalWallets.length,
+        },
+      });
+    }
 
     return {
       accessToken,
@@ -705,25 +937,64 @@ export class AuthService {
   async privyRefreshToken(
     userId: string,
     currentRefreshToken: string,
+    req?: Request,
   ): Promise<{
     accessToken: string;
     refreshToken: string;
   }> {
     if (!userId || !currentRefreshToken) {
+      if (req) {
+        await this.auditService.logAuthEvent(AuthEventType.TOKEN_REFRESH_FAILED, req, {
+          userId,
+          success: false,
+          failureReason: 'Missing parameters',
+        });
+      }
       throw new Error('User ID and refresh token required');
     }
 
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) {
+      if (req) {
+        await this.auditService.logAuthEvent(AuthEventType.TOKEN_REFRESH_FAILED, req, {
+          userId,
+          success: false,
+          failureReason: 'User not found',
+        });
+      }
+      throw AppError.notFound('User not found');
+    }
+
     const accessToken = this.generateAccessToken({ id: userId });
+    const refreshToken = 'refresh-token-' + Date.now();
+
+    if (req) {
+      await this.auditService.logAuthEvent(AuthEventType.PRIVY_TOKEN_REFRESH, req, {
+        userId,
+        email: user.email,
+        success: true,
+      });
+    }
 
     return {
       accessToken,
-      refreshToken: 'refresh-token-' + Date.now(),
+      refreshToken,
     };
   }
 
-  async privyLogout(userId: string): Promise<void> {
+  async privyLogout(userId: string, req?: Request): Promise<void> {
     if (!userId) {
       throw new Error('User ID required');
+    }
+
+    // Revoke all refresh tokens for this user
+    await this.refreshTokenRepo.update({ userId }, { revoked: true });
+
+    if (req) {
+      await this.auditService.logAuthEvent(AuthEventType.PRIVY_LOGOUT, req, {
+        userId,
+        success: true,
+      });
     }
   }
 

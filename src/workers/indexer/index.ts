@@ -3,48 +3,52 @@
  *
  * Initializes the database, starts the concurrent per-contract pollers, and
  * keeps the process alive until it receives SIGINT/SIGTERM.
+ *
+ * Projection of raw events into read models runs as its own loop, decoupled
+ * from ingestion (Issue #261): a projector failure never blocks raw event
+ * storage, and projections can be rebuilt with `npm run cli:project`.
  */
 import 'reflect-metadata';
 import { createServer, Server } from 'http';
 import AppDataSource from '../../config/db';
 import { IndexerWorker } from './IndexerWorker';
+import { EventProjector } from '../../services/EventProjector';
 import logger from '../../config/logger';
 import { getMetrics, getMetricsContentType } from '../../services/MetricsService';
 
+const PROJECTOR_INTERVAL_MS = parseInt(process.env.INDEXER_PROJECTOR_INTERVAL_MS || '15000', 10);
+
 let worker: IndexerWorker | null = null;
-let metricsServer: Server | null = null;
+let projectorTimer: NodeJS.Timeout | null = null;
 
-function startMetricsServer(): void {
-  const port = Number(process.env.INDEXER_METRICS_PORT || 9464);
-  metricsServer = createServer((request, response) => {
-    if (request.method !== 'GET' || request.url?.split('?')[0] !== '/metrics') {
-      response.writeHead(404).end();
-      return;
+/**
+ * Periodically apply new raw events to all projections. Skips a tick if the
+ * previous run is still in flight.
+ */
+export function startProjectorLoop(
+  projector: EventProjector,
+  intervalMs: number = PROJECTOR_INTERVAL_MS,
+): NodeJS.Timeout {
+  let running = false;
+  const tick = async (): Promise<void> => {
+    if (running) return;
+    running = true;
+    try {
+      await projector.catchUp();
+    } catch (err) {
+      logger.error({ err }, 'Event projector run failed');
+    } finally {
+      running = false;
     }
-
-    void (async () => {
-      try {
-        const [contentType, metrics] = await Promise.all([getMetricsContentType(), getMetrics()]);
-        response.writeHead(200, { 'Content-Type': contentType });
-        response.end(metrics);
-      } catch (error) {
-        logger.error({ err: error }, 'Failed to render indexer metrics');
-        response.writeHead(500, { 'Content-Type': 'text/plain' });
-        response.end('Metrics temporarily unavailable');
-      }
-    })();
-  });
-  metricsServer.on('error', (error) =>
-    logger.error({ err: error }, 'Indexer metrics server failed'),
-  );
-  metricsServer.listen(port, '0.0.0.0', () => {
-    logger.info({ port }, 'Indexer metrics server listening');
-  });
+  };
+  void tick();
+  return setInterval(() => void tick(), intervalMs);
 }
 
 function shutdown(signal: string): void {
   logger.info({ signal }, 'Shutting down indexer worker');
   worker?.stop();
+  if (projectorTimer) clearInterval(projectorTimer);
   const finish = async (): Promise<void> => {
     if (metricsServer) {
       await new Promise<void>((resolve) => metricsServer?.close(() => resolve()));
@@ -65,6 +69,7 @@ export async function main(): Promise<void> {
   startMetricsServer();
   worker = new IndexerWorker();
   worker.start();
+  projectorTimer = startProjectorLoop(new EventProjector());
 
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));

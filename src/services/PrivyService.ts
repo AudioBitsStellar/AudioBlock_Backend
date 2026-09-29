@@ -266,6 +266,14 @@ export class PrivyService {
     }
   }
 
+  /**
+   * Get user data from Privy including linked accounts (Issue #632).
+   * GET /v1/users/{id}
+   */
+  async getUserData(privyUserId: string): Promise<PrivyUserResponse> {
+    return this.requestJson(`/v1/users/${encodeURIComponent(privyUserId)}`);
+  }
+
   private async requestJson<T>(path: string): Promise<T> {
     const { apiUrl } = getPrivyConfig();
     const res = await this.privyFetch(`${apiUrl}${path}`);

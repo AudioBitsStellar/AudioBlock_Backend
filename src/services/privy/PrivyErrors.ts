@@ -67,6 +67,23 @@ export class PrivyUserNotSyncedError extends Error {
 }
 
 /**
+ * A Privy session has been explicitly revoked (Issue #625).
+ *
+ * Distinct from expired tokens: a revoked session was valid once and has been
+ * intentionally invalidated server-side, typically by user action (logout) or
+ * security policy (suspicious activity). Must not be retried.
+ */
+export class PrivySessionRevokedError extends Error {
+  readonly sessionId: string;
+
+  constructor(sessionId: string) {
+    super('This session has been revoked');
+    this.name = 'PrivySessionRevokedError';
+    this.sessionId = sessionId;
+  }
+}
+
+/**
  * Narrow an unknown rejection to the "Privy is unavailable" family.
  *
  * Used by the auth middleware to decide whether legacy fallback is permitted,

@@ -16,6 +16,8 @@ import { IndexerCursor } from '../entities/IndexerCursor';
 import { BackfillStatus } from '../entities/BackfillStatus';
 import { IndexedEvent } from '../entities/IndexedEvent';
 import { AccountDeletionRequest } from '../entities/AccountDeletionRequest';
+import { ProjectionCheckpoint } from '../entities/ProjectionCheckpoint';
+import { OnChainEventCount } from '../entities/OnChainEventCount';
 
 dotenv.config();
 
@@ -46,6 +48,8 @@ const AppDataSource = new DataSource({
     BackfillStatus,
     IndexedEvent,
     AccountDeletionRequest,
+    ProjectionCheckpoint,
+    OnChainEventCount,
   ],
   migrations: [__dirname + '/../migrations/*.{js,ts}'],
   migrationsTableName: 'migrations',

@@ -2,9 +2,11 @@ import { Request, Response } from 'express';
 import { handleError } from '../utils/helpers';
 import { AppError, ErrorType } from '../errors/AppError';
 import { SongService } from '../services/SongService';
+import { TagSuggestionService } from '../services/TagSuggestionService';
 import logger from '../config/logger';
 
 const songService = new SongService();
+const tagSuggestionService = new TagSuggestionService();
 
 export class UploadController {
   uploadChunk = async (req: Request, res: Response) => {
@@ -38,6 +40,29 @@ export class UploadController {
   };
 
   /**
+   * Suggest tags and genres for a song based on title and description (Issue #270).
+   * Advisory and opt-in only; does not mutate song entities.
+   */
+  suggestTagsAndGenres = async (req: Request, res: Response) => {
+    try {
+      const { title, description } = req.body;
+      const user = (req as any).user;
+      const suggestions = await tagSuggestionService.suggestTagsAndGenres({
+        title,
+        description,
+        artistName: user?.username || user?.name,
+      });
+
+      return res.status(200).json({
+        success: true,
+        data: suggestions,
+      });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  /**
    * Once all chunks are uploaded, merge, scan for malware, and push to RabbitMQ.
    *
    * If the merged file is flagged by the malware scanner the artist receives a
@@ -64,7 +89,20 @@ export class UploadController {
         coverArtPath,
         composers,
       });
-      return res.status(201).json({ success: true, data: song });
+
+      // Suggest tags/genres via AI (Issue #270) — advisory/opt-in only
+      let suggestions = { tags: [] as string[], genres: [] as string[] };
+      try {
+        suggestions = await tagSuggestionService.suggestTagsAndGenres({
+          title,
+          description,
+          artistName: user?.username || user?.name,
+        });
+      } catch {
+        // Silent fallback
+      }
+
+      return res.status(201).json({ success: true, data: song, suggestions });
     } catch (err: any) {
       // Surface malware detection as a 422 with a clear artist-facing message
       if (err?.code === 'MALWARE_DETECTED') {

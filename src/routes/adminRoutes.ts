@@ -127,4 +127,11 @@ router.get(
   AdminController.getIndexerStatus,
 );
 
+// Privy linked accounts (Issue #632) — admins only.
+router.get(
+  '/users/:id/linked-accounts',
+  requirePermission(Permission.ROLE_ASSIGN),
+  AdminController.getLinkedAccounts,
+);
+
 export default router;

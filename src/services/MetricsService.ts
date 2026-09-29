@@ -133,6 +133,13 @@ export const privyAuthFallbacksTotal = new client.Counter({
   registers: [register],
 });
 
+export const authFailuresTotal = new client.Counter({
+  name: 'auth_failures_total',
+  help: 'Total authentication failures by type',
+  labelNames: ['auth_method', 'failure_type'] as const, // auth_method: 'legacy'|'privy', failure_type: 'invalid_token'|'expired'|'revoked'|'unavailable'
+  registers: [register],
+});
+
 export const privyCircuitState = new client.Gauge({
   name: 'privy_circuit_state',
   help: 'Current state of the Privy circuit breaker (1 for the active state, 0 otherwise)',

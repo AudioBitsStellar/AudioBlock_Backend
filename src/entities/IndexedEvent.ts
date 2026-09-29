@@ -6,8 +6,15 @@ import {
   UpdateDateColumn,
   Index,
   Unique,
+  Generated,
 } from 'typeorm';
 
+/**
+ * Raw, append-only store of decoded on-chain events (Issue #261).
+ *
+ * Ingestion only ever writes rows here; derived read models are built from
+ * these rows by the EventProjector, so they can be rebuilt at any time.
+ */
 @Entity('indexed_events')
 @Unique('UQ_indexed_events_dedup', ['network', 'contractId', 'ledger', 'eventId'])
 @Index('IDX_indexed_events_network_contract_ledger', ['network', 'contractId', 'ledger'])
@@ -15,9 +22,19 @@ import {
 @Index('IDX_indexed_events_contractType_createdAt', ['contractType', 'createdAt'])
 @Index('IDX_indexed_events_eventType_createdAt', ['eventType', 'createdAt'])
 @Index('IDX_indexed_events_address_createdAt', ['address', 'createdAt'])
+@Index('IDX_indexed_events_ingestSeq', ['ingestSeq'], { unique: true })
 export class IndexedEvent {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
+
+  /**
+   * Monotonic ingestion sequence assigned by the database. Projectors replay
+   * raw events in this order and checkpoint against it (Issue #261).
+   * Postgres returns bigint as a string.
+   */
+  @Column({ type: 'bigint', insert: false, update: false })
+  @Generated('increment')
+  ingestSeq!: string;
 
   @Column({ type: 'varchar', length: 50, default: 'stellar-testnet' })
   network!: string;
