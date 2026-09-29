@@ -122,6 +122,7 @@ router.post(
   validateDTO(FinalizeUploadDTO),
   uploadController.finalizeUpload,
 );
+router.post('/upload/suggest-tags', authArtistMiddleware, uploadController.suggestTagsAndGenres);
 
 // Stream Songs
 router.get('/stream/:id', SongController.streamSong);

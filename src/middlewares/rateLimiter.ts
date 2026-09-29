@@ -49,7 +49,7 @@ export const createSlidingWindowLimiter = (
       next();
     } catch (error) {
       // Fail open if Redis is down
-      logger.error('Rate limiter error', error);
+      logger.error({ err: error }, 'Rate limiter error');
       next();
     }
   };
@@ -86,6 +86,23 @@ export const commentRateLimiter = createSlidingWindowLimiter(
   (req) => {
     const userId = (req as any).user?.id;
     return userId ? `comment:rl:${userId}` : `comment:rl:${req.ip}`;
+  },
+);
+
+// AI Playlist Curation (Issue #275): Rate limit per user for AI prompt curation
+const AI_CURATION_WINDOW = parseInt(
+  process.env.AI_CURATION_RATE_LIMIT_WINDOW_MS || String(60 * 1000),
+  10,
+);
+const AI_CURATION_MAX = parseInt(process.env.AI_CURATION_RATE_LIMIT_MAX || '10', 10);
+
+export const aiPlaylistCurationRateLimiter = createSlidingWindowLimiter(
+  AI_CURATION_WINDOW,
+  AI_CURATION_MAX,
+  'ai:curation:rl',
+  (req) => {
+    const userId = (req as any).user?.id;
+    return userId ? `ai:curation:rl:${userId}` : `ai:curation:rl:${req.ip}`;
   },
 );
 

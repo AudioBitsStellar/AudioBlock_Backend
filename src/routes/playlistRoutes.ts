@@ -1,12 +1,17 @@
 import { Router } from 'express';
 import { PlaylistController } from '../controllers/PlaylistController';
 import { requireAuth } from '../middlewares/authMiddleware';
+import { aiPlaylistCurationRateLimiter } from '../middlewares/rateLimiter';
 
 const router = Router();
 
 // All playlist routes require authentication (Issue #77).
 router.post('/', requireAuth, PlaylistController.create);
 router.get('/', requireAuth, PlaylistController.list);
+
+// AI-powered candidate playlist curation (Issue #275) — registered before /:id
+router.post('/curate', requireAuth, aiPlaylistCurationRateLimiter, PlaylistController.curate);
+
 // Followed playlists (Issue #408) — registered before /:id so it is not
 // shadowed by the single-playlist lookup.
 router.get('/followed', requireAuth, PlaylistController.listFollowedPlaylists);
