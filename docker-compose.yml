@@ -27,6 +27,31 @@ services:
       start_period: 15s
       retries: 3
 
+  # Standalone indexer worker (issue #246) — same image as `backend`, just a
+  # different start command, wired to the same Postgres/Redis so it shares
+  # migrations and the `indexer_cursors` table.
+  indexer:
+    container_name: audioblocks-indexer
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: npm run indexer
+    env_file: .env.docker
+    environment:
+      - NODE_ENV=development
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - .:/app
+      - /app/node_modules
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'workers/indexer' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
   db:
     container_name: audioblocks-db
     image: postgres:15-alpine
