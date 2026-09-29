@@ -3,7 +3,7 @@
 **Date:** 2026-08-31
 **Status:** Accepted
 **Deciders:** Core team
-**Related Issues:** #255, #256, #257, #258
+**Related Issues:** #255, #256, #257, #258, #261
 
 ## Context
 
@@ -13,6 +13,7 @@ AudioBlock needs to track blockchain events from 5 Soroban smart contracts (Arti
 2. **Reliability**: Graceful shutdown without losing cursor position
 3. **Observability**: Monitor RPC call volumes and costs
 4. **Debugging**: Replay/reindex specific ledger ranges when events are missed
+5. **Rebuildable read models**: Derived data (e.g. denormalized counts) must be rebuildable after a projection bug fix without re-fetching from RPC
 
 ## Decision
 
@@ -141,6 +142,64 @@ npm run cli:reindex -- \
 - Re-import after a malformed event was corrected
 - Validate indexer logic against historical data
 
+### Event Ingestion vs. Projection (Issue #261)
+
+Ingestion and projection are two separate steps with separate tables:
+
+```
+ Soroban RPC ──► ingestion ──► indexed_events (raw, append-only)
+                 (IndexerWorker,          │  ordered by ingestSeq
+                  BackfillService,        ▼
+                  reindex CLI)      EventProjector ──► read models (onchain_event_counts, ...)
+                                          │
+                                          └──► indexer_projection_checkpoints
+```
+
+**Ingestion** only ever writes raw rows to `indexed_events` via `IndexedEventService.upsertEvent()`. It
+never touches derived tables, so a bug in projection logic cannot corrupt or block raw event storage.
+
+**Projection** is done by `EventProjector` (`src/services/EventProjector.ts`). Each read model implements
+`EventProjection` (`src/services/projections/`) with two methods:
+
+- `reset(manager)` — delete all derived state
+- `apply(events, manager)` — apply a batch of raw events, ordered by `ingestSeq`
+
+Projections must be deterministic functions of the raw stream, so `reset` + full replay always yields the
+same state.
+
+**Ordering and checkpoints.** `indexed_events.ingestSeq` is a `BIGSERIAL` assigned at insert time. Each
+projection stores the highest `ingestSeq` it has applied in `indexer_projection_checkpoints`. A batch of
+events and its checkpoint advance are committed in the same transaction, so every raw event is applied
+exactly once. Duplicate upserts (reorg overlap, reindex) are no-ops on the raw table and therefore never
+double-count in projections.
+
+Sequence values are allocated before commit, so a lower `ingestSeq` can become visible after a higher
+one. The projector only consumes rows older than `INDEXER_PROJECTOR_SETTLE_MS` (default 5s) so the
+checkpoint does not skip past a late-committing row. Any drift caused by an unusually slow insert is
+fixed by a rebuild.
+
+**Concurrency.** Every projector transaction takes `pg_advisory_xact_lock` keyed on the projection name,
+so the worker loop and the CLI cannot interleave on the same projection.
+
+**Running.**
+
+- The indexer worker process runs the projector on its own interval (`INDEXER_PROJECTOR_INTERVAL_MS`),
+  independent of the per-contract poll loops. A projector failure is logged and retried next tick.
+- Manual catch-up: `npm run cli:project`
+- Rebuild from scratch (e.g. after fixing a projection bug):
+
+```bash
+npm run cli:project -- --rebuild [--projection onchain_event_counts]
+```
+
+A rebuild resets the projection, zeroes its checkpoint and replays every raw event in a single
+transaction. Reset uses `DELETE` rather than `TRUNCATE`, so API readers keep seeing the previous state
+until the rebuild commits.
+
+**Adding a projection.** Implement `EventProjection`, add its table (entity + migration), and register it
+in `defaultProjections()`. On first run its checkpoint starts at 0, so it backfills from all existing raw
+events automatically.
+
 ## Configuration
 
 **Environment variables:**
@@ -168,6 +227,11 @@ SOROBAN_RPC_URL_TESTNET=https://soroban-testnet.stellar.org
 INDEXER_POLL_INTERVAL_MS=5000  # Poll every 5 seconds
 INDEXER_BATCH_SIZE=100         # Events per batch
 INDEXER_OVERLAP_WINDOW=10      # Reorg protection
+
+# Projector (Issue #261)
+INDEXER_PROJECTOR_INTERVAL_MS=15000  # How often new raw events are projected
+INDEXER_PROJECTOR_BATCH_SIZE=500     # Raw events per projector transaction
+INDEXER_PROJECTOR_SETTLE_MS=5000     # Only project rows older than this
 ```
 
 ## Database Schema
@@ -205,6 +269,34 @@ CREATE TABLE indexed_events (
   created_at TIMESTAMP DEFAULT NOW(),
   UNIQUE(event_id, network, contract_id)
 );
+-- Issue #261: monotonic replay order for projectors
+ALTER TABLE indexed_events ADD COLUMN "ingestSeq" BIGSERIAL NOT NULL;
+CREATE UNIQUE INDEX "IDX_indexed_events_ingestSeq" ON indexed_events ("ingestSeq");
+```
+
+**indexer_projection_checkpoints** (Issue #261):
+
+```sql
+CREATE TABLE indexer_projection_checkpoints (
+  projection VARCHAR(100) PRIMARY KEY,
+  "lastIngestSeq" BIGINT DEFAULT 0,
+  "eventsApplied" BIGINT DEFAULT 0,
+  "lastRebuiltAt" TIMESTAMP,
+  "updatedAt" TIMESTAMP DEFAULT NOW()
+);
+```
+
+**onchain_event_counts** (read model, Issue #261):
+
+```sql
+CREATE TABLE onchain_event_counts (
+  network VARCHAR(50),
+  "contractType" VARCHAR(100),  -- 'unknown' when the raw row has none
+  "eventType" VARCHAR(100),
+  count BIGINT DEFAULT 0,
+  "updatedAt" TIMESTAMP DEFAULT NOW(),
+  PRIMARY KEY (network, "contractType", "eventType")
+);
 ```
 
 ## Consequences
@@ -216,12 +308,14 @@ CREATE TABLE indexed_events (
 - **Observable:** RPC metrics exposed for capacity planning
 - **Debuggable:** Replay/reindex CLI for troubleshooting
 - **Safe:** Graceful shutdown prevents cursor corruption
+- **Rebuildable:** Read models can be dropped and rebuilt from raw events without touching RPC
 
 ### Negative / Trade-offs
 
 - **Separate process:** Must be deployed and monitored independently
 - **RPC costs:** 5M+ calls/month may incur provider fees
 - **Memory footprint:** 10 concurrent poll loops (mitigated by rate limiting)
+- **Eventual consistency:** Read models trail raw events by up to one projector interval plus the settle window
 
 ### Neutral
 
@@ -236,6 +330,8 @@ CREATE TABLE indexed_events (
 | Integrated into main API   | Long-running poll loops block server process; separate worker is cleaner     |
 | Batch reindex via backfill | Backfill is for historical one-time imports; reindex is for debugging ranges |
 | No graceful shutdown       | Cursor corruption on deploy is unacceptable                                  |
+| Update read models inline during ingestion | Couples projection bugs to raw storage; derived data cannot be rebuilt without re-fetching from RPC |
+| Checkpoint projections by `ledger`/`createdAt` | Backfill and reindex insert historical ledgers late, and timestamps are not unique; `ingestSeq` gives a strict total order |
 
 ## Testing Strategy
 
@@ -315,6 +411,7 @@ CREATE TABLE indexed_events (
 - Issue #256: Add a CLI to replay/reindex a specific ledger range
 - Issue #257: Monitor Soroban RPC provider quota and cost
 - Issue #258: Graceful shutdown for the indexer worker without losing the cursor
+- Issue #261: Decouple event ingestion from event projection
 
 ## Future Improvements
 

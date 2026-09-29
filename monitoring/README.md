@@ -22,8 +22,12 @@ monitoring/
 `docker-compose.yml` starts a Prometheus instance and a Grafana instance.
 
 - Prometheus scrapes the backend's `GET /metrics` endpoint (exposed by
-  `prom-client` in `src/services/MetricsService.ts`) using
+  `prom-client` in `src/services/MetricsService.ts`, served by
+  `src/routes/metricsRoutes.ts`) using
   `./monitoring/prometheus.yml`.
+- The standalone indexer worker serves its process-local metrics on port 9464;
+  the `monitoring`, `observability`, and `full` Compose profiles start it and
+  let Prometheus scrape `indexer:9464`.
 - Grafana is provisioned entirely from disk:
   - `./monitoring/grafana/provisioning.yml` is mounted to
     `/etc/grafana/provisioning/provisioning.yml` — it defines the Prometheus
@@ -70,8 +74,11 @@ Blockchain indexer health dashboard visualizing metrics from `IndexerService`:
 - Per-network processing rate
 - 24-hour summaries (events, errors)
 
-Includes alert rules for high lag (>1000 ledgers) and error rate (>0.1/s).
-Covers all 5 AudioBlock contracts (Artist, Song, Album, Marketplace, Royalty).
+Includes warning and critical rules for sustained high lag (>1000 and >10000
+ledgers) and a warning when all lag metrics disappear. Covers all 5 AudioBlock
+contracts (Artist, Song, Album, Marketplace, Royalty). The indexer worker
+exposes these gauges at `/metrics`; keep that port reachable only from the
+private monitoring network.
 
 ## Adding a dashboard
 

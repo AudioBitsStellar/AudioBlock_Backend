@@ -159,6 +159,7 @@ export const SERVICE_NAMES = {
   METRICS_SERVICE: 'MetricsService',
   SEARCH_INDEX_SERVICE: 'SearchIndexService',
   BATCH_SERVICE: 'BatchService',
+  AI_PROVIDER_SERVICE: 'AIProviderService',
 
   // Marketplace services
   ROYALTY_PAYOUT_SERVICE: 'RoyaltyPayoutService',

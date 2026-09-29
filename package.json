@@ -22,6 +22,7 @@
     "gdpr:purge-accounts": "ts-node src/jobs/AccountDeletionJob.ts",
     "reconcile:onchain": "ts-node src/jobs/OnChainReconciliationJob.ts",
     "cli:reindex": "ts-node src/cli/reindex.ts",
+    "cli:project": "ts-node src/cli/project.ts",
     "migration:generate": "typeorm migration:generate",
     "migration:run": "typeorm migration:run -d dist/config/db.js",
     "migration:revert": "typeorm migration:revert -d dist/config/db.js",

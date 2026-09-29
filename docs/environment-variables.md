@@ -70,12 +70,15 @@ Complete reference of all environment variables used by the AudioBlocks Backend.
 
 ## Authentication
 
-| Variable     | Required | Default                 | Description                                     |
-| ------------ | -------- | ----------------------- | ----------------------------------------------- |
-| `JWT_SECRET` | Yes      | —                       | Secret key for signing JWT tokens               |
-| `APP_URL`    | No       | `http://localhost:3000` | Frontend URL for email verification/reset links |
+| Variable               | Required | Default                 | Description                                     |
+| ---------------------- | -------- | ----------------------- | ----------------------------------------------- |
+| `JWT_SECRET`           | Yes      | —                       | Secret key for signing JWT tokens               |
+| `APP_URL`              | No       | `http://localhost:3000` | Frontend URL for email verification/reset links |
+| `PRIVY_APP_ID`         | No       | —                       | Privy application ID                            |
+| `PRIVY_APP_SECRET`     | No       | —                       | Privy application secret                        |
+| `PRIVY_WEBHOOK_SECRET` | No       | —                       | Privy webhook signing secret (Issue #606)       |
 
-**Sensitive:** `JWT_SECRET` — never log or commit.
+**Sensitive:** `JWT_SECRET`, `PRIVY_APP_SECRET`, `PRIVY_WEBHOOK_SECRET` — never log or commit.
 
 ---
 
@@ -110,18 +113,18 @@ Complete reference of all environment variables used by the AudioBlocks Backend.
 | `SOROBAN_NETWORK`                         | No       | `testnet`                                        | Network to use: `testnet` or `mainnet` |
 | `SOROBAN_TESTNET_RPC_URL`                 | No       | `https://soroban-testnet.stellar.org`            | Testnet RPC endpoint                   |
 | `SOROBAN_TESTNET_NETWORK_PASSPHRASE`      | No       | `Test SDF Network ; September 2015`              | Testnet network passphrase             |
-| `SOROBAN_TESTNET_NFT_CONTRACT_ID`         | Yes*     | —                                                | NFT contract address (testnet)         |
-| `SOROBAN_TESTNET_ARTIST_CONTRACT_ID`      | Yes*     | —                                                | Artist contract address (testnet)      |
-| `SOROBAN_TESTNET_CATALOG_CONTRACT_ID`     | Yes*     | —                                                | Catalog contract address (testnet)     |
-| `SOROBAN_TESTNET_ROYALTY_CONTRACT_ID`     | Yes*     | —                                                | Royalty contract address (testnet)     |
-| `SOROBAN_TESTNET_MARKETPLACE_CONTRACT_ID` | Yes*     | —                                                | Marketplace contract address (testnet) |
+| `SOROBAN_TESTNET_NFT_CONTRACT_ID`         | Yes\*    | —                                                | NFT contract address (testnet)         |
+| `SOROBAN_TESTNET_ARTIST_CONTRACT_ID`      | Yes\*    | —                                                | Artist contract address (testnet)      |
+| `SOROBAN_TESTNET_CATALOG_CONTRACT_ID`     | Yes\*    | —                                                | Catalog contract address (testnet)     |
+| `SOROBAN_TESTNET_ROYALTY_CONTRACT_ID`     | Yes\*    | —                                                | Royalty contract address (testnet)     |
+| `SOROBAN_TESTNET_MARKETPLACE_CONTRACT_ID` | Yes\*    | —                                                | Marketplace contract address (testnet) |
 | `SOROBAN_MAINNET_RPC_URL`                 | No       | `https://mainnet.sorobanrpc.com`                 | Mainnet RPC endpoint                   |
 | `SOROBAN_MAINNET_NETWORK_PASSPHRASE`      | No       | `Public Global Stellar Network ; September 2015` | Mainnet network passphrase             |
-| `SOROBAN_MAINNET_NFT_CONTRACT_ID`         | Yes*     | —                                                | NFT contract address (mainnet)         |
-| `SOROBAN_MAINNET_ARTIST_CONTRACT_ID`      | Yes*     | —                                                | Artist contract address (mainnet)      |
-| `SOROBAN_MAINNET_CATALOG_CONTRACT_ID`     | Yes*     | —                                                | Catalog contract address (mainnet)     |
-| `SOROBAN_MAINNET_ROYALTY_CONTRACT_ID`     | Yes*     | —                                                | Royalty contract address (mainnet)     |
-| `SOROBAN_MAINNET_MARKETPLACE_CONTRACT_ID` | Yes*     | —                                                | Marketplace contract address (mainnet) |
+| `SOROBAN_MAINNET_NFT_CONTRACT_ID`         | Yes\*    | —                                                | NFT contract address (mainnet)         |
+| `SOROBAN_MAINNET_ARTIST_CONTRACT_ID`      | Yes\*    | —                                                | Artist contract address (mainnet)      |
+| `SOROBAN_MAINNET_CATALOG_CONTRACT_ID`     | Yes\*    | —                                                | Catalog contract address (mainnet)     |
+| `SOROBAN_MAINNET_ROYALTY_CONTRACT_ID`     | Yes\*    | —                                                | Royalty contract address (mainnet)     |
+| `SOROBAN_MAINNET_MARKETPLACE_CONTRACT_ID` | Yes\*    | —                                                | Marketplace contract address (mainnet) |
 
 _\* Required for the selected network. All five IDs must be set for the chosen `SOROBAN_NETWORK`._
 
@@ -131,13 +134,25 @@ _\* Required for the selected network. All five IDs must be set for the chosen `
 
 ## Indexer Worker
 
-| Variable                                | Required | Default   | Description                                    |
-| --------------------------------------- | -------- | --------- | ---------------------------------------------- |
-| `INDEXER_POLL_INTERVAL_MS`              | No       | `5000`    | Poll interval for the Soroban event indexer    |
-| `INDEXER_PAGE_SIZE`                     | No       | `100`     | Max events fetched per `getEvents` page        |
-| `INDEXER_LAG_MONITOR_INTERVAL_MS`       | No       | `60000`   | Interval for computing/exporting indexer lag   |
-| `INDEXER_OVERLAP_WINDOW`                | No       | `10`      | Ledger overlap window back from head           |
-| `INDEXER_GAP_THRESHOLD`                 | No       | `50`      | Ledger gap threshold that triggers a warning   |
+| Variable                          | Required | Default | Description                                                         |
+| --------------------------------- | -------- | ------- | ------------------------------------------------------------------- |
+| `INDEXER_POLL_INTERVAL_MS`        | No       | `5000`  | Poll interval for the Soroban event indexer                         |
+| `INDEXER_PAGE_SIZE`               | No       | `100`   | Max events fetched per `getEvents` page                             |
+| `INDEXER_LAG_MONITOR_INTERVAL_MS` | No       | `60000` | Interval for computing/exporting indexer lag                        |
+| `INDEXER_OVERLAP_WINDOW`          | No       | `10`    | Ledger overlap window back from head                                |
+| `INDEXER_GAP_THRESHOLD`           | No       | `50`    | Ledger gap threshold that triggers a warning                        |
+| `INDEXER_METRICS_PORT`            | No       | `9464`  | HTTP port used to expose the standalone worker's Prometheus metrics |
+
+### Subgraph queries
+
+| Variable                           | Required | Default | Description                                                                  |
+| ---------------------------------- | -------- | ------- | ---------------------------------------------------------------------------- |
+| `GRAPH_SUBGRAPH_URL`               | No       | —       | Direct GraphQL URL for the deployed subgraph                                 |
+| `GRAPH_SUBGRAPH_ENDPOINT_TEMPLATE` | No       | —       | Gateway URL template containing `{apiKey}`                                   |
+| `GRAPH_SUBGRAPH_API_KEY`           | No       | —       | API key for the Graph gateway                                                |
+| `SUBGRAPH_CACHE_TTL_MS`            | No       | `30000` | Redis cache lifetime for successful subgraph responses; `0` disables caching |
+
+**Sensitive:** `GRAPH_SUBGRAPH_API_KEY` — never log or commit.
 
 ---
 

@@ -265,8 +265,8 @@ contracts themselves.
 
 ## Authentication
 
-Two parallel signup/login flows converge on an identical JWT payload, so
-downstream code never needs to know which method a user used.
+Three parallel signup/login flows converge on an identical JWT payload, so
+downstream code never needs to know which method a user used:
 
 **Wallet-signature (EVM)** — `ethers.verifyMessage` cryptographically
 recovers the signing address from a user-provided signature and checks it
@@ -280,10 +280,125 @@ shared secret, an otpauth URL/QR data URL, and backup recovery codes. Once
 enabled, `POST /api/auth/login-email` requires either `twoFactorCode` or
 `recoveryCode` in addition to the email/password.
 
-Both issue a JWT (`expiresIn: "1d"`) carrying `id`, `email`, `role`,
+**Privy** — delegated authentication using [Privy](https://privy.io). Privy
+provides wallet-less authentication, embedded wallets, and social login. The
+backend verifies Privy-issued ES256 JWT access tokens using cached public
+keys (JWKS). See [Privy Integration Setup](#privy-integration-setup) below.
+
+All three methods issue a JWT (`expiresIn: "1d"`) carrying `id`, `email`, `role`,
 `walletAddress`, and profile fields. `authArtistMiddleware` /
 `authListenerMiddleware` verify the token and enforce the required role on
 protected routes.
+
+### Privy Integration Setup
+
+Privy authentication is **optional** and controlled by the `AUTH_MODE` feature
+flag. The backend can operate in three modes:
+
+| `AUTH_MODE` | Legacy Auth | Privy Auth | Use Case                    |
+| ----------- | ----------- | ---------- | --------------------------- |
+| `legacy`    | ✓           | ✗          | Default / pre-migration     |
+| `both`      | ✓           | ✓          | Staged rollout              |
+| `privy`     | ✗           | ✓          | Post-migration (Privy only) |
+
+#### Required Environment Variables
+
+```bash
+# Privy Authentication (optional, all three required if any is set)
+PRIVY_APP_ID=your_app_id                    # From Privy dashboard
+PRIVY_APP_SECRET=your_app_secret            # For privileged API calls
+AUTH_MODE=both                              # 'legacy' | 'both' | 'privy'
+```
+
+If Privy is not needed, leave all Privy variables unset. The application will
+log a warning and operate in `legacy` mode.
+
+#### Setup Steps
+
+1. **Create a Privy app** at [https://dashboard.privy.io](https://dashboard.privy.io)
+2. **Copy credentials** from the Privy dashboard:
+   - App ID (Configuration → App settings)
+   - App Secret (Configuration → App settings → API Keys)
+3. **Set environment variables** in `.env` or your deployment platform:
+   ```bash
+   PRIVY_APP_ID=your_app_id_from_dashboard
+   PRIVY_APP_SECRET=your_secret_from_dashboard
+   AUTH_MODE=both  # Start with 'both' for gradual rollout
+   ```
+4. **Configure CORS** — ensure your frontend domain is in `ALLOWED_ORIGINS`
+5. **Test the integration**:
+
+   ```bash
+   # Health check (should show Privy enabled)
+   curl http://localhost:4000/api/health
+
+   # Login with Privy (requires Privy ID token from client)
+   curl -X POST http://localhost:4000/api/auth/privy/login \
+     -H "Content-Type: application/json" \
+     -d '{"idToken": "privy_id_token_here"}'
+   ```
+
+#### Optional: Tuning Resilience Parameters
+
+The Privy integration includes circuit breaking, retry logic, and key caching
+to survive transient Privy outages. These can be tuned via environment variables:
+
+```bash
+# JWKS caching (Issue #634)
+PRIVY_JWKS_TTL_MS=3600000                   # 1 hour (default)
+PRIVY_JWKS_STALE_TTL_MS=86400000            # 24 hours (default)
+PRIVY_JWKS_NEGATIVE_TTL_MS=60000            # 1 minute (default)
+
+# Retry and circuit breaking (Issue #635)
+PRIVY_RETRY_ATTEMPTS=3                      # Total attempts (default)
+PRIVY_RETRY_BASE_DELAY_MS=200               # First backoff delay (default)
+PRIVY_RETRY_MAX_DELAY_MS=2000               # Max backoff delay (default)
+PRIVY_CIRCUIT_FAILURE_THRESHOLD=5           # Consecutive failures before open (default)
+PRIVY_CIRCUIT_RESET_TIMEOUT_MS=30000        # 30 seconds (default)
+PRIVY_ALLOW_STALE_KEYS=true                 # Serve stale keys on error (default)
+
+# Legacy fallback during outages
+PRIVY_ALLOW_LEGACY_FALLBACK=true            # Keep legacy auth alive during outages (default)
+```
+
+#### Monitoring
+
+Privy integration exposes Prometheus metrics for observability:
+
+- `privy_token_verifications_total{outcome}` — Token verification attempts
+- `privy_jwk_cache_hits_total` — JWKS cache performance
+- `privy_circuit_state{state}` — Circuit breaker state
+- `auth_failures_total{auth_method,failure_type}` — Authentication failures
+
+Alert rules are defined in `monitoring/prometheus-alerts.yml`.
+
+#### Session Revocation
+
+When a user logs out or sessions are revoked:
+
+- **Privy-side**: Sessions are revoked via Privy's API (`POST /v1/users/{id}/sessions/revoke`)
+- **Local tracking**: Revoked sessions are tracked in-process for early rejection
+- **Token rejection**: Revoked session tokens return `401 SESSION_REVOKED`
+
+Endpoint: `POST /api/auth/mfa/sessions/revoke` (requires valid Privy token)
+
+#### Admin Access to Linked Accounts
+
+Admins can view Privy-linked accounts for any user:
+
+```bash
+GET /api/admin/users/:id/linked-accounts
+```
+
+Returns all linked authentication methods (wallets, emails, social providers),
+MFA status, and account creation date.
+
+#### Further Reading
+
+- [Privy Authentication Guide](docs/PRIVY_AUTH.md) — Resilience & rollout details
+- [Privy Implementation Guide](docs/PRIVY_AUTH_IMPLEMENTATION.md) — Full API reference
+- [Privy Migration Guide](docs/PRIVY_MIGRATION_GUIDE.md) — Migrating existing accounts
+- [Privy Security Checklist](docs/PRIVY_AUTH_SECURITY_CHECKLIST.md)
 
 ## Environment Variables
 
@@ -569,14 +684,14 @@ This brings up the **minimal stack** (API `localhost:4000` + Postgres `5432` + R
 
 `docker-compose.yml` uses Compose **profiles** so the same file serves both use-cases:
 
-| Command | What it starts |
-|---------|----------------|
-| `docker compose up --build` | `backend` + `db` + `redis` (minimal, no profile) |
-| `docker compose --profile full up --build` | Everything: minimal + `rabbitmq` + `pgadmin` + `prometheus` + `grafana` |
-| `docker compose --profile queue up --build` | Minimal + `rabbitmq` (song-processing queue) |
-| `docker compose --profile tools up --build` | Minimal + `pgadmin` (`localhost:5050`) |
-| `docker compose --profile monitoring up --build` | Minimal + `prometheus` (`9090`) + `grafana` (`3000`) |
-| `docker compose --profile observability up --build` | Same as `monitoring` (alias) |
+| Command                                             | What it starts                                                          |
+| --------------------------------------------------- | ----------------------------------------------------------------------- |
+| `docker compose up --build`                         | `backend` + `db` + `redis` (minimal, no profile)                        |
+| `docker compose --profile full up --build`          | Everything: minimal + `rabbitmq` + `pgadmin` + `prometheus` + `grafana` |
+| `docker compose --profile queue up --build`         | Minimal + `rabbitmq` (song-processing queue)                            |
+| `docker compose --profile tools up --build`         | Minimal + `pgadmin` (`localhost:5050`)                                  |
+| `docker compose --profile monitoring up --build`    | Minimal + `prometheus` (`9090`) + `grafana` (`3000`)                    |
+| `docker compose --profile observability up --build` | Same as `monitoring` (alias)                                            |
 
 `backend` no longer `depends_on: rabbitmq` — the API starts without a queue and connects to RabbitMQ lazily when it appears (see `src/index.ts`), so the minimal stack stays self-contained. Any combination of profiles can be stacked, e.g.:
 
@@ -633,8 +748,8 @@ npm run dev
 | `npm test -- src/__tests__/health.test.ts`            | Runs a single test file (swap in any path under `src/__tests__`)                                                                |
 | `npm run test:watch`                                  | Runs Jest in watch mode                                                                                                         |
 | `npm run compose:check`                               | Validates that all docker-compose files are mutually consistent (Issue #404)                                                    |
-| `npm run env:check`                                   | Checks that `.env.example` lists every required var from `src/config/env.ts` (reports both missing and extra keys)            |
-| `npm run env:check:strict`                            | Same as above but fails on any extra key in `.env.example` (exact parity)                                                      |
+| `npm run env:check`                                   | Checks that `.env.example` lists every required var from `src/config/env.ts` (reports both missing and extra keys)              |
+| `npm run env:check:strict`                            | Same as above but fails on any extra key in `.env.example` (exact parity)                                                       |
 
 ## Known Issues / Cleanup Backlog
 

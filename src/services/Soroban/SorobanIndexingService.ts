@@ -21,7 +21,11 @@ import { buildIndexerContracts } from './IndexerContractRegistry';
 import { SorobanEventReader } from './SorobanEventReader';
 import { IndexerService } from '../IndexerService';
 import { IndexedEventService } from '../IndexedEventService';
-import { indexerLagLedgers, indexerEventsProcessedTotal, indexerErrorsTotal } from '../MetricsService';
+import {
+  indexerLagLedgers,
+  indexerEventsProcessedTotal,
+  indexerErrorsTotal,
+} from '../MetricsService';
 import logger from '../../config/logger';
 
 export interface SorobanIndexingServiceOptions {
@@ -81,7 +85,7 @@ export class SorobanIndexingService {
 
           // Update the lag gauge regardless of whether any events were found.
           const lag = Math.max(0, page.latestLedger - (cursor.lastProcessedLedger || fromLedger));
-          indexerLagLedgers.set({ contractType, network }, lag);
+          indexerLagLedgers.set({ contract: contractId, network }, lag);
 
           if (page.events.length === 0) {
             logger.debug({ label, fromLedger, latestLedger: page.latestLedger }, 'No new events');
@@ -100,7 +104,7 @@ export class SorobanIndexingService {
           // Persist in a single batch.
           if (rows.length > 0) {
             await this.eventService.insertBatch(rows);
-            indexerEventsProcessedTotal.inc({ contractType, network }, rows.length);
+            indexerEventsProcessedTotal.inc({ contract: contractId, network }, rows.length);
             totalPersisted += rows.length;
           }
 
@@ -115,7 +119,7 @@ export class SorobanIndexingService {
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           logger.error({ label, err: message }, 'Soroban indexing batch failed');
-          indexerErrorsTotal.inc({ contractType, network });
+          indexerErrorsTotal.inc({ contract: contractId, network });
 
           // Record error in cursor so health endpoint can surface it.
           await this.indexerService.recordError(contractId, network, message).catch(() => {});

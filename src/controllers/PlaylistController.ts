@@ -263,4 +263,19 @@ export class PlaylistController {
       handleError(req, res, error);
     }
   };
+
+  /** POST /api/playlists/curate — AI prompt/mood-based candidate playlist curation (Issue #275). */
+  static curate = async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user.id as string;
+      const { prompt, limit } = req.body;
+      const result = await playlistService.curateCandidatePlaylist(userId, {
+        prompt,
+        limit: limit ? Number(limit) : undefined,
+      });
+      return res.status(200).json({ success: true, data: result });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
 }

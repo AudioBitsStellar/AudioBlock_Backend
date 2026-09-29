@@ -1,8 +1,8 @@
 /**
  * SubgraphQueryService: Queries The Graph subgraph with automatic fallback to direct RPC queries.
  *
- * This service fetches indexed data from The Graph subgraph. Entity-level RPC
- * fallback is not available until RPC events can be mapped to these query shapes.
+ * Artist and song queries can fall back to persisted indexed events. Other
+ * query shapes remain subgraph-only until matching event mappings are available.
  *
  * Query modes:
  * - Primary: The Graph GraphQL subgraph API
@@ -11,6 +11,8 @@
 
 import { SorobanEventReader, NormalizedContractEvent } from './Soroban/SorobanEventReader';
 import { IndexedEventService } from './IndexedEventService';
+import { CacheService } from './CacheService';
+import { createHash } from 'crypto';
 import logger from '../config/logger';
 import axios, { AxiosError } from 'axios';
 
@@ -30,6 +32,7 @@ interface SubgraphQueryConfig {
   retryBaseDelayMs?: number;
   pageSize?: number;
   consistencyRetries?: number;
+  cacheTtlMs?: number;
 }
 
 interface Snapshot {
@@ -156,6 +159,8 @@ export class SubgraphQueryService {
   private retryBaseDelayMs: number;
   private pageSize: number;
   private consistencyRetries: number;
+  private cacheTtlMs: number;
+  private cacheNamespace: string;
 
   constructor(
     subgraphUrl?: string,
@@ -201,7 +206,9 @@ export class SubgraphQueryService {
       1,
       Math.min(
         1000,
-        Math.floor(configuredNumber(finalConfig.pageSize, process.env.SUBGRAPH_QUERY_PAGE_SIZE, 1000)),
+        Math.floor(
+          configuredNumber(finalConfig.pageSize, process.env.SUBGRAPH_QUERY_PAGE_SIZE, 1000),
+        ),
       ),
     );
     this.consistencyRetries = Math.max(
@@ -214,6 +221,12 @@ export class SubgraphQueryService {
         ),
       ),
     );
+    this.cacheTtlMs = Math.max(
+      0,
+      Math.floor(
+        configuredNumber(finalConfig.cacheTtlMs, process.env.SUBGRAPH_CACHE_TTL_MS, 30000),
+      ),
+    );
     const apiKey = finalConfig.apiKey ?? process.env.GRAPH_SUBGRAPH_API_KEY ?? '';
     const endpoint =
       subgraphUrl ||
@@ -222,48 +235,56 @@ export class SubgraphQueryService {
       process.env.GRAPH_SUBGRAPH_ENDPOINT_TEMPLATE ||
       '';
     this.graphClient = new GraphQLClient(endpoint, apiKey, this.requestTimeoutMs);
+    this.cacheNamespace = createHash('sha256')
+      .update(this.graphClient.getEndpointForHealthReport())
+      .digest('hex')
+      .slice(0, 16);
   }
 
   /**
    * Query artists from the subgraph, reporting when fallback is unavailable.
    */
   async queryArtists(limit: number = 100): Promise<SubgraphQueryResult<ArtistQueryResult[]>> {
-    const result = await this.queryEntities<ArtistQueryResult>(
-      'artists',
-      'name wallet createdAt',
-      limit,
-    );
-    if (result.error && this.fallbackEnabled) {
-      logger.warn('Subgraph query failed for artists; RPC fallback is unavailable', result.error);
-      return this.queryArtistsFromRpc(result.error);
-    }
-    return {
-      data: result.data,
-      source: 'subgraph',
-      error: result.error,
-      fallbackUsed: false,
-    };
+    return this.cacheResult(`artists:${limit}`, async () => {
+      const result = await this.queryEntities<ArtistQueryResult>(
+        'artists',
+        'name wallet createdAt',
+        limit,
+      );
+      if (result.error && this.fallbackEnabled) {
+        logger.warn('Subgraph query failed for artists; RPC fallback is unavailable', result.error);
+        return this.queryArtistsFromRpc(result.error);
+      }
+      return {
+        data: result.data,
+        source: 'subgraph',
+        error: result.error,
+        fallbackUsed: false,
+      };
+    });
   }
 
   /**
    * Query songs from the subgraph, reporting when fallback is unavailable.
    */
   async querySongs(limit: number = 100): Promise<SubgraphQueryResult<SongQueryResult[]>> {
-    const result = await this.queryEntities<SongQueryResult>(
-      'songs',
-      'title artist createdAt',
-      limit,
-    );
-    if (result.error && this.fallbackEnabled) {
-      logger.warn('Subgraph query failed for songs; RPC fallback is unavailable', result.error);
-      return this.querySongsFromRpc(result.error);
-    }
-    return {
-      data: result.data,
-      source: 'subgraph',
-      error: result.error,
-      fallbackUsed: false,
-    };
+    return this.cacheResult(`songs:${limit}`, async () => {
+      const result = await this.queryEntities<SongQueryResult>(
+        'songs',
+        'title artist createdAt',
+        limit,
+      );
+      if (result.error && this.fallbackEnabled) {
+        logger.warn('Subgraph query failed for songs; RPC fallback is unavailable', result.error);
+        return this.querySongsFromRpc(result.error);
+      }
+      return {
+        data: result.data,
+        source: 'subgraph',
+        error: result.error,
+        fallbackUsed: false,
+      };
+    });
   }
 
   /**
@@ -272,7 +293,8 @@ export class SubgraphQueryService {
   async queryArtistHierarchy(
     artistId: string,
   ): Promise<SubgraphQueryResult<ArtistHierarchyQueryResult | null>> {
-    const query = `
+    return this.cacheResult(`artist-hierarchy:${encodeURIComponent(artistId)}`, async () => {
+      const query = `
       query GetArtistHierarchy($artistId: ID!) {
         artist(id: $artistId) {
           id
@@ -310,23 +332,28 @@ export class SubgraphQueryService {
       }
     `;
 
-    const result = await this.querySubgraph<{ artist: ArtistHierarchyQueryResult | null }>(query, {
-      artistId,
-    });
+      const result = await this.querySubgraph<{ artist: ArtistHierarchyQueryResult | null }>(
+        query,
+        {
+          artistId,
+        },
+      );
 
-    return {
-      data: result.data?.artist ?? null,
-      source: 'subgraph',
-      error: result.error,
-      fallbackUsed: false,
-    };
+      return {
+        data: result.data?.artist ?? null,
+        source: 'subgraph',
+        error: result.error,
+        fallbackUsed: false,
+      };
+    });
   }
 
   /**
    * Query sales from the subgraph.
    */
   async querySales(limit: number = 100): Promise<SubgraphQueryResult<SaleQueryResult[]>> {
-    const query = `
+    return this.cacheResult(`sales:${limit}`, async () => {
+      const query = `
       query GetSales($first: Int!) {
         sales(first: $first, orderBy: createdAt, orderDirection: desc) {
           id
@@ -349,23 +376,25 @@ export class SubgraphQueryService {
       }
     `;
 
-    const result = await this.querySubgraph<{ sales: SaleQueryResult[] }>(query, {
-      first: limit,
-    });
+      const result = await this.querySubgraph<{ sales: SaleQueryResult[] }>(query, {
+        first: limit,
+      });
 
-    return {
-      data: result.data?.sales ?? null,
-      source: 'subgraph',
-      error: result.error,
-      fallbackUsed: false,
-    };
+      return {
+        data: result.data?.sales ?? null,
+        source: 'subgraph',
+        error: result.error,
+        fallbackUsed: false,
+      };
+    });
   }
 
   /**
    * Query transfers from the subgraph.
    */
   async queryTransfers(limit: number = 100): Promise<SubgraphQueryResult<TransferQueryResult[]>> {
-    const query = `
+    return this.cacheResult(`transfers:${limit}`, async () => {
+      const query = `
       query GetTransfers($first: Int!) {
         transferEvents(first: $first, orderBy: createdAt, orderDirection: desc) {
           id
@@ -383,23 +412,25 @@ export class SubgraphQueryService {
       }
     `;
 
-    const result = await this.querySubgraph<{ transferEvents: TransferQueryResult[] }>(query, {
-      first: limit,
-    });
+      const result = await this.querySubgraph<{ transferEvents: TransferQueryResult[] }>(query, {
+        first: limit,
+      });
 
-    return {
-      data: result.data?.transferEvents ?? null,
-      source: 'subgraph',
-      error: result.error,
-      fallbackUsed: false,
-    };
+      return {
+        data: result.data?.transferEvents ?? null,
+        source: 'subgraph',
+        error: result.error,
+        fallbackUsed: false,
+      };
+    });
   }
 
   /**
    * Query NFT mints from the subgraph.
    */
   async queryMints(limit: number = 100): Promise<SubgraphQueryResult<MintQueryResult[]>> {
-    const query = `
+    return this.cacheResult(`mints:${limit}`, async () => {
+      const query = `
       query GetMints($first: Int!) {
         mintEvents(first: $first, orderBy: createdAt, orderDirection: desc) {
           id
@@ -421,16 +452,17 @@ export class SubgraphQueryService {
       }
     `;
 
-    const result = await this.querySubgraph<{ mintEvents: MintQueryResult[] }>(query, {
-      first: limit,
-    });
+      const result = await this.querySubgraph<{ mintEvents: MintQueryResult[] }>(query, {
+        first: limit,
+      });
 
-    return {
-      data: result.data?.mintEvents ?? null,
-      source: 'subgraph',
-      error: result.error,
-      fallbackUsed: false,
-    };
+      return {
+        data: result.data?.mintEvents ?? null,
+        source: 'subgraph',
+        error: result.error,
+        fallbackUsed: false,
+      };
+    });
   }
 
   /**
@@ -444,7 +476,8 @@ export class SubgraphQueryService {
       commentCount: string;
     } | null>
   > {
-    const query = `
+    return this.cacheResult(`track-engagement:${encodeURIComponent(songId)}`, async () => {
+      const query = `
       query GetTrackEngagement($songId: ID!) {
         song(id: $songId) {
           likeCount
@@ -466,35 +499,58 @@ export class SubgraphQueryService {
       }
     `;
 
-    const result = await this.querySubgraph<{
-      song: {
-        likeCount: string;
-        commentCount: string;
-        likes: LikeQueryResult[];
-        comments: CommentQueryResult[];
-      } | null;
-    }>(query, { songId });
+      const result = await this.querySubgraph<{
+        song: {
+          likeCount: string;
+          commentCount: string;
+          likes: LikeQueryResult[];
+          comments: CommentQueryResult[];
+        } | null;
+      }>(query, { songId });
 
-    if (!result.data?.song) {
+      if (!result.data?.song) {
+        return {
+          data: null,
+          source: 'subgraph',
+          error: result.error,
+          fallbackUsed: false,
+        };
+      }
+
       return {
-        data: null,
+        data: {
+          likes: result.data.song.likes,
+          comments: result.data.song.comments,
+          likeCount: result.data.song.likeCount,
+          commentCount: result.data.song.commentCount,
+        },
         source: 'subgraph',
         error: result.error,
         fallbackUsed: false,
       };
+    });
+  }
+
+  private async cacheResult<T>(
+    key: string,
+    query: () => Promise<SubgraphQueryResult<T>>,
+  ): Promise<SubgraphQueryResult<T>> {
+    const cacheKey = `subgraph:v1:${this.cacheNamespace}:${key}`;
+    if (this.cacheTtlMs > 0) {
+      const cached = await CacheService.get<SubgraphQueryResult<T>>(cacheKey);
+      if (cached) return cached;
     }
 
-    return {
-      data: {
-        likes: result.data.song.likes,
-        comments: result.data.song.comments,
-        likeCount: result.data.song.likeCount,
-        commentCount: result.data.song.commentCount,
-      },
-      source: 'subgraph',
-      error: result.error,
-      fallbackUsed: false,
-    };
+    const result = await query();
+    if (
+      this.cacheTtlMs > 0 &&
+      result.source === 'subgraph' &&
+      result.error === null &&
+      result.data !== null
+    ) {
+      await CacheService.set(cacheKey, result, this.cacheTtlMs);
+    }
+    return result;
   }
 
   /**
@@ -722,7 +778,8 @@ export class SubgraphQueryService {
           songIds.add(songId);
           songs.push({
             id: songId,
-            title: (payload?.['data'] as Record<string, unknown>)?.['title'] as string || 'Unknown',
+            title:
+              ((payload?.['data'] as Record<string, unknown>)?.['title'] as string) || 'Unknown',
             artist: event.address || 'Unknown',
             isMinted: true,
             createdAt: event.createdAt?.toISOString() || new Date().toISOString(),
