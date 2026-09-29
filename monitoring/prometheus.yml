@@ -4,10 +4,15 @@ global:
 
 # Indexer lag alerting rules (Issue #240).
 rule_files:
-  - "prometheus-alerts.yml"
+  - 'prometheus-alerts.yml'
 
 scrape_configs:
-  - job_name: "audioblock-backend"
+  - job_name: 'audioblock-backend'
     static_configs:
-      - targets: ["backend:4000"]
+      - targets: ['backend:4000']
+    metrics_path: /metrics
+
+  - job_name: 'audioblock-indexer'
+    static_configs:
+      - targets: ['indexer:9464']
     metrics_path: /metrics

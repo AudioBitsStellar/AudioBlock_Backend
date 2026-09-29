@@ -9,6 +9,19 @@
 groups:
   - name: audioblock-indexer
     rules:
+      - alert: IndexerLagMetricsMissing
+        expr: absent(indexer_lag_ledgers)
+        for: 10m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: 'Indexer lag metrics are missing'
+          description: >
+            Prometheus has not received indexer lag metrics for 10 minutes.
+            Check that the indexer worker is running and its metrics endpoint is reachable.
+          runbook: 'https://github.com/AudioBitsStellar/AudioBlock_Backend/blob/main/docs/indexer-backfill-runbook.md'
+
       # Fires when any contract has been lagging behind the tip for 15+ minutes.
       # Threshold (INDEXER_LAG_ALERT_THRESHOLD_LEDGERS) defaults to 1000 ledgers.
       - alert: HighIndexerLag
@@ -19,13 +32,13 @@ groups:
           severity: warning
           team: backend
         annotations:
-          summary: "Indexer is lagging for {{ $labels.contract }} on {{ $labels.network }}"
+          summary: 'Indexer is lagging for {{ $labels.contract }} on {{ $labels.network }}'
           description: >
             The indexer worker has been {{ $value }} ledgers behind the current
             tip for {{ $labels.contract }} on {{ $labels.network }} for over 15
             minutes. The worker may have stalled (RPC outage or crash loop).
-          runbook: "https://github.com/AudioBitsStellar/AudioBlock_Backend/blob/main/docs/indexer-backfill-runbook.md"
-          dashboard: "http://localhost:3001/d/audioblock-indexer"
+          runbook: 'https://github.com/AudioBitsStellar/AudioBlock_Backend/blob/main/docs/indexer-backfill-runbook.md'
+          dashboard: 'http://localhost:3001/d/audioblock-indexer'
 
       # Escalates a critical warning if a contract falls far behind the tip.
       - alert: CriticalIndexerLag
@@ -36,9 +49,9 @@ groups:
           severity: critical
           team: backend
         annotations:
-          summary: "Indexer critically behind for {{ $labels.contract }} on {{ $labels.network }}"
+          summary: 'Indexer critically behind for {{ $labels.contract }} on {{ $labels.network }}'
           description: >
             {{ $labels.contract }} on {{ $labels.network }} is {{ $value }} ledgers
             behind the tip and needs immediate attention.
-          runbook: "https://github.com/AudioBitsStellar/AudioBlock_Backend/blob/main/docs/indexer-backfill-runbook.md"
-          dashboard: "http://localhost:3001/d/audioblock-indexer"
+          runbook: 'https://github.com/AudioBitsStellar/AudioBlock_Backend/blob/main/docs/indexer-backfill-runbook.md'
+          dashboard: 'http://localhost:3001/d/audioblock-indexer'

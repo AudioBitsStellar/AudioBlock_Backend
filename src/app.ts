@@ -29,6 +29,8 @@ import aiRoutes from "./routes/aiRoutes";
 import activityRoutes from "./routes/activityRoutes";
 import activityStreamRoutes from "./routes/activityStreamRoutes";
 import accountRoutes from "./routes/accountRoutes";
+import subgraphRoutes from "./routes/subgraphRoutes";
+import metricsRoutes from "./routes/metricsRoutes";
 
 // Route imports
 
@@ -153,6 +155,10 @@ app.use("/api/activity", activityStreamRoutes);
 
 // GDPR account lifecycle: data export, deletion request/cancel, status (#633)
 app.use("/api/account", accountRoutes);
+
+app.use("/api/subgraph", subgraphRoutes);
+
+app.use("/metrics", metricsRoutes);
 
 // Error handling middleware
 const customErrorHandler: ErrorRequestHandler = (err, req, res, _next) => {

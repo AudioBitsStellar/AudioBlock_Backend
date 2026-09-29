@@ -1,7 +1,14 @@
 import axios from 'axios';
+import { CacheService } from '../CacheService';
 import { GraphQLClient, SubgraphQueryService } from '../SubgraphQueryService';
 
 jest.mock('axios');
+jest.mock('../CacheService', () => ({
+  CacheService: {
+    get: jest.fn(),
+    set: jest.fn(),
+  },
+}));
 
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
@@ -37,7 +44,11 @@ describe('GraphQLClient', () => {
   it('sends API keys as bearer tokens when the endpoint has no template placeholder', async () => {
     mockedAxios.post.mockResolvedValue({ data: { data: { songs: [] } } });
 
-    const client = new GraphQLClient('https://api.studio.thegraph.com/query/123/audio', 'key', 5000);
+    const client = new GraphQLClient(
+      'https://api.studio.thegraph.com/query/123/audio',
+      'key',
+      5000,
+    );
 
     await client.request('query { songs { id } }');
 
@@ -58,6 +69,8 @@ describe('GraphQLClient', () => {
 describe('SubgraphQueryService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    (CacheService.get as jest.Mock).mockResolvedValue(null);
+    (CacheService.set as jest.Mock).mockResolvedValue(undefined);
     delete process.env.GRAPH_SUBGRAPH_API_KEY;
     delete process.env.GRAPH_SUBGRAPH_ENDPOINT_TEMPLATE;
     delete process.env.GRAPH_SUBGRAPH_URL;
@@ -94,6 +107,62 @@ describe('SubgraphQueryService', () => {
     });
 
     expect(mockedAxios.post).toHaveBeenCalledTimes(2);
+  });
+
+  it('serves repeated successful queries from cache', async () => {
+    const cachedResult = {
+      data: [{ id: 'song-1', title: 'Track', artist: 'artist-1', createdAt: '100' }],
+      source: 'subgraph',
+      error: null,
+      fallbackUsed: false,
+    } as const;
+    (CacheService.get as jest.Mock).mockResolvedValueOnce(null).mockResolvedValueOnce(cachedResult);
+    mockedAxios.post
+      .mockResolvedValueOnce({
+        data: {
+          data: {
+            _meta: { block: { number: 10, hash: '0xabc' }, hasIndexingErrors: false },
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          data: {
+            _meta: { block: { number: 10, hash: '0xabc' }, hasIndexingErrors: false },
+            songs: cachedResult.data,
+          },
+        },
+      });
+
+    const service = new SubgraphQueryService('https://graph.example/subgraphs/audio', undefined, {
+      pageSize: 1,
+      cacheTtlMs: 30000,
+    });
+
+    await expect(service.querySongs(1)).resolves.toEqual(cachedResult);
+    await expect(service.querySongs(1)).resolves.toEqual(cachedResult);
+
+    expect(mockedAxios.post).toHaveBeenCalledTimes(2);
+    expect(CacheService.set).toHaveBeenCalledWith(
+      expect.stringMatching(/^subgraph:v1:[a-f0-9]{16}:songs:1$/),
+      cachedResult,
+      30000,
+    );
+  });
+
+  it('does not cache failed subgraph responses', async () => {
+    mockedAxios.post.mockResolvedValue({ data: { errors: [{ message: 'unavailable' }] } });
+
+    const service = new SubgraphQueryService('https://graph.example/subgraphs/audio', undefined, {
+      retryAttempts: 1,
+      cacheTtlMs: 30000,
+    });
+
+    await expect(service.querySongs(1)).resolves.toMatchObject({
+      data: null,
+      error: expect.stringContaining('GraphQL error'),
+    });
+    expect(CacheService.set).not.toHaveBeenCalled();
   });
 
   it('uses endpoint templates and redacts API keys in health reports', async () => {
