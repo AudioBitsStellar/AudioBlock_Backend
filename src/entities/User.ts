@@ -170,6 +170,10 @@ export class User {
   @Column({ default: true })
   isProfilePublic!: boolean;
 
+  /** Per-artist opt-in flag gating AI Studio upload tools (cover art, descriptions, tag suggestions, draft tweets). */
+  @Column({ default: false })
+  aiStudioEnabled!: boolean;
+
   // ── Account lifecycle (Issue #633, GDPR Art. 12/17) ─────────────────────────
   // A deletion request does not erase immediately. The user gets a grace window
   // in which they can export their data or cancel, after which a background job
