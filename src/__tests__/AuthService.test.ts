@@ -20,6 +20,17 @@ jest.mock('qrcode', () => ({
   __esModule: true,
   default: { toDataURL: jest.fn().mockResolvedValue('data:image/png;base64,qr') },
 }));
+jest.mock('../services/AccountMergeService', () => ({
+  AccountMergeService: jest.fn().mockImplementation(() => ({
+    autoMergeDuringLogin: jest.fn().mockResolvedValue(null),
+    detectDuplicates: jest.fn().mockResolvedValue([]),
+  })),
+}));
+jest.mock('../services/AuthAuditService', () => ({
+  AuthAuditService: jest.fn().mockImplementation(() => ({
+    logAuthEvent: jest.fn().mockResolvedValue(undefined),
+  })),
+}));
 
 import AppDataSource from '../config/db';
 import redis from '../config/redis';
@@ -35,9 +46,19 @@ const mockUserRepo = {
   save: jest.fn(),
 };
 
+const mockRefreshTokenRepo = {
+  findOne: jest.fn(),
+  create: jest.fn(),
+  save: jest.fn(),
+  update: jest.fn(),
+};
+
 beforeEach(() => {
   jest.clearAllMocks();
-  (AppDataSource.getRepository as jest.Mock).mockReturnValue(mockUserRepo);
+  (AppDataSource.getRepository as jest.Mock).mockImplementation((entity: any) => {
+    if (entity.name === 'RefreshToken') return mockRefreshTokenRepo;
+    return mockUserRepo;
+  });
 });
 
 describe('AuthService.registerWithEmail', () => {
@@ -303,5 +324,95 @@ describe('AuthService.login (wallet-signature flow)', () => {
 
     expect(redis.del).toHaveBeenCalledWith('nonce:a@b.com');
     expect(result.token).toBe('jwt.token');
+  });
+});
+
+describe('AuthService.privyRefreshToken', () => {
+  const user = { id: 'u1', email: 'a@b.com', role: UserRole.ARTIST };
+  const validRt = {
+    id: 'rt1',
+    token: 'refresh-token-abc',
+    userId: 'u1',
+    familyId: 'fam-1',
+    revoked: false,
+    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+  };
+
+  it('throws when userId or refreshToken is missing', async () => {
+    const svc = new AuthService();
+    await expect(svc.privyRefreshToken('', 'tok')).rejects.toThrow(
+      'User ID and refresh token required',
+    );
+    await expect(svc.privyRefreshToken('u1', '')).rejects.toThrow(
+      'User ID and refresh token required',
+    );
+  });
+
+  it('throws when user is not found', async () => {
+    mockUserRepo.findOne.mockResolvedValue(null);
+    const svc = new AuthService();
+    await expect(svc.privyRefreshToken('u1', 'tok')).rejects.toThrow('User not found');
+  });
+
+  it('throws when refresh token is not in the database', async () => {
+    mockUserRepo.findOne.mockResolvedValue(user);
+    mockRefreshTokenRepo.findOne.mockResolvedValue(null);
+    const svc = new AuthService();
+    await expect(svc.privyRefreshToken('u1', 'bad-token')).rejects.toThrow('Invalid refresh token');
+  });
+
+  it('throws and revokes family when token belongs to a different user', async () => {
+    mockUserRepo.findOne.mockResolvedValue(user);
+    mockRefreshTokenRepo.findOne.mockResolvedValue({ ...validRt, userId: 'other-user' });
+    mockRefreshTokenRepo.update.mockResolvedValue(undefined);
+    const svc = new AuthService();
+    await expect(svc.privyRefreshToken('u1', validRt.token)).rejects.toThrow(
+      'Invalid refresh token',
+    );
+    expect(mockRefreshTokenRepo.update).toHaveBeenCalledWith({ userId: 'u1' }, { revoked: true });
+  });
+
+  it('throws and revokes family on reuse detection', async () => {
+    mockUserRepo.findOne.mockResolvedValue(user);
+    mockRefreshTokenRepo.findOne.mockResolvedValue({ ...validRt, revoked: true });
+    mockRefreshTokenRepo.update.mockResolvedValue(undefined);
+    const svc = new AuthService();
+    await expect(svc.privyRefreshToken('u1', validRt.token)).rejects.toThrow(
+      'Refresh token reuse detected',
+    );
+    expect(mockRefreshTokenRepo.update).toHaveBeenCalledWith(
+      { familyId: 'fam-1' },
+      { revoked: true },
+    );
+  });
+
+  it('throws when refresh token has expired', async () => {
+    mockUserRepo.findOne.mockResolvedValue(user);
+    mockRefreshTokenRepo.findOne.mockResolvedValue({
+      ...validRt,
+      expiresAt: new Date(Date.now() - 1000),
+    });
+    const svc = new AuthService();
+    await expect(svc.privyRefreshToken('u1', validRt.token)).rejects.toThrow(
+      'Refresh token expired',
+    );
+  });
+
+  it('rotates the refresh token and returns a new access token', async () => {
+    mockUserRepo.findOne.mockResolvedValue(user);
+    mockRefreshTokenRepo.findOne.mockResolvedValue(validRt);
+    mockRefreshTokenRepo.save.mockResolvedValue(undefined);
+    mockRefreshTokenRepo.create.mockImplementation((args: any) => args);
+    (jwt.sign as jest.Mock).mockReturnValue('new.access.token');
+    process.env.JWT_SECRET = 'test_secret';
+
+    const svc = new AuthService();
+    const result = await svc.privyRefreshToken('u1', validRt.token);
+
+    expect(result.accessToken).toBe('new.access.token');
+    expect(result.refreshToken).toBeDefined();
+    expect(mockRefreshTokenRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ revoked: true }),
+    );
   });
 });
