@@ -15,8 +15,26 @@ export class AuthAuditService {
    * Log an authentication event with full context for security auditing.
    * Captures IP, user agent, and event-specific metadata.
    */
-  asyn
-mail: options.email,
+  async logAuthEvent(
+    eventType: AuthEventType,
+    req: Request,
+    options: {
+      userId?: string;
+      email?: string;
+      privyUserId?: string;
+      success?: boolean;
+      failureReason?: string;
+      metadata?: Record<string, unknown>;
+    } = {},
+  ): Promise<void> {
+    try {
+      const ipAddress = this.extractIpAddress(req);
+      const userAgent = req.headers['user-agent'];
+
+      const auditLog = this.auditRepo.create({
+        eventType,
+        userId: options.userId,
+        email: options.email,
         privyUserId: options.privyUserId,
         ipAddress,
         userAgent,
@@ -77,10 +95,7 @@ mail: options.email,
   /**
    * Query recent failed login attempts for security monitoring.
    */
-  async getRecentFailedLogins(
-    email: string,
-    sinceMinutes: number = 60,
-  ): Promise<AuthAuditLog[]> {
+  async getRecentFailedLogins(email: string, sinceMinutes: number = 60): Promise<AuthAuditLog[]> {
     const since = new Date(Date.now() - sinceMinutes * 60 * 1000);
 
     return this.auditRepo
