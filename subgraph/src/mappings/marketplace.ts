@@ -45,27 +45,25 @@ export function handleItemSold(event: ItemSold): void {
   marketplaceEvent.save();
 
   let song = Song.load(tokenId);
-  let artistId = 'unknown';
   let price = BigInt.fromI32(0);
+  if (!song) return;
 
-  if (song) {
-    artistId = song.artist;
-    if (song.price) {
-      price = song.price as BigInt;
-    }
-    song.owner = buyer;
-    song.isListed = false;
-    song.salesCount = song.salesCount.plus(BigInt.fromI32(1));
-    song.updatedAt = event.block.timestamp;
-    song.save();
+  const artistId = song.artist;
+  if (song.price) {
+    price = song.price as BigInt;
+  }
+  song.owner = buyer;
+  song.isListed = false;
+  song.salesCount = song.salesCount.plus(BigInt.fromI32(1));
+  song.updatedAt = event.block.timestamp;
+  song.save();
 
-    let artist = Artist.load(artistId);
-    if (artist) {
-      artist.totalSalesCount = artist.totalSalesCount.plus(BigInt.fromI32(1));
-      artist.totalVolume = artist.totalVolume.plus(price);
-      artist.updatedAt = event.block.timestamp;
-      artist.save();
-    }
+  let artist = Artist.load(artistId);
+  if (artist) {
+    artist.totalSalesCount = artist.totalSalesCount.plus(BigInt.fromI32(1));
+    artist.totalVolume = artist.totalVolume.plus(price);
+    artist.updatedAt = event.block.timestamp;
+    artist.save();
   }
 
   const sale = new Sale(eventId);

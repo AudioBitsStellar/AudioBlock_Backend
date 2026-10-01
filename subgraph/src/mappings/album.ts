@@ -19,6 +19,8 @@ export function handleAlbumCreated(event: AlbumCreated): void {
     artist.totalTracks = BigInt.fromI32(0);
     artist.totalSalesCount = BigInt.fromI32(0);
     artist.totalVolume = BigInt.fromI32(0);
+    artist.totalPlays = BigInt.fromI32(0);
+    artist.totalEarnings = BigInt.fromI32(0);
     artist.createdAt = event.block.timestamp;
     artist.updatedAt = event.block.timestamp;
     artist.save();
@@ -34,7 +36,9 @@ export function handleAlbumCreated(event: AlbumCreated): void {
   album.updatedAt = event.block.timestamp;
   album.save();
 
-  const eventRecord = new AlbumEvent(event.transaction.hash.toHex() + '-' + event.logIndex.toString());
+  const eventRecord = new AlbumEvent(
+    event.transaction.hash.toHex() + '-' + event.logIndex.toString(),
+  );
   eventRecord.album = albumId;
   eventRecord.eventType = 'AlbumCreated';
   eventRecord.data = event.params.metadata;
@@ -47,18 +51,15 @@ export function handleAlbumCreated(event: AlbumCreated): void {
 export function handleAlbumUpdated(event: AlbumUpdated): void {
   const albumId = event.params.albumId;
   let album = Album.load(albumId);
-
-  if (!album) {
-    album = new Album(albumId);
-    album.artist = 'unknown';
-    album.createdAt = event.block.timestamp;
-  }
+  if (!album) return;
 
   album.title = event.params.newMetadata;
   album.updatedAt = event.block.timestamp;
   album.save();
 
-  const eventRecord = new AlbumEvent(event.transaction.hash.toHex() + '-' + event.logIndex.toString());
+  const eventRecord = new AlbumEvent(
+    event.transaction.hash.toHex() + '-' + event.logIndex.toString(),
+  );
   eventRecord.album = albumId;
   eventRecord.eventType = 'AlbumUpdated';
   eventRecord.data = event.params.newMetadata;
@@ -95,9 +96,12 @@ export function handleSongUploadedSuccessfully(event: SongUploadedSuccessfully):
     song.duration = 0;
     song.ipfsHash = songCid;
     song.isListed = false;
+    song.isMinted = false;
     song.salesCount = BigInt.fromI32(0);
     song.likeCount = BigInt.fromI32(0);
     song.commentCount = BigInt.fromI32(0);
+    song.playCount = BigInt.fromI32(0);
+    song.royaltyEarnings = BigInt.fromI32(0);
     song.createdAt = event.block.timestamp;
   }
 

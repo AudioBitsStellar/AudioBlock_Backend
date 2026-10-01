@@ -22,6 +22,8 @@ export function handleTransfer(event: Transfer): void {
     song.salesCount = BigInt.fromI32(0);
     song.likeCount = BigInt.fromI32(0);
     song.commentCount = BigInt.fromI32(0);
+    song.playCount = BigInt.fromI32(0);
+    song.royaltyEarnings = BigInt.fromI32(0);
     song.createdAt = event.block.timestamp;
   }
 
@@ -37,6 +39,8 @@ export function handleTransfer(event: Transfer): void {
     artist.totalTracks = BigInt.fromI32(0);
     artist.totalSalesCount = BigInt.fromI32(0);
     artist.totalVolume = BigInt.fromI32(0);
+    artist.totalPlays = BigInt.fromI32(0);
+    artist.totalEarnings = BigInt.fromI32(0);
     artist.createdAt = event.block.timestamp;
     artist.updatedAt = event.block.timestamp;
     artist.save();

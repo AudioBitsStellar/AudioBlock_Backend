@@ -24,10 +24,10 @@ jobs:
         with:
           node-version: 20
           cache: 'npm'
-          cache-dependency-path: subgraph/package-lock.json
+          cache-dependency-path: subgraph/package.json
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       - name: Validate schema
         run: |
@@ -61,6 +61,9 @@ jobs:
       - name: Generate types from schema
         run: npm run codegen
         continue-on-error: true
+
+      - name: Run Matchstick mapping tests
+        run: npm test
 
       - name: Build subgraph
         run: npm run build

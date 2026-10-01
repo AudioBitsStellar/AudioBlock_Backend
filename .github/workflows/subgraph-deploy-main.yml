@@ -25,6 +25,14 @@ jobs:
         working-directory: ./subgraph
     environment:
       name: subgraph-testnet
+    env:
+      ARTIST_FACET_ADDRESS: ${{ vars.ARTIST_FACET_ADDRESS }}
+      SONG_FACET_ADDRESS: ${{ vars.SONG_FACET_ADDRESS }}
+      ALBUM_FACET_ADDRESS: ${{ vars.ALBUM_FACET_ADDRESS }}
+      ERC721_FACET_ADDRESS: ${{ vars.ERC721_FACET_ADDRESS }}
+      ROYALTY_FACET_ADDRESS: ${{ vars.ROYALTY_FACET_ADDRESS }}
+      MARKETPLACE_FACET_ADDRESS: ${{ vars.MARKETPLACE_FACET_ADDRESS }}
+      START_BLOCK: ${{ vars.START_BLOCK }}
 
     steps:
       - name: Checkout code
@@ -76,6 +84,16 @@ jobs:
     defaults:
       run:
         working-directory: ./subgraph
+    environment:
+      name: subgraph-${{ github.event.inputs.environment }}
+    env:
+      ARTIST_FACET_ADDRESS: ${{ vars.ARTIST_FACET_ADDRESS }}
+      SONG_FACET_ADDRESS: ${{ vars.SONG_FACET_ADDRESS }}
+      ALBUM_FACET_ADDRESS: ${{ vars.ALBUM_FACET_ADDRESS }}
+      ERC721_FACET_ADDRESS: ${{ vars.ERC721_FACET_ADDRESS }}
+      ROYALTY_FACET_ADDRESS: ${{ vars.ROYALTY_FACET_ADDRESS }}
+      MARKETPLACE_FACET_ADDRESS: ${{ vars.MARKETPLACE_FACET_ADDRESS }}
+      START_BLOCK: ${{ vars.START_BLOCK }}
 
     steps:
       - name: Checkout code

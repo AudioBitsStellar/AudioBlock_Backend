@@ -1,12 +1,17 @@
 # AudioBlock Subgraph
 
-The Graph subgraph for AudioBlock on Stellar/Soroban. Indexes events from 5 smart contracts (Artist, Song, Album, Royalty, Marketplace) and exposes them via GraphQL.
+The Graph subgraph for AudioBlock on Stellar/Soroban. Indexes events from six contract facets (Artist, Song, Album, ERC-721, Royalty, and Marketplace) and exposes them via GraphQL.
 
 **Related Issues:**
+
 - #657: Derived fields for aggregate stats (totalPlays, totalEarnings)
 - #658: Soroban contract event indexing service
 - #659: Local Graph Node via Docker
 - #660: Deployment script for hosted service
+- #673: Matchstick mapping tests
+- #674: Event-to-query pipeline coverage
+- #675: Schema and entity relationship documentation
+- #676: Subgraph deployment runbook
 - #677: CI pipeline to validate subgraph build on PR
 - #678: CI pipeline to auto-deploy subgraph on merge to main
 - #679: RPC fallback when subgraph unavailable
@@ -90,7 +95,6 @@ GRAPH_DEPLOY_TOKEN_TESTNET=... npm run deploy:testnet
 GRAPH_DEPLOY_TOKEN_MAINNET=... npm run deploy:mainnet
 ```
 
-
 #### Hosted Service (legacy api.thegraph.com)
 
 ```bash
@@ -110,9 +114,12 @@ Use `--skip-build` to deploy pre-built artifacts and `--dry-run` to preview the 
 
 ## Architecture
 
+See [the schema and relationship reference](../docs/subgraph-schema.md) for entity IDs, relationship ownership, event mappings, and query examples. See the [deployment runbook](../docs/subgraph-deployment-runbook.md) for CI, Studio, and rollback procedures.
+
 ### Schema
 
 The GraphQL schema (`schema.graphql`) defines entities for:
+
 - **Artist** - Artists and their events
 - **Song** - Songs and metadata
 - **Album** - Albums and collections
@@ -133,11 +140,23 @@ Event handlers in `src/mappings/` decode Soroban contract events and map them to
 
 Each contract facet is a separate data source in `subgraph.yaml`, polling events independently.
 
+### Mapping Tests
+
+Mapping handler tests use Matchstick and run in PR validation:
+
+```bash
+npm run codegen
+npm test
+```
+
+The `event-to-query.test.ts` case applies representative events through the handlers and checks that the resulting entities and references expose the fields used by GraphQL queries.
+
 ## RPC Fallback
 
 If the subgraph is unavailable or undeployed, the backend automatically falls back to direct Soroban RPC queries via `SubgraphQueryService` (#679).
 
 **When fallback is used:**
+
 - Subgraph query returns 5xx or timeout
 - Service is not yet deployed to The Graph
 - Network connectivity issues
