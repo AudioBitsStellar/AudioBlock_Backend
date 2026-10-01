@@ -36,6 +36,8 @@ describe('Issue #644: Subgraph Project Scaffold Verification', () => {
 
     const schemaContent = fs.readFileSync(schemaPath, 'utf-8');
     expect(schemaContent).toContain('type Artist @entity');
-    expect(schemaContent).toContain('type Track @entity');
+    expect(schemaContent).toContain('type Song @entity');
+    expect(schemaContent).toContain('tracks: [Song!]! @derivedFrom(field: "artist")');
+    expect(schemaContent).toContain('sales: [Sale!]! @derivedFrom(field: "song")');
   });
 });

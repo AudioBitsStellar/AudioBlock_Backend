@@ -6,7 +6,15 @@ import {
   CommentAdded,
   CommentRemoved,
 } from '../generated/SongFacet/SongFacet';
-import { Song, SongEvent, Artist, Like, LikeEvent, Comment, CommentEvent } from '../generated/schema';
+import {
+  Song,
+  SongEvent,
+  Artist,
+  Like,
+  LikeEvent,
+  Comment,
+  CommentEvent,
+} from '../generated/schema';
 import { BigInt, store } from '@graphprotocol/graph-ts';
 
 export function handleSongUploaded(event: SongUploaded): void {
@@ -22,6 +30,8 @@ export function handleSongUploaded(event: SongUploaded): void {
     artist.totalTracks = BigInt.fromI32(0);
     artist.totalSalesCount = BigInt.fromI32(0);
     artist.totalVolume = BigInt.fromI32(0);
+    artist.totalPlays = BigInt.fromI32(0);
+    artist.totalEarnings = BigInt.fromI32(0);
     artist.createdAt = event.block.timestamp;
     artist.updatedAt = event.block.timestamp;
   }
@@ -37,6 +47,8 @@ export function handleSongUploaded(event: SongUploaded): void {
     song.salesCount = BigInt.fromI32(0);
     song.likeCount = BigInt.fromI32(0);
     song.commentCount = BigInt.fromI32(0);
+    song.playCount = BigInt.fromI32(0);
+    song.royaltyEarnings = BigInt.fromI32(0);
   }
 
   song.title = event.params.metadata;
@@ -46,7 +58,9 @@ export function handleSongUploaded(event: SongUploaded): void {
   song.updatedAt = event.block.timestamp;
   song.save();
 
-  const eventRecord = new SongEvent(event.transaction.hash.toHex() + '-' + event.logIndex.toString());
+  const eventRecord = new SongEvent(
+    event.transaction.hash.toHex() + '-' + event.logIndex.toString(),
+  );
   eventRecord.song = songId;
   eventRecord.eventType = 'SongUploaded';
   eventRecord.data = event.params.metadata;
@@ -59,23 +73,15 @@ export function handleSongUploaded(event: SongUploaded): void {
 export function handleSongMetadataUpdated(event: SongMetadataUpdated): void {
   const songId = event.params.songId;
   let song = Song.load(songId);
-
-  if (!song) {
-    song = new Song(songId);
-    song.duration = 0;
-    song.isListed = false;
-    song.isMinted = false;
-    song.salesCount = BigInt.fromI32(0);
-    song.likeCount = BigInt.fromI32(0);
-    song.commentCount = BigInt.fromI32(0);
-    song.createdAt = event.block.timestamp;
-  }
+  if (!song) return;
 
   song.title = event.params.newMetadata;
   song.updatedAt = event.block.timestamp;
   song.save();
 
-  const eventRecord = new SongEvent(event.transaction.hash.toHex() + '-' + event.logIndex.toString());
+  const eventRecord = new SongEvent(
+    event.transaction.hash.toHex() + '-' + event.logIndex.toString(),
+  );
   eventRecord.song = songId;
   eventRecord.eventType = 'SongMetadataUpdated';
   eventRecord.data = event.params.newMetadata;
@@ -196,7 +202,9 @@ export function handleCommentRemoved(event: CommentRemoved): void {
   const commentId = event.params.commentId;
 
   let song = Song.load(songId);
-  if (song && song.commentCount.gt(BigInt.fromI32(0))) {
+  if (!song) return;
+
+  if (song.commentCount.gt(BigInt.fromI32(0))) {
     song.commentCount = song.commentCount.minus(BigInt.fromI32(1));
     song.updatedAt = event.block.timestamp;
     song.save();

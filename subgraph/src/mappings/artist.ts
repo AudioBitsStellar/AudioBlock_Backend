@@ -12,6 +12,8 @@ export function handleArtistRegistered(event: ArtistRegistered): void {
     artist.totalTracks = BigInt.fromI32(0);
     artist.totalSalesCount = BigInt.fromI32(0);
     artist.totalVolume = BigInt.fromI32(0);
+    artist.totalPlays = BigInt.fromI32(0);
+    artist.totalEarnings = BigInt.fromI32(0);
   }
 
   artist.name = event.params.name;
@@ -19,7 +21,9 @@ export function handleArtistRegistered(event: ArtistRegistered): void {
   artist.updatedAt = event.block.timestamp;
   artist.save();
 
-  const eventRecord = new ArtistEvent(event.transaction.hash.toHex() + '-' + event.logIndex.toString());
+  const eventRecord = new ArtistEvent(
+    event.transaction.hash.toHex() + '-' + event.logIndex.toString(),
+  );
   eventRecord.artist = artistId;
   eventRecord.eventType = 'ArtistRegistered';
   eventRecord.data = event.params.name;
@@ -40,13 +44,17 @@ export function handleArtistUpdated(event: ArtistUpdated): void {
     artist.totalSalesCount = BigInt.fromI32(0);
     artist.totalVolume = BigInt.fromI32(0);
     artist.createdAt = event.block.timestamp;
+    artist.totalPlays = BigInt.fromI32(0);
+    artist.totalEarnings = BigInt.fromI32(0);
   }
 
   artist.name = event.params.metadata;
   artist.updatedAt = event.block.timestamp;
   artist.save();
 
-  const eventRecord = new ArtistEvent(event.transaction.hash.toHex() + '-' + event.logIndex.toString());
+  const eventRecord = new ArtistEvent(
+    event.transaction.hash.toHex() + '-' + event.logIndex.toString(),
+  );
   eventRecord.artist = artistId;
   eventRecord.eventType = 'ArtistUpdated';
   eventRecord.data = event.params.metadata;

@@ -174,8 +174,8 @@ type AlbumEvent @entity {
 
 type Royalty @entity {
   id: ID!
-  beneficiary: String!
-  percentage: Int!
+  beneficiary: String
+  percentage: Int
   song: String
   createdAt: BigInt!
   updatedAt: BigInt!
