@@ -724,6 +724,7 @@ export class AuthService {
     }
   }
 
+  // eslint-disable-next-line complexity -- existing method tracked in docs/refactoring_priority.md
   async privyLogin(
     idToken: string,
     req?: Request,
@@ -943,30 +944,47 @@ export class AuthService {
     refreshToken: string;
   }> {
     if (!userId || !currentRefreshToken) {
-      if (req) {
-        await this.auditService.logAuthEvent(AuthEventType.TOKEN_REFRESH_FAILED, req, {
-          userId,
-          success: false,
-          failureReason: 'Missing parameters',
-        });
-      }
-      throw new Error('User ID and refresh token required');
+      await this.logRefreshFailure(req, userId, 'Missing parameters');
+      throw AppError.validation('User ID and refresh token required');
     }
 
     const user = await this.userRepo.findOne({ where: { id: userId } });
     if (!user) {
-      if (req) {
-        await this.auditService.logAuthEvent(AuthEventType.TOKEN_REFRESH_FAILED, req, {
-          userId,
-          success: false,
-          failureReason: 'User not found',
-        });
-      }
+      await this.logRefreshFailure(req, userId, 'User not found');
       throw AppError.notFound('User not found');
     }
 
-    const accessToken = this.generateAccessToken({ id: userId });
-    const refreshToken = 'refresh-token-' + Date.now();
+    const rt = await this.refreshTokenRepo.findOne({ where: { token: currentRefreshToken } });
+    if (!rt) {
+      await this.logRefreshFailure(req, userId, 'Token not found');
+      throw AppError.authentication('Invalid refresh token');
+    }
+
+    if (rt.userId !== userId) {
+      await this.refreshTokenRepo.update({ userId }, { revoked: true });
+      await this.logRefreshFailure(req, userId, 'Token user mismatch');
+      throw AppError.authentication('Invalid refresh token');
+    }
+
+    if (rt.revoked) {
+      if (rt.familyId) {
+        await this.refreshTokenRepo.update({ familyId: rt.familyId }, { revoked: true });
+      }
+      await this.logRefreshFailure(req, userId, 'Token reuse detected');
+      throw AppError.authentication('Refresh token reuse detected');
+    }
+
+    if (rt.expiresAt < new Date()) {
+      await this.logRefreshFailure(req, userId, 'Token expired');
+      throw AppError.authentication('Refresh token expired');
+    }
+
+    rt.revoked = true;
+    await this.refreshTokenRepo.save(rt);
+
+    const accessToken = this.signToken(user);
+    const refreshToken = this.signRefreshToken(user);
+    await this.storeRefreshToken(userId, refreshToken, rt.familyId);
 
     if (req) {
       await this.auditService.logAuthEvent(AuthEventType.PRIVY_TOKEN_REFRESH, req, {
@@ -976,10 +994,21 @@ export class AuthService {
       });
     }
 
-    return {
-      accessToken,
-      refreshToken,
-    };
+    return { accessToken, refreshToken };
+  }
+
+  private async logRefreshFailure(
+    req: Request | undefined,
+    userId: string,
+    failureReason: string,
+  ): Promise<void> {
+    if (req) {
+      await this.auditService.logAuthEvent(AuthEventType.TOKEN_REFRESH_FAILED, req, {
+        userId,
+        success: false,
+        failureReason,
+      });
+    }
   }
 
   async privyLogout(userId: string, req?: Request): Promise<void> {

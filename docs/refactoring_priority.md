@@ -20,6 +20,10 @@ The following functions and files have been identified by our automated complexi
    - **Metrics:** Cyclomatic complexity of 16 (limit: 15), 100 lines (limit: 50).
    - **Reason:** Mixes API requests, database queries, and session management. Extract Twitter API calls and user linking logic to a dedicated service.
 
+5. **`privyLogin`** in `src/services/AuthService.ts`
+   - **Metrics:** Cyclomatic complexity of 46 (limit: 15), 209 lines (limit: 50).
+   - **Reason:** Handles token decoding, user lookup, account merging, social account linking, and wallet linking. Extract into smaller focused methods.
+
 ---
 
 _Note: This list is intended to guide future tech debt sprints. New code should adhere to the complexity limits enforced by CI._
