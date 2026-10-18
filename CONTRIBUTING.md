@@ -22,6 +22,20 @@ entries, and releases.
 
 ## Getting Started
 
+### Prerequisites
+
+The song-processing worker requires **ffmpeg** and **ffprobe** on the system `PATH`.
+Docker users get these automatically (`apk add ffmpeg` in the Dockerfile). For local dev:
+
+| OS | Install command |
+|---|---|
+| macOS | `brew install ffmpeg` |
+| Ubuntu / Debian | `sudo apt-get install -y ffmpeg` |
+| Alpine | `apk add ffmpeg` |
+| Windows | `choco install ffmpeg` |
+
+You can also point to custom binaries via `FFMPEG_PATH` / `FFPROBE_PATH` environment variables.
+
 ```bash
 # 1. Fork or clone the repo
 git clone git@github-account2:Darkvader-ship-it/AudioBlock_Backend.git

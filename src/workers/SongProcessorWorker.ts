@@ -1,5 +1,6 @@
 import { getChannel, MAIN_QUEUE, DLQ } from '../config/rabbitmq';
 import { AppDataSource } from '../config/data-source';
+import { assertFfmpegAvailable } from '../utils/ffmpeg';
 import { Song } from '../entities/Song';
 import { TransactionLogService } from '../services/TransactionLogService';
 import { SongVersionService } from '../services/SongVersionService';
@@ -185,6 +186,8 @@ function handleFailure(channel: any, msg: any, payload: SongPayload, error: unkn
 
 export async function startSongWorker() {
   try {
+    await assertFfmpegAvailable();
+
     const channel = getChannel();
     const logService = new TransactionLogService();
     const versionService = new SongVersionService();

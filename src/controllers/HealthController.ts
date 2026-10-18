@@ -23,6 +23,7 @@ import AppDataSource from '../config/db';
 import redis from '../config/redis';
 import logger from '../config/logger';
 import { getPoolStats } from '../services/DbPoolMonitor';
+import { checkFfmpegAvailability } from '../utils/ffmpeg';
 
 const HEALTH_CHECK_TIMEOUT_MS = 5000;
 
@@ -108,14 +109,26 @@ async function checkPinata(): Promise<DependencyStatus> {
   }
 }
 
+async function checkFfmpeg(): Promise<DependencyStatus> {
+  const result = await checkFfmpegAvailability();
+  if (result.available) {
+    return {
+      status: 'ok',
+      message: `${result.ffmpegVersion} | ${result.ffprobeVersion}`,
+    };
+  }
+  return { status: 'error', message: result.error };
+}
+
 async function checkDependencies(): Promise<Record<string, DependencyStatus>> {
-  const [database, redisStatus, pinata] = await Promise.all([
+  const [database, redisStatus, pinata, ffmpegStatus] = await Promise.all([
     checkDatabase(),
     checkRedis(),
     checkPinata(),
+    checkFfmpeg(),
   ]);
 
-  return { database, redis: redisStatus, pinata };
+  return { database, redis: redisStatus, pinata, ffmpeg: ffmpegStatus };
 }
 
 function isHealthy(dependencies: Record<string, DependencyStatus>): boolean {
