@@ -3,7 +3,7 @@ import { UploadController } from '../controllers/UploadController';
 import { validateDTO } from '../middlewares/validate';
 import { FinalizeUploadDTO } from '../dtos/FinalizeUploadDTO';
 import { UploadChunkDTO } from '../dtos/UploadChunkDTO';
-import { authArtistMiddleware } from '../middlewares/authMiddleware';
+import { authArtistMiddleware, optionalAuth } from '../middlewares/authMiddleware';
 import multer from 'multer';
 import { CreateCoverDTO } from '../dtos/CreateCoverDTO';
 import fs from 'fs';
@@ -129,6 +129,10 @@ router.post('/upload/suggest-tags', authArtistMiddleware, uploadController.sugge
 // Stream Songs
 router.get('/stream/:id', SongController.streamSong);
 router.get('/popular', SongController.getPopularSongs);
+
+// Song & Artist statistics (Issue #814)
+router.get('/artist/:artistId/stats', optionalAuth, SongController.getArtistStats);
+router.get('/:id/stats', optionalAuth, SongController.getSongStats);
 
 // Embeddable player endpoint — public, no auth, same rate limiting as streaming (Redis throttle)
 router.get('/embed/:id', EmbedController.getSongEmbed);

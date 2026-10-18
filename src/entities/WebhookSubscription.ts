@@ -40,6 +40,10 @@ export class WebhookSubscription {
   @Column({ default: true })
   isActive!: boolean;
 
+  /** Number of consecutive failed event deliveries (auto-disables when threshold exceeded) */
+  @Column({ type: 'int', default: 0 })
+  consecutiveFailures!: number;
+
   @CreateDateColumn()
   createdAt!: Date;
 

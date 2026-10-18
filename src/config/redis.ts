@@ -1,5 +1,7 @@
 import Redis from 'ioredis';
 
+const isTest = process.env.NODE_ENV === 'test';
+
 const redis = new Redis({
   username: process.env.REDIS_USERNAME,
   host: process.env.REDIS_HOST,
@@ -7,6 +9,8 @@ const redis = new Redis({
   password: process.env.REDIS_PASSWORD,
   // tls: {}, // Required for Redis Cloud TLS
   maxRetriesPerRequest: null, //  prevents retry errors
+  lazyConnect: isTest,
+  retryStrategy: isTest ? () => null : undefined,
 });
 
 redis.on('connect', () => {

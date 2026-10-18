@@ -74,16 +74,36 @@ export class CacheService {
   }
 
   /**
-   * Remove all keys matching a Redis glob pattern.
+   * Remove all keys matching a Redis glob pattern using SCAN and UNLINK.
    *
-   * @param pattern - Redis key pattern (e.g. "song:*").
+   * Replaced KEYS with non-blocking SCAN stream (batch size 500) and UNLINK
+   * to avoid blocking Redis event loop in production (Issue #826).
+   *
+   * @param pattern - Redis key pattern (e.g. "stats:song:123:*").
    */
   static async invalidatePattern(pattern: string): Promise<void> {
     try {
-      const keys = await redis.keys(pattern);
-      if (keys.length > 0) {
-        await redis.del(...keys);
-        logger.info({ pattern, keyCount: keys.length }, 'Cache pattern invalidated');
+      const stream = redis.scanStream({
+        match: pattern,
+        count: 500,
+      });
+
+      let totalKeys = 0;
+
+      for await (const resultKeys of stream) {
+        const keys = resultKeys as string[];
+        if (keys && keys.length > 0) {
+          totalKeys += keys.length;
+          if (typeof redis.unlink === 'function') {
+            await redis.unlink(...keys);
+          } else {
+            await redis.del(...keys);
+          }
+        }
+      }
+
+      if (totalKeys > 0) {
+        logger.info({ pattern, keyCount: totalKeys }, 'Cache pattern invalidated');
       }
     } catch (err) {
       logger.warn({ err, pattern }, 'Cache pattern invalidate failed');

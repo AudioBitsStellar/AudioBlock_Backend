@@ -29,8 +29,26 @@ class PrivySessionService {
   private cleanupInterval: NodeJS.Timeout | null = null;
 
   constructor() {
-    // Clean up expired revocations every 5 minutes
+    // Timers are started via explicit start() to prevent leaking timers in tests (Issue #834)
+  }
+
+  /**
+   * Start periodic cleanup of expired revocations.
+   * Calls .unref() so the timer does not keep Node.js or Jest workers alive.
+   */
+  start(): void {
+    if (this.cleanupInterval) return;
     this.cleanupInterval = setInterval(() => this.cleanup(), 5 * 60 * 1000);
+    if (typeof this.cleanupInterval.unref === 'function') {
+      this.cleanupInterval.unref();
+    }
+  }
+
+  /**
+   * Stop the cleanup interval. Alias for shutdown().
+   */
+  stop(): void {
+    this.shutdown();
   }
 
   /**

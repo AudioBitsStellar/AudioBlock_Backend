@@ -5,7 +5,7 @@ jest.mock('../../config/db', () => ({
   default: { getRepository: jest.fn() },
 }));
 jest.mock('../CacheService', () => ({
-  CacheService: { invalidate: jest.fn(), invalidatePattern: jest.fn() },
+  CacheService: { invalidate: jest.fn(), invalidatePattern: jest.fn(), clearSong: jest.fn() },
 }));
 jest.mock('../privy/PrivyIdentityService', () => ({
   deleteLinkedPrivyIdentity: jest.fn(),
@@ -14,6 +14,7 @@ jest.mock('../privy/PrivyIdentityService', () => ({
 import { DataSource } from 'typeorm';
 import { AccountDeletionService } from '../AccountDeletionService';
 import { User, UserRole } from '../../entities/User';
+import { Song } from '../../entities/Song';
 import { CacheService } from '../CacheService';
 import { deleteLinkedPrivyIdentity } from '../privy/PrivyIdentityService';
 
@@ -63,6 +64,7 @@ describe('AccountDeletionService (#633)', () => {
   /** Every SQL statement issued, for assertions. */
   let statements: Array<{ sql: string; params?: unknown[] }>;
   let refreshTokenRepo: { update: jest.Mock };
+  let songRepo: { find: jest.Mock };
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -82,6 +84,7 @@ describe('AccountDeletionService (#633)', () => {
     };
 
     refreshTokenRepo = { update: jest.fn().mockResolvedValue({ affected: 1 }) };
+    songRepo = { find: jest.fn().mockResolvedValue([{ id: 'song-1' }, { id: 'song-2' }]) };
 
     manager = {
       query: jest.fn((sql: string, params?: unknown[]) => {
@@ -91,6 +94,7 @@ describe('AccountDeletionService (#633)', () => {
       // Mirrors the repositories the service touches inside its transaction.
       getRepository: jest.fn((entity: unknown) => {
         if (entity === User) return userRepo;
+        if (entity === Song) return songRepo;
         if (entity === 'refresh_tokens') return refreshTokenRepo;
         return requestRepo;
       }),
@@ -100,6 +104,7 @@ describe('AccountDeletionService (#633)', () => {
     dataSource = {
       getRepository: jest.fn((entity: unknown) => {
         if (entity === User) return userRepo;
+        if (entity === Song) return songRepo;
         return requestRepo;
       }),
       query: jest.fn((sql: string, params?: unknown[]) => {
@@ -426,7 +431,7 @@ describe('AccountDeletionService (#633)', () => {
       expect(result.privyDeletion).toBe('skipped');
     });
 
-    it('invalidates the artist cache so cached copies lose the attribution', async () => {
+    it('invalidates the artist cache and only that artist’s songs so cached copies lose attribution', async () => {
       userRepo.findOneBy.mockResolvedValue(
         makeUser({
           role: UserRole.ARTIST,
@@ -438,7 +443,13 @@ describe('AccountDeletionService (#633)', () => {
       await service.purgeUser('user-1');
 
       expect(CacheService.invalidate).toHaveBeenCalledWith('artist:user-1');
-      expect(CacheService.invalidatePattern).toHaveBeenCalledWith('song:*');
+      expect(songRepo.find).toHaveBeenCalledWith({
+        where: { artistId: 'user-1' },
+        select: ['id'],
+      });
+      expect(CacheService.clearSong).toHaveBeenCalledWith('song-1');
+      expect(CacheService.clearSong).toHaveBeenCalledWith('song-2');
+      expect(CacheService.invalidatePattern).not.toHaveBeenCalledWith('song:*');
     });
   });
 

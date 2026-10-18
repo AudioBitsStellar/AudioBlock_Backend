@@ -96,7 +96,9 @@ export async function attemptReconnect(
   return false;
 }
 
-export function createDbCircuitBreaker(dataSource: DataSource): CircuitBreaker {
+let connectionStateLoggerTimer: NodeJS.Timeout | null = null;
+
+export function createDbCircuitBreaker(dataSource: DataSource, autoStart = false): CircuitBreaker {
   const cb = new CircuitBreaker(
     async () => {
       if (!dataSource.isInitialized) return false;
@@ -109,14 +111,18 @@ export function createDbCircuitBreaker(dataSource: DataSource): CircuitBreaker {
     },
   );
 
-  cb.startHealthChecks();
+  if (autoStart) {
+    cb.startHealthChecks();
+  }
   return cb;
 }
 
 export function startConnectionStateLogger(): NodeJS.Timeout {
+  if (connectionStateLoggerTimer) return connectionStateLoggerTimer;
+
   const intervalMs = Number(process.env.DB_CONNECTION_STATE_LOG_INTERVAL_MS || 60000);
 
-  const timer = setInterval(() => {
+  connectionStateLoggerTimer = setInterval(() => {
     logger.info(
       {
         connected: dbConnectionState.connected,
@@ -129,9 +135,17 @@ export function startConnectionStateLogger(): NodeJS.Timeout {
     );
   }, intervalMs);
 
-  if (timer.unref) {
-    timer.unref();
+  if (typeof connectionStateLoggerTimer.unref === 'function') {
+    connectionStateLoggerTimer.unref();
   }
 
-  return timer;
+  return connectionStateLoggerTimer;
 }
+
+export function stopConnectionStateLogger(): void {
+  if (connectionStateLoggerTimer) {
+    clearInterval(connectionStateLoggerTimer);
+    connectionStateLoggerTimer = null;
+  }
+}
+

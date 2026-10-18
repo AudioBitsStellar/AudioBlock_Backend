@@ -8,6 +8,7 @@ import { Genre } from '../entities/Genre';
 import { Album } from '../entities/Album';
 import { RoyaltyPayout } from '../entities/RoyaltyPayout';
 import { WebhookSubscription } from '../entities/WebhookSubscription';
+import { WebhookDelivery } from '../entities/WebhookDelivery';
 import { TakedownRequest } from '../entities/TakedownRequest';
 import { ApiKey } from '../entities/ApiKey';
 import { AiGenerationRecord } from '../entities/AiGenerationRecord';

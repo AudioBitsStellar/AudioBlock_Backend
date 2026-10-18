@@ -2,8 +2,13 @@ import { Router } from 'express';
 import { ArtistProfileController } from '../controllers/ArtistProfileController';
 import { ArtistOnChainController } from '../controllers/ArtistOnChainController';
 import { ArtistMetadataController } from '../controllers/ArtistMetadataController';
+import { SongController } from '../controllers/SongController';
 import { validateDTO } from '../middlewares/validate';
-import { authArtistMiddleware, requireArtistAndVerified } from '../middlewares/authMiddleware';
+import {
+  authArtistMiddleware,
+  optionalAuth,
+  requireArtistAndVerified,
+} from '../middlewares/authMiddleware';
 import { ConnectStellarWalletDTO } from '../dtos/ConnectStellarWalletDTO';
 import { PrepareArtistSetupDTO } from '../dtos/PrepareArtistSetupDTO';
 import { SubmitSignedXdrDTO } from '../dtos/SubmitSignedXdrDTO';
@@ -15,6 +20,9 @@ const router = Router();
 
 // Public metadata endpoint for OG tags / JSON-LD (no auth, no private data)
 router.get('/:id/metadata', ArtistMetadataController.getMetadata);
+
+// Artist statistics (Issue #814)
+router.get('/:id/stats', optionalAuth, SongController.getArtistStats);
 
 router.patch(
   '/update-profile',
