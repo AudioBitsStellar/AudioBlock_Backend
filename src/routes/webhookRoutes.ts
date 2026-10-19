@@ -18,6 +18,8 @@ router.post(
 router.get('/', requireAuth, WebhookController.list);
 router.delete('/:id', requireAuth, WebhookController.remove);
 router.post('/:id/test', requireAuth, WebhookController.testDelivery);
+router.get('/:id/deliveries', requireAuth, WebhookController.listDeliveries);
+router.post('/:id/deliveries/:deliveryId/redeliver', requireAuth, WebhookController.redeliver);
 
 // Privy webhook handlers (Issues #603, #604, #605, #606)
 // These endpoints receive webhooks from Privy for user lifecycle events

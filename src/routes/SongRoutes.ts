@@ -147,6 +147,10 @@ router.post('/upload/suggest-tags', authArtistMiddleware, uploadController.sugge
 router.get('/stream/:id', SongController.streamSong);
 router.get('/popular', SongController.getPopularSongs);
 
+// Song & Artist statistics (Issue #814)
+router.get('/artist/:artistId/stats', optionalAuth, SongController.getArtistStats);
+router.get('/:id/stats', optionalAuth, SongController.getSongStats);
+
 // Embeddable player endpoint — public, no auth, same rate limiting as streaming (Redis throttle)
 router.get('/embed/:id', EmbedController.getSongEmbed);
 
