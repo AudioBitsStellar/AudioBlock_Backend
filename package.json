@@ -1,7 +1,7 @@
 {
   "name": "audioblocksbackend",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "dist/index.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --trace-warnings --transpile-only src/index.ts",
     "dev:bootstrap": "ts-node --transpile-only scripts/dev-bootstrap.ts",

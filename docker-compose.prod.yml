@@ -23,6 +23,7 @@ services:
           cpus: '0.50'
           memory: 512M
   redis:
+    command: redis-server --maxmemory 200mb --maxmemory-policy volatile-lru
     deploy:
       resources:
         limits:
