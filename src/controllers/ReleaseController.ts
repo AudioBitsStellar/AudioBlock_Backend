@@ -9,7 +9,7 @@ export class ReleaseController {
   static create = async (req: Request, res: Response) => {
     try {
       const artistId = (req as any).user.id as string;
-      const { title, releaseDate, type, coverArt, songIds } = req.body;
+      const { title, releaseDate, type, coverArt, songIds, scheduledAt, status } = req.body;
 
       if (!title || !releaseDate || !type) {
         throw AppError.validation('title, releaseDate, and type are required');
@@ -22,6 +22,8 @@ export class ReleaseController {
         type,
         coverArt,
         songIds,
+        scheduledAt,
+        status,
       });
       return res.status(201).json({ success: true, data: release });
     } catch (error) {
@@ -34,8 +36,12 @@ export class ReleaseController {
       const page = parseInt(req.query.page as string) || 1;
       const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
       const artistId = (req.query.artistId as string) || undefined;
+      const status = (req.query.status as any) || undefined;
 
-      const result = await releaseService.findPaginated(page, limit, artistId);
+      const result =
+        status !== undefined
+          ? await releaseService.findPaginated(page, limit, artistId, status)
+          : await releaseService.findPaginated(page, limit, artistId);
       return res.status(200).json({
         success: true,
         data: result.data,
@@ -59,14 +65,29 @@ export class ReleaseController {
     try {
       const releaseId = req.params.id as string;
       const requesterId = (req as any).user.id as string;
-      const { title, releaseDate, type, coverArt } = req.body;
+      const { title, releaseDate, type, coverArt, scheduledAt, status } = req.body;
 
       const release = await releaseService.update(releaseId, requesterId, {
         title,
         releaseDate,
         type,
         coverArt,
+        scheduledAt,
+        status,
       });
+      return res.status(200).json({ success: true, data: release });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  /** POST /api/releases/:id/publish — manually publish a release immediately (Issue #423). */
+  static publish = async (req: Request, res: Response) => {
+    try {
+      const releaseId = req.params.id as string;
+      const artistId = (req as any).user.id as string;
+
+      const release = await releaseService.publish(releaseId, artistId);
       return res.status(200).json({ success: true, data: release });
     } catch (error) {
       handleError(req, res, error);

@@ -5,6 +5,7 @@ import { authArtistMiddleware } from '../middlewares/authMiddleware';
 const router = Router();
 
 router.post('/', authArtistMiddleware, ReleaseController.create);
+router.post('/:id/publish', authArtistMiddleware, ReleaseController.publish);
 router.get('/', ReleaseController.list);
 router.get('/:id', ReleaseController.getById);
 router.put('/:id', authArtistMiddleware, ReleaseController.update);

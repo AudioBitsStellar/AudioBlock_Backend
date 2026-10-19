@@ -174,6 +174,10 @@ export class User {
   @Column({ default: false })
   aiStudioEnabled!: boolean;
 
+  /** Visible artist verification badge flag (Issue #92, #426). */
+  @Column({ default: false })
+  isVerified!: boolean;
+
   // ── Account lifecycle (Issue #633, GDPR Art. 12/17) ─────────────────────────
   // A deletion request does not erase immediately. The user gets a grace window
   // in which they can export their data or cancel, after which a background job

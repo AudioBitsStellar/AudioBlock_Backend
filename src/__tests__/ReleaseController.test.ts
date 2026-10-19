@@ -1,9 +1,21 @@
 import 'reflect-metadata';
 
+jest.mock('../config/redis', () => ({
+  __esModule: true,
+  default: {
+    get: jest.fn(),
+    set: jest.fn(),
+    incr: jest.fn(),
+    expire: jest.fn(),
+    on: jest.fn(),
+  },
+}));
+
 const mockCreate = jest.fn();
 const mockFindPaginated = jest.fn();
 const mockGetById = jest.fn();
 const mockUpdate = jest.fn();
+const mockPublish = jest.fn();
 
 jest.mock('../services/ReleaseService', () => ({
   ReleaseService: jest.fn().mockImplementation(() => ({
@@ -11,6 +23,7 @@ jest.mock('../services/ReleaseService', () => ({
     findPaginated: mockFindPaginated,
     getById: mockGetById,
     update: mockUpdate,
+    publish: mockPublish,
   })),
 }));
 
@@ -32,6 +45,7 @@ beforeEach(() => {
   mockFindPaginated.mockReset();
   mockGetById.mockReset();
   mockUpdate.mockReset();
+  mockPublish.mockReset();
 });
 
 describe('ReleaseController.create — publish flow (issue #316)', () => {
@@ -209,5 +223,39 @@ describe('ReleaseController.update', () => {
     await ReleaseController.update(req, res);
 
     expect(status).toHaveBeenCalledWith(403);
+  });
+});
+
+describe('ReleaseController.publish — manual immediate publish (issue #423)', () => {
+  it('manually publishes a release immediately', async () => {
+    mockPublish.mockResolvedValue({ id: 'r1', status: 'published' });
+    const req = mockReq({
+      user: { id: 'artist1' },
+      params: { id: 'r1' },
+    });
+    const { res, status, json } = mockRes();
+
+    await ReleaseController.publish(req, res);
+
+    expect(mockPublish).toHaveBeenCalledWith('r1', 'artist1');
+    expect(status).toHaveBeenCalledWith(200);
+    expect(json).toHaveBeenCalledWith({
+      success: true,
+      data: { id: 'r1', status: 'published' },
+    });
+  });
+
+  it('propagates 404 when release is missing', async () => {
+    const { AppError } = jest.requireActual('../errors/AppError');
+    mockPublish.mockRejectedValue(AppError.notFound('Release not found'));
+    const req = mockReq({
+      user: { id: 'artist1' },
+      params: { id: 'ghost' },
+    });
+    const { res, status } = mockRes();
+
+    await ReleaseController.publish(req, res);
+
+    expect(status).toHaveBeenCalledWith(404);
   });
 });

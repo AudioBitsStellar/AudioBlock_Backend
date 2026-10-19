@@ -279,11 +279,14 @@ export class ArtistProfileService {
     verification.reviewedAt = new Date();
     verification.rejectionReason = null;
 
-    return this.toVerificationView(await this.verificationRepo.save(verification));
+    const saved = await this.verificationRepo.save(verification);
+    await this.userRepo.update({ id: verification.userId }, { isVerified: true });
+
+    return this.toVerificationView(saved);
   }
 
   /**
-   * Rejects a pending verification application with a reason (Issue #92).
+   * Rejects a pending verification application with a reason (Issue #92, #426).
    *
    * @param verificationId - Application to reject
    * @param adminId - Admin performing the review
@@ -297,16 +300,25 @@ export class ArtistProfileService {
     adminId: string,
     reason: string,
   ): Promise<VerificationView> {
-    validateStringLength(reason, 'reason', 1, VERIFICATION_REASON_MAX_LENGTH);
+    const trimmedReason = typeof reason === 'string' ? reason.trim() : '';
+    validateStringLength(trimmedReason, 'reason', 1, VERIFICATION_REASON_MAX_LENGTH);
 
     const verification = await this.loadPendingVerification(verificationId);
 
     verification.status = VerificationStatus.REJECTED;
     verification.reviewedBy = adminId;
     verification.reviewedAt = new Date();
-    verification.rejectionReason = reason.trim();
+    verification.rejectionReason = trimmedReason;
 
-    return this.toVerificationView(await this.verificationRepo.save(verification));
+    const saved = await this.verificationRepo.save(verification);
+    const otherApproved = await this.verificationRepo.findOne({
+      where: { userId: verification.userId, status: VerificationStatus.APPROVED },
+    });
+    if (!otherApproved) {
+      await this.userRepo.update({ id: verification.userId }, { isVerified: false });
+    }
+
+    return this.toVerificationView(saved);
   }
 
   /**

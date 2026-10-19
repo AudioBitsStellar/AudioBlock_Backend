@@ -34,6 +34,8 @@ import metricsRoutes from "./routes/metricsRoutes";
 import privyWebhookRoutes from "./routes/privyWebhookRoutes";
 import accountTypeRoutes from "./routes/accountTypeRoutes";
 import healthRoutes from "./routes/healthRoutes";
+import notificationRoutes from "./routes/notificationRoutes";
+import ReleaseRoutes from "./routes/ReleaseRoutes";
 
 // Route imports
 
@@ -133,6 +135,12 @@ app.use("/api/playlists", playlistRoutes);
 
 // User routes
 app.use("/api/users", userRoutes);
+
+// Notifications & preferences (Issue #79, #427)
+app.use("/api/notifications", notificationRoutes);
+
+// Releases (Issue #423)
+app.use("/api/releases", ReleaseRoutes);
 
 
 //TWITTER CALLBACK ROUTE
