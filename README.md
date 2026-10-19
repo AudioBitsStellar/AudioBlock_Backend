@@ -24,24 +24,7 @@ an artist's behalf without ever holding their private key.
 
 ## Architecture
 
-```
-                 ┌──────────────┐        ┌──────────────┐
- Artist/Listener │   Frontend    │◀──────▶│   Express API │
-      Apps       │ (Next.js)     │  REST  │  (this repo)  │
-                 └──────────────┘        └──────┬───────┘
-                                                  │
-                ┌─────────────────┬──────────────┼───────────────┬──────────────┐
-                ▼                 ▼              ▼               ▼              ▼
-           PostgreSQL          Redis        RabbitMQ          S3            Stellar/Soroban
-         (TypeORM models)   (nonces,      (song_processing  (audio/cover    RPC (transaction
-                              manifest      queue)            storage)       relay only —
-                              cache)                                         no keys held)
-                                              │
-                                              ▼
-                                     Song Processor Worker
-                                  (ffmpeg transcode → HLS,
-                                   Pinata/IPFS metadata pin)
-```
+See the [source-controlled architecture diagram](docs/architecture.md) for the API, workers, storage, AI, indexer, and monitoring topology.
 
 The HTTP server starts immediately on boot (so deploy-platform health checks
 pass) and connects to RabbitMQ — and starts the background worker — only

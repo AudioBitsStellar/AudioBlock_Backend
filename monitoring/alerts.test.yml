@@ -1,0 +1,79 @@
+rule_files:
+  - prometheus-alerts.yml
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'http_requests_total{status="500"}'
+        values: '0+12x15'
+      - series: 'http_requests_total{status="200"}'
+        values: '0+108x15'
+      - series: 'http_request_duration_seconds_bucket{le="0.01"}'
+        values: '0+0x15'
+      - series: 'http_request_duration_seconds_bucket{le="0.05"}'
+        values: '0+0x15'
+      - series: 'http_request_duration_seconds_bucket{le="0.1"}'
+        values: '0+0x15'
+      - series: 'http_request_duration_seconds_bucket{le="0.25"}'
+        values: '0+0x15'
+      - series: 'http_request_duration_seconds_bucket{le="0.5"}'
+        values: '0+0x15'
+      - series: 'http_request_duration_seconds_bucket{le="1"}'
+        values: '0+0x15'
+      - series: 'http_request_duration_seconds_bucket{le="2.5"}'
+        values: '0+0x15'
+      - series: 'http_request_duration_seconds_bucket{le="5"}'
+        values: '0+120x15'
+      - series: 'http_request_duration_seconds_bucket{le="10"}'
+        values: '0+120x15'
+      - series: 'http_request_duration_seconds_bucket{le="+Inf"}'
+        values: '0+120x15'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: HighHttp5xxRate
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              team: backend
+            exp_annotations:
+              summary: 'HTTP 5xx error rate is above 5%'
+              description: >
+                More than 5% of HTTP requests have returned 5xx responses for 10 minutes.
+                Current error ratio: 10%.
+              dashboard: 'http://localhost:3001/d/audioblock-app'
+              runbook: 'https://github.com/AudioBitsStellar/AudioBlock_Backend/blob/main/docs/runbooks/monitoring-alerts.md'
+      - eval_time: 15m
+        alertname: HighHttpP95Latency
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              team: backend
+            exp_annotations:
+              summary: 'HTTP p95 latency is above 2.5 seconds'
+              description: >
+                The estimated HTTP p95 latency has exceeded 2.5 seconds for 10 minutes.
+                Current p95: 4.875s.
+              dashboard: 'http://localhost:3001/d/audioblock-app'
+              runbook: 'https://github.com/AudioBitsStellar/AudioBlock_Backend/blob/main/docs/runbooks/monitoring-alerts.md'
+
+  - interval: 1m
+    input_series:
+      - series: 'rabbitmq_queue_depth{queue="song_processing"}'
+        values: '20+0x15'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: SongProcessingQueueBacklog
+        exp_alerts:
+          - exp_labels:
+              queue: song_processing
+              severity: warning
+              team: backend
+            exp_annotations:
+              summary: 'RabbitMQ song_processing queue backlog detected'
+              description: >
+                The song_processing queue has had 20 pending messages for over 5 minutes.
+                Song workers may have stalled, crashed, or encountered processing failures.
+              runbook: 'https://github.com/AudioBitsStellar/AudioBlock_Backend/blob/main/docs/worker-scaling.md'
+              dashboard: 'http://localhost:3001/d/audioblock-app'
