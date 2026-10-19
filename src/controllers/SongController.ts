@@ -529,4 +529,25 @@ export class SongController {
       handleError(req, res, error);
     }
   };
+
+  // #792: client fires this after 30 s of continuous playback.
+  static recordPlay = async (req: Request, res: Response) => {
+    try {
+      const songId = req.params.id as string;
+      const songRepo = AppDataSource.getRepository(Song);
+      const song = await songRepo.findOne({ where: { id: songId } });
+      if (!song) {
+        return res.status(404).json({ success: false, message: 'Song not found' });
+      }
+      const sessionKey = `play:throttle:${req.ip}:${songId}`;
+      const recentlyPlayed = await redis.get(sessionKey);
+      if (!recentlyPlayed) {
+        await songRepo.increment({ id: songId }, 'playCount', 1);
+        await redis.set(sessionKey, '1', 'EX', 300);
+      }
+      return res.status(204).send();
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
 }

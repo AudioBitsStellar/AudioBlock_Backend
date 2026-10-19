@@ -35,6 +35,10 @@ import metricsRoutes from "./routes/metricsRoutes";
 import privyWebhookRoutes from "./routes/privyWebhookRoutes";
 import accountTypeRoutes from "./routes/accountTypeRoutes";
 import healthRoutes from "./routes/healthRoutes";
+import swaggerUi from "swagger-ui-express";
+import jsYaml from "js-yaml";
+import fs from "fs";
+import path from "path";
 
 // Route imports
 
@@ -97,6 +101,12 @@ app.use((req, res, next) => {
 
 // Log application startup
 
+
+// Swagger UI — gated by ENABLE_API_DOCS in production (#796)
+if (process.env.ENABLE_API_DOCS === "true" || process.env.NODE_ENV !== "production") {
+  const swaggerDocument = jsYaml.load(fs.readFileSync(path.join(__dirname, "../docs/openapi.yaml"), "utf8"));
+  app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+}
 
 // Define routes
 app.use("/health", healthRoutes);
