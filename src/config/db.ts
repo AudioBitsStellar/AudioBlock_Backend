@@ -21,6 +21,10 @@ import { ProjectionCheckpoint } from '../entities/ProjectionCheckpoint';
 import { OnChainEventCount } from '../entities/OnChainEventCount';
 import { Notification } from '../entities/Notification';
 import { DeviceToken } from '../entities/DeviceToken';
+import { Release } from '../entities/Release';
+import { ReleaseTrack } from '../entities/ReleaseTrack';
+import { ReleasePreSave } from '../entities/ReleasePreSave';
+import { UserSave } from '../entities/UserSave';
 
 dotenv.config();
 
@@ -43,6 +47,7 @@ const AppDataSource = new DataSource({
     Album,
     RoyaltyPayout,
     WebhookSubscription,
+    WebhookDelivery,
     TakedownRequest,
     ApiKey,
     AiGenerationRecord,
@@ -55,6 +60,10 @@ const AppDataSource = new DataSource({
     OnChainEventCount,
     Notification,
     DeviceToken,
+    Release,
+    ReleaseTrack,
+    ReleasePreSave,
+    UserSave,
   ],
   migrations: [__dirname + '/../migrations/*.{js,ts}'],
   migrationsTableName: 'migrations',

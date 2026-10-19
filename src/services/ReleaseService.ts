@@ -4,6 +4,7 @@ import { Release, ReleaseType } from '../entities/Release';
 import { ReleaseTrack } from '../entities/ReleaseTrack';
 import { Song } from '../entities/Song';
 import { AppError } from '../errors/AppError';
+import { isReleasePublished, PreSaveService } from './PreSaveService';
 
 export interface CreateReleaseInput {
   title: string;
@@ -117,6 +118,8 @@ export class ReleaseService {
       throw AppError.validation(`type must be one of: ${Object.values(ReleaseType).join(', ')}`);
     }
 
+    const wasUpcoming = !isReleasePublished(release.releaseDate);
+
     Object.assign(release, {
       ...(updates.title !== undefined && { title: updates.title }),
       ...(updates.releaseDate !== undefined && { releaseDate: new Date(updates.releaseDate) }),
@@ -124,6 +127,41 @@ export class ReleaseService {
       ...(updates.coverArt !== undefined && { coverArt: updates.coverArt }),
     });
 
-    return this.releaseRepo.save(release);
+    const saved = await this.releaseRepo.save(release);
+
+    // Moving the date into the past is a publish: pre-saved releases must
+    // auto-appear in each fan's library at that moment (Issue #424).
+    if (wasUpcoming && isReleasePublished(saved.releaseDate)) {
+      await new PreSaveService().fulfillForRelease(saved.id);
+    }
+
+    return saved;
+  }
+
+  /**
+   * Publishes an upcoming release immediately (Issue #424).
+   *
+   * Owner-only. A future `releaseDate` is moved to now; an already-published
+   * release is a no-op for the date but still fulfills any pending pre-saves
+   * so pre-saved releases auto-appear in each fan's library at publish time.
+   */
+  async publish(
+    releaseId: string,
+    requesterId: string,
+  ): Promise<{ release: ReleaseWithTracks; fulfilled: number; savesCreated: number }> {
+    const release = await this.releaseRepo.findOneBy({ id: releaseId });
+    if (!release) throw AppError.notFound('Release not found');
+    if (release.artistId !== requesterId) {
+      throw AppError.authorization('Only the release owner can publish this release');
+    }
+
+    if (!isReleasePublished(release.releaseDate)) {
+      release.releaseDate = new Date();
+      await this.releaseRepo.save(release);
+    }
+
+    const { fulfilled, savesCreated } = await new PreSaveService().fulfillForRelease(release.id);
+
+    return { release: await this.getById(release.id), fulfilled, savesCreated };
   }
 }
