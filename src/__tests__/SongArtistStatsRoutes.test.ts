@@ -8,14 +8,16 @@ import { SongController } from '../controllers/SongController';
 
 // Mock SongStatsService
 const mockFullStats = {
-  window: '7d',
+  window: '30d',
   from: '2026-10-11T00:00:00.000Z',
   to: '2026-10-18T00:00:00.000Z',
+  songCount: 2,
   totals: {
     plays: 120,
     uniqueListeners: 45,
     saves: 30,
     revenueStroops: '5000000',
+    followers: 12,
   },
   previous: {
     plays: 100,
@@ -29,6 +31,7 @@ const mockFullStats = {
     savesPct: 20,
     revenuePct: 25,
   },
+  topSongs: [{ songId: 'song-uuid-1', title: 'Stellar Track', plays: 90 }],
   series: [
     { bucket: '2026-10-11', plays: 10, saves: 2, revenueStroops: '500000' },
   ],
@@ -78,8 +81,8 @@ jest.mock('../services/Song/SongStatsService', () => {
       }),
     })),
     parseWindow: jest.fn((w?: string) => {
-      const allowed = ['24h', '7d', '30d', '90d', 'all-time'];
-      const target = (w || '7d').toLowerCase();
+      const allowed = ['7d', '30d', '90d', 'all-time'];
+      const target = (w || '30d').toLowerCase();
       if (!allowed.includes(target)) {
         throw new Error(`Invalid window: "${w}". Expected one of: ${allowed.join(', ')}`);
       }
@@ -235,6 +238,8 @@ describe('Song and Artist Stats Endpoints (Issue #814)', () => {
 
       expect(res.body.success).toBe(true);
       expect(res.body.data.totals.plays).toBe(120);
+      expect(res.body.data.totals.saves).toBe(30);
+      expect(res.body.data.totals.followers).toBe(12);
       expect(res.body.data.totals.uniqueListeners).toBeUndefined();
       expect(res.body.data.totals.revenueStroops).toBeUndefined();
       expect(res.headers['cache-control']).toContain('public');
@@ -251,6 +256,7 @@ describe('Song and Artist Stats Endpoints (Issue #814)', () => {
       expect(res.body.data.totals.plays).toBe(120);
       expect(res.body.data.totals.uniqueListeners).toBe(45);
       expect(res.body.data.totals.revenueStroops).toBe('5000000');
+      expect(res.body.data.totals.followers).toBe(12);
       expect(res.headers['cache-control']).toContain('private');
     });
 

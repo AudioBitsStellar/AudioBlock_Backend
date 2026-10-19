@@ -147,7 +147,8 @@ router.post('/upload/suggest-tags', authArtistMiddleware, uploadController.sugge
 router.get('/stream/:id', SongController.streamSong);
 router.get('/popular', SongController.getPopularSongs);
 
-// Song & Artist statistics (Issue #814)
+// Song & Artist statistics (Issues #814, #846). Artist stats also mounted at
+// /api/artist/:id/stats and /api/artists/:id/stats — see artistRoutes + app.ts.
 router.get('/artist/:artistId/stats', optionalAuth, SongController.getArtistStats);
 router.get('/:id/stats', optionalAuth, SongController.getSongStats);
 
