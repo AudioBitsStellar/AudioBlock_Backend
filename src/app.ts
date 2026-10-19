@@ -104,6 +104,9 @@ app.use("/health", healthRoutes);
 
 app.use("/api/auth", authRoutes);
 app.use("/api/artist", artistRoutes);
+// Plural alias advertised in docs (GET /api/artists/:id/stats?window=...) for
+// artist-portal overview integration (Issue #846). Same router, same handlers.
+app.use("/api/artists", artistRoutes);
 
 // Dynamic wallet routes
 app.use("/api/wallet", walletRoutes);

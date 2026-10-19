@@ -401,7 +401,21 @@ export class SongController {
     }
   };
 
-  /** GET /api/song/artist/:artistId/stats or /api/artist/:id/stats — artist-level aggregation (Issue #814). */
+  /**
+   * GET /api/artists/:id/stats?window=7d|30d|90d|all-time
+   * (aliases: /api/artist/:id/stats, /api/song/artist/:artistId/stats) — artist overview (Issues #814, #846).
+   *
+   * Auth: `optionalAuth`. Ownership-checked: the artist owner (`caller.id === artistId`)
+   * or admin/moderator receives full metrics (`plays`, `saves`, `uniqueListeners`,
+   * `revenueStroops` + all-time `followers`); everyone else receives public
+   * `plays`, `saves` and `followers` only. Financial totals must come from here —
+   * never reconstruct revenue from `/api/activity` feeds.
+   *
+   * Semantics: `window` defaults to `30d`. `revenueStroops` is gross song revenue
+   * (`SUM(grossAmount)` over `status='reconciled'` payout rows), not the artist
+   * recipient share. `followers` is all-time. No-songs result: 404
+   * `ARTIST_HAS_NO_SONGS`.
+   */
   static getArtistStats = async (req: Request, res: Response) => {
     try {
       const artistId = (req.params.artistId || req.params.id) as string;
@@ -429,6 +443,7 @@ export class SongController {
             totals: {
               plays: stats.totals.plays,
               saves: stats.totals.saves,
+              followers: (stats.totals as any).followers,
             },
             previous: stats.previous
               ? {

@@ -21,7 +21,10 @@ const router = Router();
 // Public metadata endpoint for OG tags / JSON-LD (no auth, no private data)
 router.get('/:id/metadata', ArtistMetadataController.getMetadata);
 
-// Artist statistics (Issue #814)
+// Artist statistics (Issues #814, #846). Mounted at both /api/artist and
+// /api/artists (see app.ts). `optionalAuth` + ownership check in the controller:
+// owner/admin sees plays/saves/uniqueListeners/revenueStroops + all-time followers,
+// public sees plays/saves/followers. 404 ARTIST_HAS_NO_SONGS when no songs.
 router.get('/:id/stats', optionalAuth, SongController.getArtistStats);
 
 router.patch(

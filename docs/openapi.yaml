@@ -180,7 +180,52 @@ paths:
   /api/song/{id}/stats:
     get:
       summary: Get song statistics
-      description: Returns aggregated playback and engagement metrics for a song. Public callers receive total plays and saves; the song artist or admins receive full metrics including unique listeners and revenue.
+      description: >-
+        Returns aggregated playback and engagement metrics for a song. Public callers
+        receive total plays and saves; the song artist or admins receive full metrics
+        including unique listeners and gross reconciled revenue. Window defaults to 30d.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Unique song identifier (UUID).
+          schema:
+            type: string
+            format: uuid
+        - name: window
+          in: query
+          required: false
+          description: Aggregation time window. Default is 30d.
+          schema:
+            type: string
+            enum: [7d, 30d, 90d, all-time]
+            default: 30d
+      responses:
+        '200':
+          description: Song statistics retrieved successfully.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: Caching policy (public or private with 300s TTL).
+            Vary:
+              schema:
+                type: string
+              example: Authorization
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/SongStats'
+        '400':
+          description: Invalid window parameter.
+        '404':
+          description: Song not found.
   /api/song/{id}:
     parameters:
       - name: id
@@ -238,45 +283,24 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: window
-          in: query
-          required: false
-          description: Aggregation time window. Default is 7d.
-          schema:
-            type: string
-            enum: [24h, 7d, 30d, 90d, all-time]
-            default: 7d
       responses:
         '200':
-          description: Song statistics retrieved successfully.
-          headers:
-            Cache-Control:
-              schema:
-                type: string
-              description: Caching policy (public or private with 300s TTL).
-            Vary:
-              schema:
-                type: string
-              example: Authorization
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  data:
-                    $ref: '#/components/schemas/SongStats'
-        '400':
-          description: Invalid window parameter.
+          description: The lyrics and their language.
         '404':
-          description: Song not found.
+          description: No servable lyrics for this song.
 
   /api/song/artist/{artistId}/stats:
     get:
       summary: Get artist aggregated statistics via song route
-      description: Returns catalog-wide metrics for the specified artist. Public callers receive plays and saves; the artist owner or admins receive full metrics including revenue and unique listeners.
+      description: >-
+        Returns catalog-wide metrics for the specified artist (alias of
+        GET /api/artists/:id/stats). `optionalAuth` + ownership-checked: the artist
+        owner or admin/moderator receives full metrics (plays, saves, uniqueListeners,
+        revenueStroops + all-time followers); public callers receive plays, saves and
+        followers. `revenueStroops` is gross song revenue (SUM(grossAmount) over
+        status='reconciled' royalty payouts), not the artist recipient share.
+        `followers` is all-time. No-songs result: 404 ARTIST_HAS_NO_SONGS. Do not
+        reconstruct financial totals from /api/activity feeds.
       parameters:
         - name: artistId
           in: path
@@ -288,23 +312,31 @@ paths:
         - name: window
           in: query
           required: false
-          description: Aggregation time window. Default is 7d.
+          description: Aggregation time window. Default is 30d.
           schema:
             type: string
-            enum: [24h, 7d, 30d, 90d, all-time]
-            default: 7d
+            enum: [7d, 30d, 90d, all-time]
+            default: 30d
       responses:
         '200':
           description: Artist statistics retrieved successfully.
         '400':
           description: Invalid window parameter.
         '404':
-          description: Artist not found.
+          description: Artist owns no songs (ARTIST_HAS_NO_SONGS).
 
   /api/artist/{id}/stats:
     get:
       summary: Get artist aggregated statistics
-      description: Returns catalog-wide metrics for the specified artist. Public callers receive plays and saves; the artist owner or admins receive full metrics including revenue and unique listeners.
+      description: >-
+        Returns catalog-wide metrics for the specified artist (also mounted at
+        GET /api/artists/:id/stats). `optionalAuth` + ownership-checked: the artist
+        owner or admin/moderator receives full metrics (plays, saves, uniqueListeners,
+        revenueStroops + all-time followers); public callers receive plays, saves and
+        followers. `revenueStroops` is gross song revenue (SUM(grossAmount) over
+        status='reconciled' royalty payouts), not the artist recipient share.
+        `followers` is all-time (user_follows count), not windowed. No-songs result:
+        404 ARTIST_HAS_NO_SONGS. Cache: private max-age=300 for owner, public max-age=300 otherwise; Vary Authorization.
       parameters:
         - name: id
           in: path
@@ -316,31 +348,150 @@ paths:
         - name: window
           in: query
           required: false
-          description: Aggregation time window. Default is 7d.
+          description: Aggregation time window. Default is 30d.
           schema:
             type: string
-            enum: [24h, 7d, 30d, 90d, all-time]
-            default: 7d
+            enum: [7d, 30d, 90d, all-time]
+            default: 30d
       responses:
         '200':
           description: Artist statistics retrieved successfully.
         '400':
           description: Invalid window parameter.
         '404':
-          description: Artist not found.
+          description: Artist owns no songs (ARTIST_HAS_NO_SONGS).
+
+  /api/artists/{id}/stats:
+    get:
+      summary: Get artist aggregated statistics (plural alias)
+      description: >-
+        Plural alias of GET /api/artist/:id/stats, advertised as
+        GET /api/artists/:id/stats?window=7d|30d|90d|all-time for the artist-portal
+        overview. Same auth, ownership, window, revenue (gross reconciled), followers
+        (all-time) and 404 ARTIST_HAS_NO_SONGS semantics.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Unique artist identifier (UUID).
+          schema:
+            type: string
+            format: uuid
+        - name: window
+          in: query
+          required: false
+          description: Aggregation time window. Default is 30d.
+          schema:
+            type: string
+            enum: [7d, 30d, 90d, all-time]
+            default: 30d
+      responses:
+        '200':
+          description: Artist statistics retrieved successfully.
+        '400':
+          description: Invalid window parameter.
+        '404':
+          description: Artist owns no songs (ARTIST_HAS_NO_SONGS).
+
+  /api/activity:
+    get:
+      summary: List activity feed with artist filter
+      description: >-
+        Global feed by default (newest first, paginated). Pass `artistId` (aliases:
+        artist, artist_id, userId, user_id) to scope server-side to the artist overview:
+        rows authored by the artist plus rows involving owned songs (targetId in artist
+        songs) plus artist_follow rows targeting the artist. Use this — never count the
+        global feed for an artist overview, and never reconstruct financial totals from
+        this sampled feed; use GET /api/artists/:id/stats revenue instead.
+      parameters:
+        - name: artistId
+          in: query
+          required: false
+          description: Artist identifier to scope the overview feed (aliases artist, artist_id, userId, user_id).
+          schema:
+            type: string
+            format: uuid
+        - name: mode
+          in: query
+          required: false
+          description: Pass `following` (requires auth) to scope to the caller's follows.
+          schema:
+            type: string
+            enum: [following]
+        - name: type
+          in: query
+          required: false
+          description: Comma-separated actionType filter (applies on the artist-scoped path).
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Paginated activity feed (page, limit, total, data).
+        '401':
+          description: Authentication required for mode=following.
 
   /api/webhooks/{id}/deliveries:
     get:
       summary: List webhook delivery attempts
       description: Returns paginated delivery history for a webhook subscription (newest first). Only accessible by the subscription owner.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Unique webhook subscription identifier (UUID).
           schema:
             type: string
             format: uuid
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
       responses:
         '200':
-          description: The lyrics and their language.
+          description: Delivery attempts list.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WebhookDelivery'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          description: Unauthorized.
+        '403':
+          description: Forbidden - caller is not the subscription owner.
         '404':
-          description: No servable lyrics for this song.
+          description: Webhook subscription not found.
   /api/song/{id}/cover:
     parameters:
       - name: id
@@ -457,6 +608,16 @@ paths:
           description: Subscription or delivery record not found.
         '502':
           description: Destination endpoint failed after retry attempts.
+
+  /api/song/{id}/versions/{version}:
+    get:
+      summary: Get a song version
+      description: Owner or admin only. Returns the specified version.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Unique song identifier (UUID).
           schema:
             type: string
             format: uuid
@@ -654,7 +815,7 @@ components:
       properties:
         window:
           type: string
-          example: 7d
+          example: 30d
         from:
           type: string
           format: date-time
@@ -676,8 +837,60 @@ components:
               example: 45
             revenueStroops:
               type: string
-              description: Owner and admin only.
+              description: Owner and admin only. Gross reconciled revenue, not recipient share.
               example: "5000000"
+    ArtistStats:
+      type: object
+      properties:
+        artistId:
+          type: string
+          format: uuid
+        window:
+          type: string
+          example: 30d
+        periodStart:
+          type: string
+          format: date-time
+          nullable: true
+        periodEnd:
+          type: string
+          format: date-time
+        songCount:
+          type: integer
+          example: 4
+        totals:
+          type: object
+          properties:
+            plays:
+              type: integer
+              example: 120
+            saves:
+              type: integer
+              example: 30
+            uniqueListeners:
+              type: integer
+              description: Owner and admin only.
+              example: 45
+            revenueStroops:
+              type: string
+              description: Owner and admin only. Gross song revenue over reconciled payouts.
+              example: "5000000"
+            followers:
+              type: integer
+              description: All-time follower count, not windowed. Visible to public and owner.
+              example: 12
+        topSongs:
+          type: array
+          items:
+            type: object
+            properties:
+              songId:
+                type: string
+                format: uuid
+              title:
+                type: string
+              plays:
+                type: integer
     WebhookDelivery:
       type: object
       properties:
