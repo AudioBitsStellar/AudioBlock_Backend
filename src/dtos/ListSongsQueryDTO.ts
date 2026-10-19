@@ -29,8 +29,8 @@ export class ListSongsQueryDTO {
   tag?: string;
 
   @IsOptional()
-  @IsIn(['not_minted', 'pending', 'minted', 'failed'])
-  mintStatus?: 'not_minted' | 'pending' | 'minted' | 'failed';
+  @IsIn(['not_minted', 'pending', 'minting', 'minted', 'failed'])
+  mintStatus?: 'not_minted' | 'pending' | 'minting' | 'minted' | 'failed';
 
   @IsOptional()
   @IsIn(SONG_LIST_SORTS)
