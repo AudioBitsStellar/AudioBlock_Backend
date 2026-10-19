@@ -35,6 +35,7 @@ import metricsRoutes from "./routes/metricsRoutes";
 import privyWebhookRoutes from "./routes/privyWebhookRoutes";
 import accountTypeRoutes from "./routes/accountTypeRoutes";
 import healthRoutes from "./routes/healthRoutes";
+import releaseRoutes from "./routes/ReleaseRoutes";
 
 // Route imports
 
@@ -134,6 +135,9 @@ app.use("/api/oembed", oembedRoutes);
 
 // Playlists (Issue #77) + collaborative editing (#406) + smart playlists (#407)
 app.use("/api/playlists", playlistRoutes);
+
+// Releases + pre-save campaigns for upcoming releases (Issue #424)
+app.use("/api/releases", releaseRoutes);
 
 // User routes
 app.use("/api/users", userRoutes);
