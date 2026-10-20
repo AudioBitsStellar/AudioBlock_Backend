@@ -1,5 +1,6 @@
 import { authenticatedEvmClient } from '../utils/dynamicUtils';
 import { Sepolia } from 'viem/chains';
+import logger from './logger';
 
 export async function getLiskPublicClient() {
   const evmClient = await authenticatedEvmClient();
@@ -7,6 +8,6 @@ export async function getLiskPublicClient() {
     chain: Sepolia,
     rpcUrl: process.env.LISK_SEPOLIA_RPC_URL!,
   });
-  console.log('Lisk Public client initialized:', publicClient);
+  logger.info('Lisk Public client initialized');
   return publicClient;
 }

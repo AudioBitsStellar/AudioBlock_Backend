@@ -2,6 +2,7 @@ import { plainToInstance } from 'class-transformer';
 import { validate, ValidationError } from 'class-validator';
 import { AppError } from '../errors/AppError';
 import { handleError } from '../utils/helpers';
+import logger from '../config/logger';
 
 export interface FieldValidationErrorDetail {
   field: string;
@@ -61,7 +62,7 @@ export function validateDTO(DTOClass: any) {
       req.body = dto;
       next();
     } catch (err) {
-      console.error('Validation Middleware Error:', err);
+      logger.error({ err }, 'Validation middleware error');
       return handleError(req, res, err);
     }
   };
