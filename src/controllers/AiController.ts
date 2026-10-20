@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { AiGenerationService } from '../services/ai/AiGenerationService';
+import { AiGenerationService } from '../services/AI/AiGenerationService';
 import { handleError } from '../utils/helpers';
 import { HTTP_STATUS } from '../config/constants';
 import { routeParam } from '../utils/routeParams';
