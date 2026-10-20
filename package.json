@@ -23,6 +23,8 @@
     "reconcile:royalties": "ts-node src/jobs/RoyaltyReconciliationJob.ts",
     "gdpr:purge-accounts": "ts-node src/jobs/AccountDeletionJob.ts",
     "reconcile:onchain": "ts-node src/jobs/OnChainReconciliationJob.ts",
+    "aggregate:playback": "ts-node src/jobs/DailyPlaybackAggregationJob.ts",
+    "scheduler": "ts-node src/workers/scheduler.ts",
     "cli:reindex": "ts-node src/cli/reindex.ts",
     "cli:project": "ts-node src/cli/project.ts",
     "migration:generate": "typeorm migration:generate",
