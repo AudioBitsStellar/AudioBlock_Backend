@@ -22,6 +22,7 @@ import embedRoutes from "./routes/embedRoutes";
 import oembedRoutes from "./routes/oembedRoutes";
 import royaltyPayoutRoutes from "./routes/royaltyPayoutRoutes";
 import playlistRoutes from "./routes/playlistRoutes";
+import playlistFollowRoutes from "./routes/playlistFollowRoutes";
 import userRoutes from "./routes/userRoutes";
 import commentRoutes from "./routes/commentRoutes";
 import commentReactionRoutes from "./routes/commentReactionRoutes";
@@ -142,7 +143,9 @@ app.use("/api/oembed", oembedRoutes);
 
 
 // Playlists (Issue #77) + collaborative editing (#406) + smart playlists (#407)
+// + playlist follow/unfollow (#408, #759)
 app.use("/api/playlists", playlistRoutes);
+app.use("/api/playlists", playlistFollowRoutes);
 
 // Releases + pre-save campaigns for upcoming releases (Issue #424)
 app.use("/api/releases", releaseRoutes);
