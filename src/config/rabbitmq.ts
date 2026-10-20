@@ -1,5 +1,6 @@
 import amqp from 'amqplib';
 import { isShuttingDown } from '../utils/gracefulShutdown';
+import logger from './logger';
 
 let connection: Awaited<ReturnType<typeof amqp.connect>> | null = null;
 let stopping = false;
@@ -26,7 +27,7 @@ export async function initRabbitMQ(): Promise<void> {
         throw new Error('RABBITMQ_URL environment variable is required');
       }
 
-      console.log(`🔄 Connecting to RabbitMQ (secure connection)...`);
+      logger.info('Connecting to RabbitMQ');
 
       // For amqps://, no additional config needed - amqplib handles TLS automatically
       const connected = await amqp.connect(rabbitmqUrl, {
@@ -40,19 +41,19 @@ export async function initRabbitMQ(): Promise<void> {
         return;
       }
       channel = await connected.createChannel();
-      console.log('✅ RabbitMQ connected and channel created');
+      logger.info('RabbitMQ connected and channel created');
 
       connected.on('close', () => {
-        console.error('⚠️ RabbitMQ connection closed. Retrying...');
+        logger.warn('RabbitMQ connection closed, retrying...');
         channel = null;
         if (!stopping && !isShuttingDown()) retryTimer = setTimeout(connect, 5000);
       });
 
       connected.on('error', (err) => {
-        console.error('⚠️ RabbitMQ connection error:', err.message);
+        logger.error({ err }, 'RabbitMQ connection error');
       });
     } catch (error: any) {
-      console.error('❌ RabbitMQ connection failed:', error.message);
+      logger.error({ err: error }, 'RabbitMQ connection failed');
       channel = null;
       if (!stopping && !isShuttingDown()) retryTimer = setTimeout(connect, 5000);
     }

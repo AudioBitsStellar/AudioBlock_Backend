@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import { mapToOnChainError } from '../types/OnChainErrorCodes';
 import { AppError } from '../errors/AppError';
 import { logRequestError } from './errorLogger';
+import logger from '../config/logger';
 
 /** Shape returned by {@link formatValidationErrors}. */
 interface IValidationFormatResult {
@@ -91,7 +92,7 @@ export function handleError(arg1: any, arg2: any, arg3?: any): void {
   }
 
   logRequestError(req, error, 500);
-  console.error('Unhandled error in handleError:', error);
+  logger.error({ err: error }, 'Unhandled error in handleError');
   res.status(500).json({
     success: false,
     message: isDev ? 'Internal server error' : 'Something went wrong',

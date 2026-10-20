@@ -5,6 +5,8 @@
  * Supports both singleton and transient lifetimes, constructor injection, and circular dependency detection.
  */
 
+import logger from './config/logger';
+
 export type ServiceLifetime = 'singleton' | 'transient';
 
 export interface ServiceDescriptor<T = any> {
@@ -182,9 +184,7 @@ export function measureResolution<T>(name: string, resolver: () => T): T {
   } finally {
     const duration = performance.now() - start;
     if (duration > 5) {
-      console.warn(
-        `Service resolution for "${name}" took ${duration.toFixed(2)}ms (threshold: 5ms)`,
-      );
+      logger.warn({ name, durationMs: duration.toFixed(2) }, 'Service resolution exceeded threshold');
     }
   }
 }
