@@ -45,14 +45,22 @@ Complete reference of all environment variables used by the AudioBlocks Backend.
 
 ## Redis
 
-| Variable         | Required | Default | Description         |
-| ---------------- | -------- | ------- | ------------------- |
-| `REDIS_HOST`     | No       | `redis` | Redis host address  |
-| `REDIS_PORT`     | No       | `6379`  | Redis port          |
-| `REDIS_USERNAME` | No       | —       | Redis auth username |
-| `REDIS_PASSWORD` | No       | —       | Redis auth password |
+| Variable             | Required | Default        | Description                                                                                             |
+| -------------------- | -------- | -------------- | ------------------------------------------------------------------------------------------------------- |
+| `REDIS_HOST`         | No       | `redis`        | Redis host address                                                                                      |
+| `REDIS_PORT`         | No       | `6379`         | Redis port                                                                                              |
+| `REDIS_USERNAME`     | No       | —              | Redis auth username                                                                                     |
+| `REDIS_PASSWORD`     | No       | —              | Redis auth password                                                                                     |
+| `MANIFEST_CACHE_TTL` | No       | `300`          | Manifest cache TTL in seconds. Must be strictly less than `SIGNED_URL_EXPIRES` (#828).                  |
+| `SIGNED_URL_EXPIRES` | No       | `600`          | S3 presigned URL expiration in seconds. Must strictly exceed `MANIFEST_CACHE_TTL` (#828).               |
 
 **Sensitive:** `REDIS_PASSWORD` — never log or commit.
+
+### Eviction Policy & Memory Management (#378)
+
+- **Configured Eviction Policy:** `maxmemory-policy volatile-lru`
+- **Memory Cap:** `maxmemory 200mb` (in Docker / production container limits of 256MB)
+- **Rationale:** Redis stores a mix of persistent secondary search indices (`song:idx:*`), short-lived authentication nonces (`nonce:*`, 300s TTL), OAuth state (`twitter:state:*`, 300s TTL), and derived caches. Under `volatile-lru`, keys without a TTL (search index, job queues) are never evicted, and idle cached metadata is evicted before active in-flight authentication tokens. See [ADR-008](adrs/008-caching-strategy.md) for detailed evaluation.
 
 ---
 

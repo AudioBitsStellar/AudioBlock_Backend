@@ -20,6 +20,7 @@ an artist's behalf without ever holding their private key.
 - [Documentation](#documentation)
 - [Getting Started](#getting-started)
 - [Scripts](#scripts)
+- [Troubleshooting](#troubleshooting)
 - [Known Issues / Cleanup Backlog](#known-issues--cleanup-backlog)
 
 ## Architecture
@@ -758,9 +759,20 @@ npm run dev
 | `npm run env:check`                                   | Checks that `.env.example` lists every required var from `src/config/env.ts` (reports both missing and extra keys)              |
 | `npm run env:check:strict`                            | Same as above but fails on any extra key in `.env.example` (exact parity)                                                       |
 
+## Troubleshooting
+
+Operational runbooks and troubleshooting guides for common incidents and failure modes:
+
+| Guide / Runbook | Description |
+| :--- | :--- |
+| **[Database Backup & Restore](docs/runbooks/database-backup-restore.md)** | PostgreSQL backup schedule, S3 storage location, and step-by-step incident recovery/restore procedure (#372). |
+| **[Indexer Backfill Runbook](docs/indexer-backfill-runbook.md)** | Step-by-step guide for one-time historical contract event ingestion. |
+| **[Indexer Resync Runbook](docs/indexer-resync-runbook.md)** | Procedure for recovering from indexer lag, RPC outages, or blockchain reorgs. |
+| **[Database Pool Alerting](docs/db-pool-alerting.md)** | Diagnosing pool exhaustion, connection leaks, and adjusting `DB_POOL_MAX`. |
+| **[Redis Caching & Eviction](docs/adrs/008-caching-strategy.md)** | Cache TTL policies, `maxmemory-policy`, and handling memory pressure (#378). |
+
 ## Known Issues / Cleanup Backlog
 
-- `src/routes/twitterRoutesOld.ts` is an unused/superseded code path still present in the repo.
 - A handful of variables in `.env.example` (`REDIS_URL`, `JWT_EXPIRER_AT`,
   `PRIVATE_KEY`, `PRIVATE_KEY_2`, several OAuth1-style Twitter vars) are not
   currently read by any code.

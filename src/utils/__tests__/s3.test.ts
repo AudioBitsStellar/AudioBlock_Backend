@@ -30,7 +30,7 @@ describe('sanitizeS3KeyPart', () => {
 
   it('rejects overly long values', () => {
     expect(() => sanitizeS3KeyPart('a'.repeat(129), 'userId')).toThrow();
-    expect(() => sanitizeS3KeyPart('a'.repeat(128), 'userId')).toBe('a'.repeat(128));
+    expect(sanitizeS3KeyPart('a'.repeat(128), 'userId')).toBe('a'.repeat(128));
   });
 });
 
