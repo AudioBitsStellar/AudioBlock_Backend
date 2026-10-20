@@ -7,6 +7,8 @@ module.exports = {
   // Strip AI vendor keys and pin AI_PROVIDER=noop before every test file so
   // no test can depend on a live AI provider (#287).
   setupFiles: ["<rootDir>/tests/setup/aiProviderIsolation.js"],
+  // Global teardown to clean up in-process timers and mock connections (Issue #834)
+  setupFilesAfterEnv: ["<rootDir>/tests/setup/jestTeardown.ts"],
   moduleNameMapper: {
     "^reflect-metadata$": "<rootDir>/node_modules/reflect-metadata",
     // wasm-attestation-bindings is ESM-only and uses `import.meta`, which

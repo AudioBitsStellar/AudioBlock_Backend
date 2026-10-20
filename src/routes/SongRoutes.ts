@@ -150,6 +150,11 @@ router.get('/search', SongController.searchSongs);
 router.get('/stream/:id', SongController.streamSong);
 router.get('/popular', SongController.getPopularSongs);
 
+// Song & Artist statistics (Issues #814, #846). Artist stats also mounted at
+// /api/artist/:id/stats and /api/artists/:id/stats — see artistRoutes + app.ts.
+router.get('/artist/:artistId/stats', optionalAuth, SongController.getArtistStats);
+router.get('/:id/stats', optionalAuth, SongController.getSongStats);
+
 // Embeddable player endpoint — public, no auth, same rate limiting as streaming (Redis throttle)
 router.get('/embed/:id', EmbedController.getSongEmbed);
 

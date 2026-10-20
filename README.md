@@ -24,24 +24,7 @@ an artist's behalf without ever holding their private key.
 
 ## Architecture
 
-```
-                 ┌──────────────┐        ┌──────────────┐
- Artist/Listener │   Frontend    │◀──────▶│   Express API │
-      Apps       │ (Next.js)     │  REST  │  (this repo)  │
-                 └──────────────┘        └──────┬───────┘
-                                                  │
-                ┌─────────────────┬──────────────┼───────────────┬──────────────┐
-                ▼                 ▼              ▼               ▼              ▼
-           PostgreSQL          Redis        RabbitMQ          S3            Stellar/Soroban
-         (TypeORM models)   (nonces,      (song_processing  (audio/cover    RPC (transaction
-                              manifest      queue)            storage)       relay only —
-                              cache)                                         no keys held)
-                                              │
-                                              ▼
-                                     Song Processor Worker
-                                  (ffmpeg transcode → HLS,
-                                   Pinata/IPFS metadata pin)
-```
+See the [source-controlled architecture diagram](docs/architecture.md) for the API, workers, storage, AI, indexer, and monitoring topology.
 
 The HTTP server starts immediately on boot (so deploy-platform health checks
 pass) and connects to RabbitMQ — and starts the background worker — only
@@ -119,10 +102,11 @@ appropriate role (`authArtistMiddleware` for artist-only routes).
 
 ### Artist — `/api/artist`
 
-| Method | Path                      | Auth   | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| ------ | ------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Method | Path                      | Auth   | Description |
+| ------ | ------------------------- | ------ | ----------- |
 | GET    | `/:id/metadata`           | —      | **Public artist metadata** — returns `{ openGraph: { title, description, image, url, type }, jsonLd: { "@context","@type","name",... }, profile: { id, username, name, bio, profileImage, pageCover, website, twitterUsername } }` for OG tags / link previews and search indexing. No private fields (email, walletAddress, stellarPublicKey) are ever exposed. Append `?format=html` for an HTML fragment with `<meta property="og:*">` + `<script type="application/ld+json">`. |
-| PATCH  | `/update-profile`         | artist | Updates bio/website/etc., accepts `profileImage`/`pageCover` uploads                                                                                                                                                                                                                                                                                                                                                                                                               |
+| GET    | `/:id/stats?window=`      | optional (ownership-checked) | **Artist overview stats** — also at `/api/artists/:id/stats` and `/api/song/artist/:artistId/stats`. `window=7d\|30d\|90d\|all-time` (default `30d`). Owner/admin gets `plays,saves,uniqueListeners,revenueStroops+followers`; public gets `plays,saves,followers`. `revenueStroops` = gross reconciled revenue; `followers` = all-time. No songs → `404 ARTIST_HAS_NO_SONGS`. |
+| PATCH  | `/update-profile`         | artist | Updates bio/website/etc., accepts `profileImage`/`pageCover` uploads |
 | POST   | `/onchain/connect-wallet` | artist | Records the artist's Stellar public key                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | POST   | `/onchain/prepare-setup`  | artist | Builds an unsigned `setup_artist_profile` Soroban transaction                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | POST   | `/onchain/submit-setup`   | artist | Submits the wallet-signed transaction, persists the resulting artist/token IDs                                                                                                                                                                                                                                                                                                                                                                                                     |

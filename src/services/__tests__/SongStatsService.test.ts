@@ -23,6 +23,7 @@ import { Song } from '../../entities/Song';
 import { SongPlayEvent } from '../../entities/SongPlayEvent';
 import { SongSave } from '../../entities/SongSave';
 import { RoyaltyPayout } from '../../entities/RoyaltyPayout';
+import { UserFollow } from '../../entities/UserFollow';
 
 /**
  * Query-builder stub: counts and raw rows are queued per-repository so each
@@ -49,6 +50,7 @@ function makeRepoStub(results: { counts?: number[]; rawOne?: unknown[]; rawMany?
     createQueryBuilder: jest.fn(() => qb),
     findOneBy: jest.fn(),
     find: jest.fn(),
+    count: jest.fn(async () => 0),
     qb,
   };
 }
@@ -57,6 +59,7 @@ let playRepo: ReturnType<typeof makeRepoStub>;
 let saveRepo: ReturnType<typeof makeRepoStub>;
 let payoutRepo: ReturnType<typeof makeRepoStub>;
 let songRepo: ReturnType<typeof makeRepoStub>;
+let followRepo: ReturnType<typeof makeRepoStub>;
 
 function wireRepos() {
   (AppDataSource.getRepository as jest.Mock).mockImplementation((entity: unknown) => {
@@ -64,6 +67,7 @@ function wireRepos() {
     if (entity === SongSave) return saveRepo;
     if (entity === RoyaltyPayout) return payoutRepo;
     if (entity === Song) return songRepo;
+    if (entity === UserFollow) return followRepo;
     return songRepo;
   });
 }
@@ -75,6 +79,7 @@ beforeEach(() => {
   saveRepo = makeRepoStub({});
   payoutRepo = makeRepoStub({});
   songRepo = makeRepoStub({});
+  followRepo = makeRepoStub({});
   wireRepos();
 });
 
@@ -247,14 +252,34 @@ describe('SongStatsService.getArtistStats', () => {
     });
     saveRepo = makeRepoStub({ counts: [40, 20] });
     payoutRepo = makeRepoStub({ rawOne: [{ total: '900' }, { total: '300' }] });
+    followRepo.count.mockResolvedValue(12);
     wireRepos();
 
     const stats = await new SongStatsService().getArtistStats('artist-1', '30d');
 
     expect(stats.songCount).toBe(2);
     expect(stats.totals.plays).toBe(300);
+    expect(stats.totals.followers).toBe(12);
     expect(stats.comparison?.plays).toBe(50);
     expect(stats.topSongs[0]).toEqual({ songId: 'song-2', title: 'Second', plays: 200 });
+    // Revenue sums only reconciled (settled) payouts — assert the status filter.
+    expect(payoutRepo.qb.andWhere).toHaveBeenCalledWith('payout.status = :status', {
+      status: 'reconciled',
+    });
+  });
+
+  it('exposes all-time followers even when windowed activity is empty', async () => {
+    songRepo.find.mockResolvedValue([{ id: 'song-1', title: 'Only' }]);
+    playRepo = makeRepoStub({ counts: [0, 0], rawMany: [[], [], []] });
+    saveRepo = makeRepoStub({ counts: [0, 0] });
+    payoutRepo = makeRepoStub({ rawOne: [{ total: '0' }, { total: '0' }] });
+    followRepo.count.mockResolvedValue(7);
+    wireRepos();
+
+    const stats = await new SongStatsService().getArtistStats('artist-1', '7d');
+
+    expect(stats.totals.followers).toBe(7);
+    expect(stats.totals.plays).toBe(0);
   });
 
   it('404s when the artist has no songs', async () => {

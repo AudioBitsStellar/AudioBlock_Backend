@@ -5,6 +5,7 @@ import logger from '../config/logger';
 import { AppError } from '../errors/AppError';
 import { CacheService } from './CacheService';
 import { User, UserRole } from '../entities/User';
+import { Song } from '../entities/Song';
 import {
   AccountDeletionRequest,
   type AccountDeletionStatus,
@@ -537,10 +538,18 @@ export class AccountDeletionService {
 
     // Songs survive erasure, so any cached copy of their streaming manifests is
     // cleared to drop the former owner's attribution.
+    // Issue #826: only invalidate that user's songs rather than scanning song:*
     if (user.role === UserRole.ARTIST) {
       try {
-        await CacheService.invalidatePattern('song:*');
-        count += 1;
+        const songRepo = this.dataSource.getRepository(Song);
+        const userSongs = await songRepo.find({
+          where: { artistId: user.id },
+          select: ['id'],
+        });
+        for (const song of userSongs) {
+          await CacheService.clearSong(song.id);
+          count += 1;
+        }
       } catch (error) {
         warnings.push(`Failed to invalidate song cache: ${(error as Error).message}`);
       }

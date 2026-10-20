@@ -1,4 +1,7 @@
 import Redis from 'ioredis';
+import logger from './logger';
+
+const isTest = process.env.NODE_ENV === 'test';
 
 const redis = new Redis({
   username: process.env.REDIS_USERNAME,
@@ -7,14 +10,16 @@ const redis = new Redis({
   password: process.env.REDIS_PASSWORD,
   // tls: {}, // Required for Redis Cloud TLS
   maxRetriesPerRequest: null, //  prevents retry errors
+  lazyConnect: isTest,
+  retryStrategy: isTest ? () => null : undefined,
 });
 
 redis.on('connect', () => {
-  console.log('✅ Connected to Redis');
+  logger.info('Connected to Redis');
 });
 
 redis.on('error', (err) => {
-  console.error('❌ Redis error:', err);
+  logger.error({ err }, 'Redis error');
 });
 
 export default redis;

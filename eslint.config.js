@@ -30,7 +30,14 @@ module.exports = tseslint.config(
       'max-lines-per-function': ['warn', 50],
       'max-lines': ['warn', 300],
       'max-params': ['warn', 5],
+      'no-console': 'error',
     },
     ignores: ['dist/**', 'node_modules/**', 'jest.config.js'],
+  },
+  {
+    files: ['src/cli/**/*', 'src/scripts/**/*', 'seeders/**/*'],
+    rules: {
+      'no-console': 'off',
+    },
   },
 );

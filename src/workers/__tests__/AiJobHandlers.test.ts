@@ -13,8 +13,8 @@ import 'reflect-metadata';
 const mockGenerate = jest.fn();
 const mockMarkFailed = jest.fn();
 
-jest.mock('../../services/ai/AiGenerationService', () => {
-  const original = jest.requireActual('../../services/ai/AiGenerationService');
+jest.mock('../../services/AI/AiGenerationService', () => {
+  const original = jest.requireActual('../../services/AI/AiGenerationService');
   return {
     ...original,
     AiGenerationService: jest.fn().mockImplementation(() => ({
@@ -35,7 +35,7 @@ jest.mock('../JobQueueWorker', () => ({
 // ─── imports (after mocks) ────────────────────────────────────────────────────
 
 import { registerAiJobHandlers } from '../AiJobHandlers';
-import { AI_JOB_TYPE } from '../../services/ai/AiGenerationService';
+import { AI_JOB_TYPE } from '../../services/AI/AiGenerationService';
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 

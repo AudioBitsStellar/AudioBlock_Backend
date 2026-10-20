@@ -7,6 +7,7 @@ import { routeParam } from '../utils/routeParams';
 import { generateListenerKey } from '../utils/listenerKey';
 import AppDataSource from '../config/db';
 import { Song } from '../entities/Song';
+import { UserRole } from '../entities/User';
 import { SongPlayEvent } from '../entities/SongPlayEvent';
 import { SongSave } from '../entities/SongSave';
 import redis from '../config/redis';
@@ -340,25 +341,127 @@ export class SongController {
     }
   };
 
-  /** GET /api/songs/:id/stats — aggregated song statistics (Issue #87). */
+  /** GET /api/song/:id/stats — aggregated song statistics (Issue #814). */
   static getSongStats = async (req: Request, res: Response) => {
     try {
       const songId = req.params.id as string;
-      const window = parseWindow(req.query.window);
+      let window: string;
+      try {
+        window = parseWindow(req.query.window);
+      } catch (err: any) {
+        throw AppError.validation(err.message, undefined, 'INVALID_WINDOW');
+      }
+
+      const songRepo = AppDataSource.getRepository(Song);
+      const song = await songRepo.findOne({
+        where: { id: songId },
+        select: ['id', 'artistId'],
+      });
+      if (!song) {
+        throw AppError.notFound('Song not found', undefined, 'SONG_NOT_FOUND');
+      }
+
+      const caller = (req as any).user;
+      const isOwner = Boolean(
+        caller &&
+          (caller.id === song.artistId ||
+            caller.role === UserRole.ADMIN ||
+            caller.role === UserRole.MODERATOR),
+      );
+
       const stats = await songStatsService.getSongStats(songId, window);
-      return res.status(200).json({ success: true, data: stats });
+
+      const data = isOwner
+        ? stats
+        : {
+            ...stats,
+            totals: {
+              plays: stats.totals.plays,
+              saves: stats.totals.saves,
+            },
+            previous: stats.previous
+              ? {
+                  plays: stats.previous.plays,
+                  saves: stats.previous.saves,
+                }
+              : null,
+            comparison: stats.comparison
+              ? {
+                  plays: stats.comparison.plays,
+                  saves: stats.comparison.saves,
+                }
+              : null,
+          };
+
+      res.set('Cache-Control', isOwner ? 'private, max-age=300' : 'public, max-age=300');
+      res.set('Vary', 'Authorization');
+      return res.status(200).json({ success: true, data });
     } catch (error) {
       handleError(req, res, error);
     }
   };
 
-  /** GET /api/artists/:id/stats — artist-level aggregation (Issue #87). */
+  /**
+   * GET /api/artists/:id/stats?window=7d|30d|90d|all-time
+   * (aliases: /api/artist/:id/stats, /api/song/artist/:artistId/stats) — artist overview (Issues #814, #846).
+   *
+   * Auth: `optionalAuth`. Ownership-checked: the artist owner (`caller.id === artistId`)
+   * or admin/moderator receives full metrics (`plays`, `saves`, `uniqueListeners`,
+   * `revenueStroops` + all-time `followers`); everyone else receives public
+   * `plays`, `saves` and `followers` only. Financial totals must come from here —
+   * never reconstruct revenue from `/api/activity` feeds.
+   *
+   * Semantics: `window` defaults to `30d`. `revenueStroops` is gross song revenue
+   * (`SUM(grossAmount)` over `status='reconciled'` payout rows), not the artist
+   * recipient share. `followers` is all-time. No-songs result: 404
+   * `ARTIST_HAS_NO_SONGS`.
+   */
   static getArtistStats = async (req: Request, res: Response) => {
     try {
-      const artistId = req.params.id as string;
-      const window = parseWindow(req.query.window);
+      const artistId = (req.params.artistId || req.params.id) as string;
+      let window: string;
+      try {
+        window = parseWindow(req.query.window);
+      } catch (err: any) {
+        throw AppError.validation(err.message, undefined, 'INVALID_WINDOW');
+      }
+
+      const caller = (req as any).user;
+      const isOwner = Boolean(
+        caller &&
+          (caller.id === artistId ||
+            caller.role === UserRole.ADMIN ||
+            caller.role === UserRole.MODERATOR),
+      );
+
       const stats = await songStatsService.getArtistStats(artistId, window);
-      return res.status(200).json({ success: true, data: stats });
+
+      const data = isOwner
+        ? stats
+        : {
+            ...stats,
+            totals: {
+              plays: stats.totals.plays,
+              saves: stats.totals.saves,
+              followers: (stats.totals as any).followers,
+            },
+            previous: stats.previous
+              ? {
+                  plays: stats.previous.plays,
+                  saves: stats.previous.saves,
+                }
+              : null,
+            comparison: stats.comparison
+              ? {
+                  plays: stats.comparison.plays,
+                  saves: stats.comparison.saves,
+                }
+              : null,
+          };
+
+      res.set('Cache-Control', isOwner ? 'private, max-age=300' : 'public, max-age=300');
+      res.set('Vary', 'Authorization');
+      return res.status(200).json({ success: true, data });
     } catch (error) {
       handleError(req, res, error);
     }

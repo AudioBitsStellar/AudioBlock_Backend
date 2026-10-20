@@ -22,6 +22,7 @@ import embedRoutes from "./routes/embedRoutes";
 import oembedRoutes from "./routes/oembedRoutes";
 import royaltyPayoutRoutes from "./routes/royaltyPayoutRoutes";
 import playlistRoutes from "./routes/playlistRoutes";
+import playlistFollowRoutes from "./routes/playlistFollowRoutes";
 import userRoutes from "./routes/userRoutes";
 import commentRoutes from "./routes/commentRoutes";
 import commentReactionRoutes from "./routes/commentReactionRoutes";
@@ -35,10 +36,8 @@ import metricsRoutes from "./routes/metricsRoutes";
 import privyWebhookRoutes from "./routes/privyWebhookRoutes";
 import accountTypeRoutes from "./routes/accountTypeRoutes";
 import healthRoutes from "./routes/healthRoutes";
-import swaggerUi from "swagger-ui-express";
-import jsYaml from "js-yaml";
-import fs from "fs";
-import path from "path";
+import releaseRoutes from "./routes/ReleaseRoutes";
+import { createBatchRoutes } from "./routes/BatchRoutes";
 
 // Route imports
 
@@ -111,8 +110,15 @@ if (process.env.ENABLE_API_DOCS === "true" || process.env.NODE_ENV !== "producti
 // Define routes
 app.use("/health", healthRoutes);
 
+// Batch endpoint: generic sub-request dispatch + native artist-catalog
+// operations (e.g. bulk genre update).
+app.use("/api/batch", createBatchRoutes(app));
+
 app.use("/api/auth", authRoutes);
 app.use("/api/artist", artistRoutes);
+// Plural alias advertised in docs (GET /api/artists/:id/stats?window=...) for
+// artist-portal overview integration (Issue #846). Same router, same handlers.
+app.use("/api/artists", artistRoutes);
 
 // Dynamic wallet routes
 app.use("/api/wallet", walletRoutes);
@@ -143,7 +149,12 @@ app.use("/api/oembed", oembedRoutes);
 
 
 // Playlists (Issue #77) + collaborative editing (#406) + smart playlists (#407)
+// + playlist follow/unfollow (#408, #759)
 app.use("/api/playlists", playlistRoutes);
+app.use("/api/playlists", playlistFollowRoutes);
+
+// Releases + pre-save campaigns for upcoming releases (Issue #424)
+app.use("/api/releases", releaseRoutes);
 
 // User routes
 app.use("/api/users", userRoutes);
