@@ -101,6 +101,12 @@ app.use((req, res, next) => {
 // Log application startup
 
 
+// Swagger UI — gated by ENABLE_API_DOCS in production (#796)
+if (process.env.ENABLE_API_DOCS === "true" || process.env.NODE_ENV !== "production") {
+  const swaggerDocument = jsYaml.load(fs.readFileSync(path.join(__dirname, "../docs/openapi.yaml"), "utf8"));
+  app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+}
+
 // Define routes
 app.use("/health", healthRoutes);
 
