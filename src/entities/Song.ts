@@ -72,7 +72,11 @@ export class Song {
   @Column({ nullable: true })
   loudness!: number; // LUFS
 
-  @Column({ default: 'processing' })
+  @Column({
+    type: 'enum',
+    enum: ['processing', 'ready', 'failed'],
+    default: 'processing',
+  })
   status!: 'processing' | 'ready' | 'failed';
 
   @Column({ type: 'text', nullable: true })
@@ -85,8 +89,12 @@ export class Song {
   metadataCid!: string;
 
   /** On-chain minting state, independent of streaming readiness above. */
-  @Column({ default: 'not_minted' })
-  mintStatus!: 'not_minted' | 'pending' | 'minted' | 'failed';
+  @Column({
+    type: 'enum',
+    enum: ['not_minted', 'pending', 'minting', 'minted', 'failed'],
+    default: 'not_minted',
+  })
+  mintStatus!: 'not_minted' | 'pending' | 'minting' | 'minted' | 'failed';
 
   /** song_id returned by the catalog Soroban contract once minting succeeds. */
   @Column({ nullable: true })
