@@ -25,6 +25,7 @@
     "reconcile:onchain": "ts-node src/jobs/OnChainReconciliationJob.ts",
     "aggregate:playback": "ts-node src/jobs/DailyPlaybackAggregationJob.ts",
     "scheduler": "ts-node src/workers/scheduler.ts",
+    "backfill:loudness": "ts-node scripts/backfill-loudness.ts",
     "cli:reindex": "ts-node src/cli/reindex.ts",
     "cli:project": "ts-node src/cli/project.ts",
     "migration:generate": "typeorm migration:generate",

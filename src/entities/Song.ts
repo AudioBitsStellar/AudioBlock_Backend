@@ -69,8 +69,18 @@ export class Song {
   @Column({ nullable: true })
   duration!: number;
 
-  @Column({ nullable: true })
-  loudness!: number; // LUFS
+  @Column({ type: 'numeric', nullable: true })
+  loudness!: number | null; // LUFS (integrated loudness)
+
+  @Column({ type: 'numeric', nullable: true })
+  truePeakDb!: number | null; // True peak in dBTP
+
+  @Column({ type: 'numeric', nullable: true })
+  loudnessRange!: number | null; // LRA (loudness range)
+
+  /** Issue #771: JSON array of peak values for waveform visualization */
+  @Column({ type: 'simple-json', nullable: true })
+  waveformPeaks!: number[] | null;
 
   @Column({
     type: 'enum',
