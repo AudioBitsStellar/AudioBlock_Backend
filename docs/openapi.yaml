@@ -703,6 +703,83 @@ paths:
           description: The caller already reported this song.
         '429':
           description: Too many reports in the last hour.
+
+  /api/batch:
+    post:
+      summary: Execute a batch of sub-requests or a native catalog operation
+      description: |
+        Executes up to 10 sub-requests in a single HTTP call. Each sub-request is
+        processed independently and reports its own status/body, so partial
+        failures do not abort the whole batch. Supports two kinds of items:
+
+        * Generic sub-request: `{ method, path, body? }` — dispatched internally
+          to the matching route (GET/POST/PUT/PATCH/DELETE).
+        * Native catalog operation: `{ operation, songIds, genre }` — e.g.
+          `bulkGenreUpdate` updates the genre of several songs in the caller's
+          catalog in one call. One failure does not abort the rest; every song
+          produces a result row.
+
+        Overall HTTP status is 200 when the request is well-formed, regardless of
+        per-sub-request outcomes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              maxItems: 10
+              items:
+                oneOf:
+                  - title: Generic sub-request
+                    type: object
+                    required: [method, path]
+                    properties:
+                      method:
+                        type: string
+                        enum: [GET, POST, PUT, PATCH, DELETE]
+                      path:
+                        type: string
+                      body:
+                        type: object
+                  - title: Native catalog operation
+                    type: object
+                    required: [operation, songIds]
+                    properties:
+                      operation:
+                        type: string
+                        enum: [bulkGenreUpdate]
+                      songIds:
+                        type: array
+                        items:
+                          type: string
+                        maxItems: 50
+                      genre:
+                        type: string
+      responses:
+        '200':
+          description: Batch processed. Per-item results are in `data`.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        status:
+                          type: integer
+                          example: 200
+                        body:
+                          type: object
+        '400':
+          description: Validation error (bad body, unknown operation, ...).
+        '413':
+          description: Request body exceeds 100 KB batch limit.
 components:
   schemas:
     Song:
@@ -942,4 +1019,46 @@ components:
         totalPages:
           type: integer
           example: 3
+
+    BatchResponseItem:
+      type: object
+      properties:
+        status:
+          type: integer
+          example: 200
+        body:
+          type: object
+
+    BulkCatalogItemResult:
+      type: object
+      properties:
+        songId:
+          type: string
+          format: uuid
+        status:
+          type: integer
+          example: 200
+        body:
+          type: object
+
+    BulkCatalogResponse:
+      type: object
+      properties:
+        operation:
+          type: string
+          enum: [bulkGenreUpdate]
+          example: bulkGenreUpdate
+        requested:
+          type: integer
+          example: 2
+        succeeded:
+          type: integer
+          example: 1
+        failed:
+          type: integer
+          example: 1
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BulkCatalogItemResult'
 

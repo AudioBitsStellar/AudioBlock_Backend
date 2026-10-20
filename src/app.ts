@@ -36,6 +36,7 @@ import privyWebhookRoutes from "./routes/privyWebhookRoutes";
 import accountTypeRoutes from "./routes/accountTypeRoutes";
 import healthRoutes from "./routes/healthRoutes";
 import releaseRoutes from "./routes/ReleaseRoutes";
+import { createBatchRoutes } from "./routes/BatchRoutes";
 
 // Route imports
 
@@ -101,6 +102,10 @@ app.use((req, res, next) => {
 
 // Define routes
 app.use("/health", healthRoutes);
+
+// Batch endpoint: generic sub-request dispatch + native artist-catalog
+// operations (e.g. bulk genre update).
+app.use("/api/batch", createBatchRoutes(app));
 
 app.use("/api/auth", authRoutes);
 app.use("/api/artist", artistRoutes);
