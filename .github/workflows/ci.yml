@@ -9,6 +9,20 @@ on:
     - cron: '0 6 * * 1'
 
 jobs:
+  case-collision-check:
+    name: Reject case-colliding paths
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for case-insensitive path collisions
+        run: |
+          collisions=$(git ls-files | sort -f | uniq -di)
+          if [ -n "$collisions" ]; then
+            echo "Case-colliding paths detected (breaks macOS/Windows clones):"
+            echo "$collisions"
+            exit 1
+          fi
+
   lint:
     runs-on: ubuntu-latest
     strategy:
