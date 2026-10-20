@@ -150,3 +150,61 @@ For in-depth context on key design choices and trade-offs, refer to the decision
 - **[ADR 003: File Storage Strategy](file:///Users/sam/Desktop/Drips/AudioBlock_Backend/docs/adrs/003-file-storage-strategy.md)** — AWS S3 for master audio & HLS streaming paired with IPFS/Pinata for immutable metadata CIDs.
 - **[ADR 004: Background Job Processing](file:///Users/sam/Desktop/Drips/AudioBlock_Backend/docs/adrs/004-background-job-processing.md)** — Priority job queue and worker pattern for asynchronous transcoding and malware scans.
 - **[ADR 005: Database & ORM Selection](file:///Users/sam/Desktop/Drips/AudioBlock_Backend/docs/adrs/005-database-and-orm.md)** — PostgreSQL with TypeORM for relational data integrity, migrations, and strict entity typing.
+
+---
+
+## Loudness Normalization (Issue #769)
+
+The backend measures loudness of all audio files using EBU R128 standard and stores the following metrics in the `songs` table:
+
+- **`loudness`** (numeric, LUFS): Integrated loudness measurement
+- **`truePeakDb`** (numeric, dBTP): True peak level in decibels true peak
+- **`loudnessRange`** (numeric, LRA): Loudness range measurement
+
+### Client-Side Normalization
+
+Clients should apply replay gain to normalize playback loudness. The recommended approach:
+
+1. **Target Loudness**: -14 LUFS (Spotify, YouTube Music standard)
+2. **Gain Calculation**: `gain_db = target_lufs - song.loudness`
+3. **True Peak Protection**: Ensure `song.truePeakDb + gain_db ≤ -1.0 dBTP` to prevent clipping
+4. **Clamp Gain**: If the calculated gain would cause clipping, reduce it to keep true peak below -1 dBTP
+
+**Example calculation** (JavaScript/TypeScript):
+
+```typescript
+function calculateReplayGain(song: { loudness: number; truePeakDb: number }): number {
+  const TARGET_LUFS = -14.0;
+  const MAX_TRUE_PEAK_DBTP = -1.0;
+
+  // Calculate desired gain
+  let gainDb = TARGET_LUFS - song.loudness;
+
+  // Check if this gain would cause clipping
+  const resultingPeak = song.truePeakDb + gainDb;
+  if (resultingPeak > MAX_TRUE_PEAK_DBTP) {
+    // Clamp gain to prevent clipping
+    gainDb = MAX_TRUE_PEAK_DBTP - song.truePeakDb;
+  }
+
+  return gainDb;
+}
+```
+
+### API Exposure
+
+Loudness metrics are included in:
+
+- `GET /api/songs/:id` - Song detail endpoint
+- `GET /api/songs/:id/stream` - Streaming manifest metadata
+- NFT metadata (for newly minted songs)
+
+### Backfill
+
+For existing songs without loudness data, run:
+
+```bash
+npm run backfill:loudness
+```
+
+This script analyzes existing songs and populates the loudness columns without re-pinning metadata (on-chain metadata is immutable).

@@ -20,6 +20,7 @@ import { AuthEventType } from '../entities/AuthAuditLog';
 import { AccountMergeService } from './AccountMergeService';
 import { Request } from 'express';
 import logger from '../config/logger';
+import { JobQueueService } from './JobQueueService';
 
 const PASSWORD_SALT_ROUNDS = 12;
 const RECOVERY_CODE_COUNT = 8;
@@ -123,10 +124,14 @@ export class AuthService {
     const savedUser = await this.userRepo.save(user);
 
     const appUrl = process.env.APP_URL || 'http://localhost:3000';
-    await this.emailService.sendEmail(
-      dto.email,
-      'Verify your email',
-      `<p>Please click <a href="${appUrl}/verify-email/${verificationToken}">here</a> to verify your email.</p>`,
+    await JobQueueService.enqueue(
+      'email.send',
+      {
+        to: dto.email,
+        subject: 'Verify your email',
+        html: `<p>Please click <a href="${appUrl}/verify-email/${verificationToken}">here</a> to verify your email.</p>`,
+      },
+      { priority: 'critical' },
     );
 
     const token = this.signToken(savedUser);
@@ -654,10 +659,14 @@ export class AuthService {
     await this.userRepo.save(user);
 
     const appUrl = process.env.APP_URL || 'http://localhost:3000';
-    await this.emailService.sendEmail(
-      email,
-      'Reset your password',
-      `<p>Please click <a href="${appUrl}/reset-password/${resetToken}">here</a> to reset your password. This link expires in 1 hour.</p>`,
+    await JobQueueService.enqueue(
+      'email.send',
+      {
+        to: email,
+        subject: 'Reset your password',
+        html: `<p>Please click <a href="${appUrl}/reset-password/${resetToken}">here</a> to reset your password. This link expires in 1 hour.</p>`,
+      },
+      { priority: 'critical' },
     );
   }
 

@@ -16,6 +16,7 @@
 import redis from '../config/redis';
 import logger from '../config/logger';
 import { Job, JobQueueService } from '../services/JobQueueService';
+import { EmailService } from '../services/EmailService';
 
 type JobHandler = (job: Job) => Promise<void>;
 
@@ -117,3 +118,55 @@ export function stopJobQueueMonitor(): void {
     monitorTimer = null;
   }
 }
+
+/**
+ * Email job payload for transactional email delivery via job queue (Issue #798).
+ * Stores template name and variables rather than pre-rendered HTML so retries
+ * can render fresh content.
+ */
+export interface EmailJobPayload {
+  to: string;
+  subject: string;
+  html: string;
+}
+
+/**
+ * Email job handler (Issue #798).
+ * Sends transactional emails with retry on 5xx/timeouts, no retry on 4xx
+ * (bad address), and logs provider message ID on success.
+ */
+async function handleEmailJob(job: Job<EmailJobPayload>): Promise<void> {
+  const { to, subject, html } = job.payload;
+  const emailService = new EmailService();
+
+  try {
+    const messageId = await emailService.sendEmail(to, subject, html);
+    if (messageId) {
+      logger.info({ jobId: job.id, to, subject, messageId }, 'Email sent successfully');
+    } else {
+      logger.info({ jobId: job.id, to, subject }, 'Email send skipped (no API key configured)');
+    }
+  } catch (error: any) {
+    const status = error?.response?.status;
+
+    // Don't retry 4xx errors (bad address, invalid payload, etc.)
+    if (status && status >= 400 && status < 500) {
+      logger.error(
+        { jobId: job.id, to, subject, status, error: error.message },
+        'Email send failed with client error, not retrying',
+      );
+      // Mark as complete to avoid retry
+      return;
+    }
+
+    // Retry 5xx and network errors
+    logger.warn(
+      { jobId: job.id, to, subject, status, error: error.message, attempt: job.attempts },
+      'Email send failed, will retry',
+    );
+    throw error;
+  }
+}
+
+// Register the email job handler
+registerJobHandler('email.send', handleEmailJob);
