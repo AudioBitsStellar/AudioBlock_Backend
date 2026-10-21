@@ -44,6 +44,12 @@ export class NotificationController {
     }
   };
 
+  /** GET /api/notifications/preferences — get caller's notification preferences. */
+  static getPreferences = async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user.id as string;
+      const preferences = await notificationService.getPreferences(userId);
+      return res.status(200).json({ success: true, data: preferences });
   /** POST /api/notifications/device-token — register a device token for push delivery (Issue #429). */
   static registerDeviceToken = async (req: Request, res: Response) => {
     try {
@@ -57,6 +63,26 @@ export class NotificationController {
     }
   };
 
+  /** PUT /api/notifications/preferences — update notification preferences. */
+  static updatePreferences = async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user.id as string;
+      const body = req.body;
+
+      let normalized: Array<{ type: string; enabled: boolean }> = [];
+      if (Array.isArray(body.preferences)) {
+        normalized = body.preferences;
+      } else if (body.type !== undefined && body.enabled !== undefined) {
+        normalized = [{ type: body.type, enabled: Boolean(body.enabled) }];
+      } else if (typeof body.preferences === 'object' && body.preferences !== null) {
+        normalized = Object.entries(body.preferences).map(([type, enabled]) => ({
+          type,
+          enabled: Boolean(enabled),
+        }));
+      }
+
+      const updated = await notificationService.updatePreferences(userId, normalized);
+      return res.status(200).json({ success: true, data: updated });
   /** DELETE /api/notifications/device-token — remove a device token (Issue #429). */
   static removeDeviceToken = async (req: Request, res: Response) => {
     try {

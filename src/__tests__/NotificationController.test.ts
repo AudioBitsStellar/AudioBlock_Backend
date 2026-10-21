@@ -1,8 +1,21 @@
 import 'reflect-metadata';
 
+jest.mock('../config/redis', () => ({
+  __esModule: true,
+  default: {
+    get: jest.fn(),
+    set: jest.fn(),
+    incr: jest.fn(),
+    expire: jest.fn(),
+    on: jest.fn(),
+  },
+}));
+
 const mockListForUser = jest.fn();
 const mockMarkAsRead = jest.fn();
 const mockMarkAllAsRead = jest.fn();
+const mockGetPreferences = jest.fn();
+const mockUpdatePreferences = jest.fn();
 const mockRegisterDeviceToken = jest.fn();
 const mockRemoveDeviceToken = jest.fn();
 
@@ -11,6 +24,8 @@ jest.mock('../services/NotificationService', () => ({
     listForUser: mockListForUser,
     markAsRead: mockMarkAsRead,
     markAllAsRead: mockMarkAllAsRead,
+    getPreferences: mockGetPreferences,
+    updatePreferences: mockUpdatePreferences,
     registerDeviceToken: mockRegisterDeviceToken,
     removeDeviceToken: mockRemoveDeviceToken,
   })),
@@ -40,6 +55,8 @@ beforeEach(() => {
   mockListForUser.mockReset();
   mockMarkAsRead.mockReset();
   mockMarkAllAsRead.mockReset();
+  mockGetPreferences.mockReset();
+  mockUpdatePreferences.mockReset();
 });
 
 describe('NotificationController.list', () => {
@@ -99,6 +116,43 @@ describe('NotificationController.markAllAsRead', () => {
   });
 });
 
+describe('NotificationController.preferences', () => {
+  it('gets preferences for the caller', async () => {
+    mockGetPreferences.mockResolvedValue([
+      { id: 'p1', userId: 'user-1', type: 'royalty_payout', enabled: false },
+    ]);
+
+    const req = mockReq();
+    const { res, json } = mockRes();
+
+    await NotificationController.getPreferences(req, res);
+
+    expect(mockGetPreferences).toHaveBeenCalledWith('user-1');
+    expect(json).toHaveBeenCalledWith({
+      success: true,
+      data: [{ id: 'p1', userId: 'user-1', type: 'royalty_payout', enabled: false }],
+    });
+  });
+
+  it('updates preferences for the caller', async () => {
+    mockUpdatePreferences.mockResolvedValue([
+      { id: 'p1', userId: 'user-1', type: 'royalty_payout', enabled: false },
+    ]);
+
+    const req = mockReq({
+      body: { preferences: [{ type: 'royalty_payout', enabled: false }] },
+    });
+    const { res, json } = mockRes();
+
+    await NotificationController.updatePreferences(req, res);
+
+    expect(mockUpdatePreferences).toHaveBeenCalledWith('user-1', [
+      { type: 'royalty_payout', enabled: false },
+    ]);
+    expect(json).toHaveBeenCalledWith({
+      success: true,
+      data: [{ id: 'p1', userId: 'user-1', type: 'royalty_payout', enabled: false }],
+    });
 describe('NotificationController.registerDeviceToken', () => {
   it('registers a device token for the authenticated user', async () => {
     mockRegisterDeviceToken.mockResolvedValue({

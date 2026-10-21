@@ -20,6 +20,10 @@ import { AccountDeletionRequest } from '../entities/AccountDeletionRequest';
 import { ProjectionCheckpoint } from '../entities/ProjectionCheckpoint';
 import { OnChainEventCount } from '../entities/OnChainEventCount';
 import { Notification } from '../entities/Notification';
+import { NotificationPreference } from '../entities/NotificationPreference';
+import { Release } from '../entities/Release';
+import { ReleaseTrack } from '../entities/ReleaseTrack';
+import { ArtistVerification } from '../entities/ArtistVerification';
 import { DeviceToken } from '../entities/DeviceToken';
 import { Release } from '../entities/Release';
 import { ReleaseTrack } from '../entities/ReleaseTrack';
@@ -60,6 +64,10 @@ const AppDataSource = new DataSource({
     ProjectionCheckpoint,
     OnChainEventCount,
     Notification,
+    NotificationPreference,
+    Release,
+    ReleaseTrack,
+    ArtistVerification,
     DeviceToken,
     Release,
     ReleaseTrack,

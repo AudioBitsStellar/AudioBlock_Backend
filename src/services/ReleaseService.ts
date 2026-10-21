@@ -1,6 +1,6 @@
-import { In, Repository } from 'typeorm';
+import { FindOptionsWhere, In, LessThanOrEqual, Repository } from 'typeorm';
 import AppDataSource from '../config/db';
-import { Release, ReleaseType } from '../entities/Release';
+import { Release, ReleaseStatus, ReleaseType } from '../entities/Release';
 import { ReleaseTrack } from '../entities/ReleaseTrack';
 import { Song } from '../entities/Song';
 import { AppError } from '../errors/AppError';
@@ -13,6 +13,8 @@ export interface CreateReleaseInput {
   type: ReleaseType;
   coverArt?: string;
   songIds: string[];
+  scheduledAt?: string | Date | null;
+  status?: ReleaseStatus;
 }
 
 export interface UpdateReleaseInput {
@@ -20,6 +22,8 @@ export interface UpdateReleaseInput {
   releaseDate?: string | Date;
   type?: ReleaseType;
   coverArt?: string;
+  scheduledAt?: string | Date | null;
+  status?: ReleaseStatus;
 }
 
 export interface ReleaseWithTracks extends Release {
@@ -37,6 +41,29 @@ export class ReleaseService {
     this.songRepo = AppDataSource.getRepository(Song);
   }
 
+  private resolveScheduleOnCreate(input: CreateReleaseInput): {
+    status: ReleaseStatus;
+    scheduledAt: Date | null;
+    publishedAt: Date | null;
+  } {
+    if (input.scheduledAt) {
+      const scheduledDate = new Date(input.scheduledAt);
+      if (isNaN(scheduledDate.getTime())) {
+        throw AppError.validation('Invalid scheduledAt date format');
+      }
+      if (scheduledDate > new Date()) {
+        return { status: ReleaseStatus.SCHEDULED, scheduledAt: scheduledDate, publishedAt: null };
+      }
+      return { status: ReleaseStatus.PUBLISHED, scheduledAt: null, publishedAt: new Date() };
+    }
+
+    if (input.status === ReleaseStatus.DRAFT) {
+      return { status: ReleaseStatus.DRAFT, scheduledAt: null, publishedAt: null };
+    }
+
+    return { status: ReleaseStatus.PUBLISHED, scheduledAt: null, publishedAt: new Date() };
+  }
+
   async create(input: CreateReleaseInput): Promise<ReleaseWithTracks> {
     if (!Object.values(ReleaseType).includes(input.type)) {
       throw AppError.validation(`type must be one of: ${Object.values(ReleaseType).join(', ')}`);
@@ -50,12 +77,17 @@ export class ReleaseService {
       throw AppError.notFound('One or more songIds do not exist');
     }
 
+    const { status, scheduledAt, publishedAt } = this.resolveScheduleOnCreate(input);
+
     const release = await this.releaseRepo.save(
       this.releaseRepo.create({
         title: input.title,
         artistId: input.artistId,
         releaseDate: new Date(input.releaseDate),
         type: input.type,
+        status,
+        scheduledAt,
+        publishedAt,
         coverArt: input.coverArt,
       }),
     );
@@ -69,10 +101,56 @@ export class ReleaseService {
     return this.getById(release.id);
   }
 
-  async findPaginated(page = 1, limit = 20, artistId?: string) {
+  /**
+   * Manually and immediately publish a release (Issue #423).
+   * Works for both draft and scheduled releases.
+   */
+  async publish(releaseId: string, artistId: string): Promise<Release> {
+    const release = await this.releaseRepo.findOneBy({ id: releaseId });
+    if (!release) throw AppError.notFound('Release not found');
+    if (release.artistId !== artistId) {
+      throw AppError.authorization('Only the release owner can publish this release');
+    }
+
+    release.status = ReleaseStatus.PUBLISHED;
+    release.publishedAt = new Date();
+    release.scheduledAt = null;
+
+    return this.releaseRepo.save(release);
+  }
+
+  /**
+   * Automatically publish releases whose scheduled publish time has arrived (Issue #423).
+   *
+   * @param asOf - Reference time to compare against (defaults to now, allows mocking in tests)
+   * @returns The list of releases that were published
+   */
+  async publishScheduledReleases(asOf: Date = new Date()): Promise<Release[]> {
+    const dueReleases = await this.releaseRepo.find({
+      where: {
+        status: ReleaseStatus.SCHEDULED,
+        scheduledAt: LessThanOrEqual(asOf),
+      },
+    });
+
+    const published: Release[] = [];
+    for (const release of dueReleases) {
+      release.status = ReleaseStatus.PUBLISHED;
+      release.publishedAt = release.scheduledAt || asOf;
+      published.push(await this.releaseRepo.save(release));
+    }
+
+    return published;
+  }
+
+  async findPaginated(page = 1, limit = 20, artistId?: string, status?: ReleaseStatus) {
     const skip = (page - 1) * limit;
+    const whereClause: FindOptionsWhere<Release> = {};
+    if (artistId) whereClause.artistId = artistId;
+    if (status) whereClause.status = status;
+
     const [items, total] = await this.releaseRepo.findAndCount({
-      where: artistId ? { artistId } : {},
+      where: whereClause,
       order: { releaseDate: 'DESC' },
       skip,
       take: limit,
@@ -103,6 +181,40 @@ export class ReleaseService {
     };
   }
 
+  private resolveScheduleOnUpdate(
+    updates: UpdateReleaseInput,
+    release: Release,
+  ): {
+    status: ReleaseStatus;
+    scheduledAt?: Date | null;
+    publishedAt?: Date | null;
+  } {
+    const initialStatus = updates.status !== undefined ? updates.status : release.status;
+
+    if (updates.scheduledAt === undefined) {
+      return {
+        status: initialStatus,
+        scheduledAt: release.scheduledAt,
+        publishedAt: release.publishedAt,
+      };
+    }
+
+    if (updates.scheduledAt === null) {
+      return { status: initialStatus, scheduledAt: null, publishedAt: release.publishedAt };
+    }
+
+    const scheduledDate = new Date(updates.scheduledAt);
+    if (isNaN(scheduledDate.getTime())) {
+      throw AppError.validation('Invalid scheduledAt date format');
+    }
+
+    if (scheduledDate > new Date()) {
+      return { status: ReleaseStatus.SCHEDULED, scheduledAt: scheduledDate, publishedAt: null };
+    }
+
+    return { status: ReleaseStatus.PUBLISHED, scheduledAt: null, publishedAt: new Date() };
+  }
+
   async update(
     releaseId: string,
     requesterId: string,
@@ -118,6 +230,13 @@ export class ReleaseService {
       throw AppError.validation(`type must be one of: ${Object.values(ReleaseType).join(', ')}`);
     }
 
+    if (updates.status && !Object.values(ReleaseStatus).includes(updates.status)) {
+      throw AppError.validation(
+        `status must be one of: ${Object.values(ReleaseStatus).join(', ')}`,
+      );
+    }
+
+    const schedule = this.resolveScheduleOnUpdate(updates, release);
     const wasUpcoming = !isReleasePublished(release.releaseDate);
 
     Object.assign(release, {
@@ -125,6 +244,9 @@ export class ReleaseService {
       ...(updates.releaseDate !== undefined && { releaseDate: new Date(updates.releaseDate) }),
       ...(updates.type !== undefined && { type: updates.type }),
       ...(updates.coverArt !== undefined && { coverArt: updates.coverArt }),
+      status: schedule.status,
+      scheduledAt: schedule.scheduledAt,
+      publishedAt: schedule.publishedAt,
     });
 
     const saved = await this.releaseRepo.save(release);

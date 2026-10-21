@@ -12,11 +12,22 @@ import {
 import { ConnectStellarWalletDTO } from '../dtos/ConnectStellarWalletDTO';
 import { PrepareArtistSetupDTO } from '../dtos/PrepareArtistSetupDTO';
 import { SubmitSignedXdrDTO } from '../dtos/SubmitSignedXdrDTO';
+import { ApplyVerificationDTO } from '../dtos/ApplyVerificationDTO';
 import { upload } from '../middlewares/upload';
 
 const artistProfileController = new ArtistProfileController();
 const artistOnChainController = new ArtistOnChainController();
 const router = Router();
+
+// Artist verification badge workflow (Issue #92, #426)
+router.post(
+  '/verify/apply',
+  authArtistMiddleware,
+  validateDTO(ApplyVerificationDTO),
+  artistProfileController.applyForVerification,
+);
+router.get('/verify/me', authArtistMiddleware, artistProfileController.getMyVerification);
+router.get('/:id/verification', artistProfileController.getVerificationBadge);
 
 // Public metadata endpoint for OG tags / JSON-LD (no auth, no private data)
 router.get('/:id/metadata', ArtistMetadataController.getMetadata);
