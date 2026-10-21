@@ -3,7 +3,8 @@ import { UploadController } from '../controllers/UploadController';
 import { validateDTO } from '../middlewares/validate';
 import { FinalizeUploadDTO } from '../dtos/FinalizeUploadDTO';
 import { UploadChunkDTO } from '../dtos/UploadChunkDTO';
-import { authArtistMiddleware } from '../middlewares/authMiddleware';
+import { authArtistMiddleware, requireAuth, optionalAuth } from '../middlewares/authMiddleware';
+import { etagCache } from '../middlewares/etag';
 import multer from 'multer';
 import { CreateCoverDTO } from '../dtos/CreateCoverDTO';
 import fs from 'fs';
@@ -11,6 +12,12 @@ import { SongController } from '../controllers/SongController';
 import { EmbedController } from '../controllers/EmbedController';
 import { SubmitSignedXdrDTO } from '../dtos/SubmitSignedXdrDTO';
 import { idempotency } from '../middlewares/idempotency';
+import { AddCollaboratorDTO } from '../dtos/AddCollaboratorDTO';
+import { UpdateCollaboratorDTO } from '../dtos/UpdateCollaboratorDTO';
+import { ApplyRoyaltyTemplateDTO } from '../dtos/ApplyRoyaltyTemplateDTO';
+import { reportRateLimiter } from '../middlewares/rateLimiter';
+import { ReportSongDTO } from '../dtos/ReportSongDTO';
+import { UpdateSongDTO } from '../dtos/UpdateSongDTO';
 
 const uploadController = new UploadController();
 const router = Router();
@@ -48,7 +55,6 @@ const ALLOWED_AUDIO_MIMES = [
   'audio/aac', // .aac
   'audio/mp4', // .m4a
   'audio/x-m4a', // .m4a (alt)
-  'audio/webm', // .webm
 ];
 
 const ALLOWED_IMAGE_MIMES = ['image/jpeg', 'image/png', 'image/jpg'];
@@ -85,7 +91,7 @@ const chunkUpload = multer({
   fileFilter: (req, file, cb) => {
     if (!ALLOWED_AUDIO_MIMES.includes(file.mimetype)) {
       return cb(
-        new Error('Invalid file type. Allowed audio formats: MP3, WAV, FLAC, OGG, AAC, M4A, WebM'),
+        new Error('Invalid file type. Allowed audio formats: MP3, WAV, FLAC, OGG, AAC, M4A'),
       );
     }
     cb(null, true);
@@ -94,6 +100,17 @@ const chunkUpload = multer({
 
 const coverUpload = multer({
   storage: coverStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB for cover images
+  fileFilter: (req, file, cb) => {
+    if (!ALLOWED_IMAGE_MIMES.includes(file.mimetype)) {
+      return cb(new Error('Invalid file type. Allowed image formats: JPG, PNG'));
+    }
+    cb(null, true);
+  },
+});
+// Replacement cover: kept in memory because CoverArtService reads file.buffer.
+const coverReplaceUpload = multer({
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB for cover images
   fileFilter: (req, file, cb) => {
     if (!ALLOWED_IMAGE_MIMES.includes(file.mimetype)) {
@@ -126,22 +143,103 @@ router.post(
 );
 router.post('/upload/suggest-tags', authArtistMiddleware, uploadController.suggestTagsAndGenres);
 
+// Search songs — must be before /:id to avoid being captured as an id param (#812)
+router.get('/search', SongController.searchSongs);
+
 // Stream Songs
 router.get('/stream/:id', SongController.streamSong);
 router.get('/popular', SongController.getPopularSongs);
 
+// Song & Artist statistics (Issues #814, #846). Artist stats also mounted at
+// /api/artist/:id/stats and /api/artists/:id/stats — see artistRoutes + app.ts.
+router.get('/artist/:artistId/stats', optionalAuth, SongController.getArtistStats);
+router.get('/:id/stats', optionalAuth, SongController.getSongStats);
+
 // Embeddable player endpoint — public, no auth, same rate limiting as streaming (Redis throttle)
 router.get('/embed/:id', EmbedController.getSongEmbed);
 
+// Listing and single-song reads. Both use optionalAuth so an artist can see
+// their own non-public songs. `/:id` is registered after every static GET path
+// above so it cannot capture them.
+router.get('/', optionalAuth, SongController.listSongs);
+router.get('/:id', optionalAuth, etagCache({ visibility: 'no-cache' }), SongController.getSong);
+
+// Play count: clients call this after 30 s of continuous playback (#792).
+// Incrementing on the HLS manifest fetch would inflate counts for buffering
+// and scrubbing; a dedicated POST fired by the player gives an accurate count.
+router.post('/:id/play', SongController.recordPlay);
+
 // Soroban on-chain song minting: the artist's wallet signs, the backend
 // only builds and relays the transaction.
-router.post('/:id/onchain/prepare-mint', authArtistMiddleware, idempotency(), SongController.prepareMint);
+router.post(
+  '/:id/onchain/prepare-mint',
+  authArtistMiddleware,
+  idempotency(),
+  SongController.prepareMint,
+);
 router.post(
   '/:id/onchain/submit-mint',
   authArtistMiddleware,
   idempotency(),
   validateDTO(SubmitSignedXdrDTO),
   SongController.submitMint,
+);
+
+// Edit or remove a song (owner or admin; enforced in SongService)
+router.patch('/:id', authArtistMiddleware, validateDTO(UpdateSongDTO), SongController.updateSong);
+router.delete('/:id', authArtistMiddleware, SongController.deleteSong);
+
+// Lyrics are public, but only served once the lyrics rights are confirmed
+router.get('/:id/lyrics', SongController.getLyrics);
+
+// Cover art: public read, owner-only replacement
+router.get('/:id/cover', SongController.getCoverArt);
+router.put(
+  '/:id/cover',
+  authArtistMiddleware,
+  coverReplaceUpload.single('cover'),
+  SongController.uploadCoverArt,
+);
+
+// Version history (owner or admin; enforced in SongController) (Issue #86)
+router.get('/:id/versions', requireAuth, SongController.listVersions);
+router.get('/:id/versions/:version', requireAuth, SongController.getVersion);
+
+// Version rollback (owner-only; creates a new version copying historical metadata, Issue #441)
+router.post(
+  '/:id/versions/:version/rollback',
+  authArtistMiddleware,
+  SongController.rollbackVersion,
+);
+
+// Content reports: one per user per song (a repeat returns 409), 10 per hour per user
+router.post(
+  '/:id/report',
+  requireAuth,
+  reportRateLimiter,
+  validateDTO(ReportSongDTO),
+  SongController.reportSong,
+);
+
+// Collaborator management (owner-only writes; credits are public to read)
+router.get('/:id/collaborators', SongController.listCollaborators);
+router.post(
+  '/:id/collaborators',
+  authArtistMiddleware,
+  validateDTO(AddCollaboratorDTO),
+  SongController.addCollaborator,
+);
+router.patch(
+  '/:id/collaborators/:userId',
+  authArtistMiddleware,
+  validateDTO(UpdateCollaboratorDTO),
+  SongController.updateCollaborator,
+);
+router.post(
+  '/:id/royalty-template',
+  authArtistMiddleware,
+  validateDTO(ApplyRoyaltyTemplateDTO),
+  SongController.applyTemplate,
 );
 
 // Collaborator dispute endpoints

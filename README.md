@@ -20,28 +20,12 @@ an artist's behalf without ever holding their private key.
 - [Documentation](#documentation)
 - [Getting Started](#getting-started)
 - [Scripts](#scripts)
+- [Troubleshooting](#troubleshooting)
 - [Known Issues / Cleanup Backlog](#known-issues--cleanup-backlog)
 
 ## Architecture
 
-```
-                 ┌──────────────┐        ┌──────────────┐
- Artist/Listener │   Frontend    │◀──────▶│   Express API │
-      Apps       │ (Next.js)     │  REST  │  (this repo)  │
-                 └──────────────┘        └──────┬───────┘
-                                                  │
-                ┌─────────────────┬──────────────┼───────────────┬──────────────┐
-                ▼                 ▼              ▼               ▼              ▼
-           PostgreSQL          Redis        RabbitMQ          S3            Stellar/Soroban
-         (TypeORM models)   (nonces,      (song_processing  (audio/cover    RPC (transaction
-                              manifest      queue)            storage)       relay only —
-                              cache)                                         no keys held)
-                                              │
-                                              ▼
-                                     Song Processor Worker
-                                  (ffmpeg transcode → HLS,
-                                   Pinata/IPFS metadata pin)
-```
+See the [source-controlled architecture diagram](docs/architecture.md) for the API, workers, storage, AI, indexer, and monitoring topology.
 
 The HTTP server starts immediately on boot (so deploy-platform health checks
 pass) and connects to RabbitMQ — and starts the background worker — only
@@ -119,10 +103,11 @@ appropriate role (`authArtistMiddleware` for artist-only routes).
 
 ### Artist — `/api/artist`
 
-| Method | Path                      | Auth   | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| ------ | ------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Method | Path                      | Auth   | Description |
+| ------ | ------------------------- | ------ | ----------- |
 | GET    | `/:id/metadata`           | —      | **Public artist metadata** — returns `{ openGraph: { title, description, image, url, type }, jsonLd: { "@context","@type","name",... }, profile: { id, username, name, bio, profileImage, pageCover, website, twitterUsername } }` for OG tags / link previews and search indexing. No private fields (email, walletAddress, stellarPublicKey) are ever exposed. Append `?format=html` for an HTML fragment with `<meta property="og:*">` + `<script type="application/ld+json">`. |
-| PATCH  | `/update-profile`         | artist | Updates bio/website/etc., accepts `profileImage`/`pageCover` uploads                                                                                                                                                                                                                                                                                                                                                                                                               |
+| GET    | `/:id/stats?window=`      | optional (ownership-checked) | **Artist overview stats** — also at `/api/artists/:id/stats` and `/api/song/artist/:artistId/stats`. `window=7d\|30d\|90d\|all-time` (default `30d`). Owner/admin gets `plays,saves,uniqueListeners,revenueStroops+followers`; public gets `plays,saves,followers`. `revenueStroops` = gross reconciled revenue; `followers` = all-time. No songs → `404 ARTIST_HAS_NO_SONGS`. |
+| PATCH  | `/update-profile`         | artist | Updates bio/website/etc., accepts `profileImage`/`pageCover` uploads |
 | POST   | `/onchain/connect-wallet` | artist | Records the artist's Stellar public key                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | POST   | `/onchain/prepare-setup`  | artist | Builds an unsigned `setup_artist_profile` Soroban transaction                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | POST   | `/onchain/submit-setup`   | artist | Submits the wallet-signed transaction, persists the resulting artist/token IDs                                                                                                                                                                                                                                                                                                                                                                                                     |
@@ -497,6 +482,12 @@ deployment secret stores or environment dashboards together with the contract
 repo deployment tag/commit in the release notes so backend and contract
 versions can be traced together.
 
+## Operations runbooks
+
+- [Disaster recovery: DB, S3, Redis, RabbitMQ and region loss](docs/runbooks/disaster-recovery.md)
+- [Staging and production parity audit and checklist](docs/staging-production-parity.md)
+- [Worker horizontal scaling, prefetch and multi-instance verification](docs/worker-scaling.md)
+
 ## S3 Storage and Lifecycle Management
 
 Audio uploads are stored in AWS S3, with a structured prefix strategy to
@@ -658,6 +649,7 @@ Additional in-repo docs live under [`docs/`](docs/):
 - [Deployment & Scaling Guide](docs/deployment-and-scaling.md) — expected
   CPU/memory sizing for the API and the ffmpeg-backed worker, how to measure
   it, and how to scale each process (Issue #405)
+- [Logging & Aggregation Guide](docs/logging-and-aggregation.md) — centralized log shipping to Grafana Loki via Promtail, LogQL queries, and sensitive data redaction (Issue #380)
 - [Architecture](docs/ARCHITECTURE.md) — high-level module layout
 - [AI Feature Set](docs/AI_FEATURES.md) — AI capabilities, what data is sent
   where, and the per-artist opt-in/opt-out story
@@ -698,18 +690,18 @@ This brings up the **minimal stack** (API `localhost:4000` + Postgres `5432` + R
 
 | Command                                             | What it starts                                                          |
 | --------------------------------------------------- | ----------------------------------------------------------------------- |
-| `docker compose up --build`                         | `backend` + `db` + `redis` (minimal, no profile)                        |
-| `docker compose --profile full up --build`          | Everything: minimal + `rabbitmq` + `pgadmin` + `prometheus` + `grafana` |
-| `docker compose --profile queue up --build`         | Minimal + `rabbitmq` (song-processing queue)                            |
-| `docker compose --profile tools up --build`         | Minimal + `pgadmin` (`localhost:5050`)                                  |
-| `docker compose --profile monitoring up --build`    | Minimal + `prometheus` (`9090`) + `grafana` (`3000`)                    |
-| `docker compose --profile observability up --build` | Same as `monitoring` (alias)                                            |
+| `docker compose up --build`                         | `backend` + `db` + `redis` (minimal, no profile)                                                |
+| `docker compose --profile full up --build`          | Everything: minimal + `rabbitmq` + `pgadmin` + `prometheus` + `grafana` + `loki` + `promtail`   |
+| `docker compose --profile queue up --build`         | Minimal + `rabbitmq` (song-processing queue)                                                    |
+| `docker compose --profile tools up --build`         | Minimal + `pgadmin` (`localhost:5050`)                                                          |
+| `docker compose --profile monitoring up --build`    | Minimal + `prometheus` (`9090`) + `grafana` (`3000`) + `loki` (`3100`) + `promtail`            |
+| `docker compose --profile observability up --build` | Same as `monitoring` (alias)                                                                    |
 
 `backend` no longer `depends_on: rabbitmq` — the API starts without a queue and connects to RabbitMQ lazily when it appears (see `src/index.ts`), so the minimal stack stays self-contained. Any combination of profiles can be stacked, e.g.:
 
 ```bash
 docker compose --profile queue --profile monitoring up --build
-# → backend + db + redis + rabbitmq + prometheus + grafana
+# → backend + db + redis + rabbitmq + prometheus + grafana + loki + promtail
 ```
 
 The full observability stack (`--profile full`) is unchanged from the pre-profile `docker compose up` topology and is what CI and `docker-compose.prod.yml` extend.
@@ -757,6 +749,7 @@ npm run dev
 | `npm run migration:run`                               | Applies pending migrations to the database                                                                                      |
 | `npm run migration:revert`                            | Reverts the last applied migration                                                                                              |
 | `npm test`                                            | Runs the full Jest suite (`src/__tests__/**/*.test.ts`)                                                                         |
+| `npm run test:changed`                                | Runs only tests affected by files changed since `main` (for fast local iteration; Issue #397)                                   |
 | `npm test -- src/__tests__/health.test.ts`            | Runs a single test file (swap in any path under `src/__tests__`)                                                                |
 | `npm run test:watch`                                  | Runs Jest in watch mode                                                                                                         |
 | `npm run dev:bootstrap`                               | Bootstraps Docker dependencies, runs migrations, seeds genres and test accounts (Issue #369)                                    |
@@ -766,9 +759,20 @@ npm run dev
 | `npm run env:check`                                   | Checks that `.env.example` lists every required var from `src/config/env.ts` (reports both missing and extra keys)              |
 | `npm run env:check:strict`                            | Same as above but fails on any extra key in `.env.example` (exact parity)                                                       |
 
+## Troubleshooting
+
+Operational runbooks and troubleshooting guides for common incidents and failure modes:
+
+| Guide / Runbook | Description |
+| :--- | :--- |
+| **[Database Backup & Restore](docs/runbooks/database-backup-restore.md)** | PostgreSQL backup schedule, S3 storage location, and step-by-step incident recovery/restore procedure (#372). |
+| **[Indexer Backfill Runbook](docs/indexer-backfill-runbook.md)** | Step-by-step guide for one-time historical contract event ingestion. |
+| **[Indexer Resync Runbook](docs/indexer-resync-runbook.md)** | Procedure for recovering from indexer lag, RPC outages, or blockchain reorgs. |
+| **[Database Pool Alerting](docs/db-pool-alerting.md)** | Diagnosing pool exhaustion, connection leaks, and adjusting `DB_POOL_MAX`. |
+| **[Redis Caching & Eviction](docs/adrs/008-caching-strategy.md)** | Cache TTL policies, `maxmemory-policy`, and handling memory pressure (#378). |
+
 ## Known Issues / Cleanup Backlog
 
-- `src/routes/twitterRoutesOld.ts` is an unused/superseded code path still present in the repo.
 - A handful of variables in `.env.example` (`REDIS_URL`, `JWT_EXPIRER_AT`,
   `PRIVATE_KEY`, `PRIVATE_KEY_2`, several OAuth1-style Twitter vars) are not
   currently read by any code.

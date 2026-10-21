@@ -8,6 +8,7 @@ import { Genre } from '../entities/Genre';
 import { Album } from '../entities/Album';
 import { RoyaltyPayout } from '../entities/RoyaltyPayout';
 import { WebhookSubscription } from '../entities/WebhookSubscription';
+import { WebhookDelivery } from '../entities/WebhookDelivery';
 import { TakedownRequest } from '../entities/TakedownRequest';
 import { ApiKey } from '../entities/ApiKey';
 import { AiGenerationRecord } from '../entities/AiGenerationRecord';
@@ -23,6 +24,11 @@ import { NotificationPreference } from '../entities/NotificationPreference';
 import { Release } from '../entities/Release';
 import { ReleaseTrack } from '../entities/ReleaseTrack';
 import { ArtistVerification } from '../entities/ArtistVerification';
+import { DeviceToken } from '../entities/DeviceToken';
+import { Release } from '../entities/Release';
+import { ReleaseTrack } from '../entities/ReleaseTrack';
+import { ReleasePreSave } from '../entities/ReleasePreSave';
+import { UserSave } from '../entities/UserSave';
 
 dotenv.config();
 
@@ -33,7 +39,8 @@ const AppDataSource = new DataSource({
   username: process.env.POSTGRES_USER || 'postgres',
   password: process.env.POSTGRES_PASSWORD || '1234',
   database: process.env.POSTGRES_DATABASE || 'audioblocks',
-  synchronize: process.env.NODE_ENV !== 'production',
+  synchronize: process.env.NODE_ENV === 'test',
+  migrationsRun: process.env.NODE_ENV !== 'test',
   dropSchema: false,
   ssl: false,
   logging: true,
@@ -45,6 +52,7 @@ const AppDataSource = new DataSource({
     Album,
     RoyaltyPayout,
     WebhookSubscription,
+    WebhookDelivery,
     TakedownRequest,
     ApiKey,
     AiGenerationRecord,
@@ -60,6 +68,11 @@ const AppDataSource = new DataSource({
     Release,
     ReleaseTrack,
     ArtistVerification,
+    DeviceToken,
+    Release,
+    ReleaseTrack,
+    ReleasePreSave,
+    UserSave,
   ],
   migrations: [__dirname + '/../migrations/*.{js,ts}'],
   migrationsTableName: 'migrations',

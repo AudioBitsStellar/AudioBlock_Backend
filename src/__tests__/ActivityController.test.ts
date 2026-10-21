@@ -12,6 +12,7 @@ import AppDataSource from '../config/db';
 describe('ActivityController.getActivityFeed', () => {
   let mockFeedRepo: any;
   let mockFollowRepo: any;
+  let mockSongRepo: any;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -22,9 +23,13 @@ describe('ActivityController.getActivityFeed', () => {
     mockFollowRepo = {
       find: jest.fn(),
     };
+    mockSongRepo = {
+      find: jest.fn().mockResolvedValue([]),
+    };
     (AppDataSource.getRepository as jest.Mock).mockImplementation((entity) => {
       if (entity.name === 'ActivityFeed') return mockFeedRepo;
       if (entity.name === 'UserFollow') return mockFollowRepo;
+      if (entity.name === 'Song') return mockSongRepo;
     });
   });
 
@@ -131,5 +136,65 @@ describe('ActivityController.getActivityFeed', () => {
         data: [],
       }),
     );
+  });
+
+  it('scopes to artist-authored plus owned-song activity when artistId is given', async () => {
+    const req = { query: { artistId: 'artist-1' } } as unknown as Request;
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    } as unknown as Response;
+
+    mockSongRepo.find.mockResolvedValue([{ id: 'song-1' }, { id: 'song-2' }]);
+
+    const qb: any = {
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      take: jest.fn().mockReturnThis(),
+      getManyAndCount: jest.fn().mockResolvedValue([[{ id: 'act-9' }], 1]),
+    };
+    mockFeedRepo.createQueryBuilder.mockReturnValue(qb);
+
+    await ActivityController.getActivityFeed(req, res);
+
+    expect(mockSongRepo.find).toHaveBeenCalled();
+    expect(qb.where).toHaveBeenCalledWith(
+      expect.stringContaining('activity.userId = :artistId'),
+      expect.objectContaining({ artistId: 'artist-1' }),
+    );
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ total: 1, data: [{ id: 'act-9' }] }),
+    );
+  });
+
+  it('supports artist/userId aliases and an empty catalogue', async () => {
+    const req = { query: { userId: 'artist-2' } } as unknown as Request;
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    } as unknown as Response;
+
+    mockSongRepo.find.mockResolvedValue([]);
+
+    const qb: any = {
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      take: jest.fn().mockReturnThis(),
+      getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+    };
+    mockFeedRepo.createQueryBuilder.mockReturnValue(qb);
+
+    await ActivityController.getActivityFeed(req, res);
+
+    expect(qb.where).toHaveBeenCalledWith(
+      expect.stringContaining('activity.userId = :artistId'),
+      expect.objectContaining({ artistId: 'artist-2' }),
+    );
+    expect(res.status).toHaveBeenCalledWith(200);
   });
 });

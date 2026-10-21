@@ -2,8 +2,13 @@ import { Router } from 'express';
 import { ArtistProfileController } from '../controllers/ArtistProfileController';
 import { ArtistOnChainController } from '../controllers/ArtistOnChainController';
 import { ArtistMetadataController } from '../controllers/ArtistMetadataController';
+import { SongController } from '../controllers/SongController';
 import { validateDTO } from '../middlewares/validate';
-import { authArtistMiddleware, requireArtistAndVerified } from '../middlewares/authMiddleware';
+import {
+  authArtistMiddleware,
+  optionalAuth,
+  requireArtistAndVerified,
+} from '../middlewares/authMiddleware';
 import { ConnectStellarWalletDTO } from '../dtos/ConnectStellarWalletDTO';
 import { PrepareArtistSetupDTO } from '../dtos/PrepareArtistSetupDTO';
 import { SubmitSignedXdrDTO } from '../dtos/SubmitSignedXdrDTO';
@@ -26,6 +31,12 @@ router.get('/:id/verification', artistProfileController.getVerificationBadge);
 
 // Public metadata endpoint for OG tags / JSON-LD (no auth, no private data)
 router.get('/:id/metadata', ArtistMetadataController.getMetadata);
+
+// Artist statistics (Issues #814, #846). Mounted at both /api/artist and
+// /api/artists (see app.ts). `optionalAuth` + ownership check in the controller:
+// owner/admin sees plays/saves/uniqueListeners/revenueStroops + all-time followers,
+// public sees plays/saves/followers. 404 ARTIST_HAS_NO_SONGS when no songs.
+router.get('/:id/stats', optionalAuth, SongController.getArtistStats);
 
 router.patch(
   '/update-profile',

@@ -135,6 +135,12 @@ export class PlaylistService {
       take: safeLimit,
     });
 
+    await Promise.all(
+      items.map(async (p) => {
+        (p as any).followerCount = await this.followRepo.count({ where: { playlistId: p.id } });
+      }),
+    );
+
     return {
       data: items,
       pagination: {
@@ -179,6 +185,9 @@ export class PlaylistService {
     if (playlist.isRuleBased) {
       playlist.songs = await this.resolveRuleSongs(playlist);
     }
+
+    const followerCount = await this.followRepo.count({ where: { playlistId } });
+    (playlist as any).followerCount = followerCount;
 
     return playlist;
   }

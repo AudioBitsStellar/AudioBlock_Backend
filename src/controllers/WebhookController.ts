@@ -6,10 +6,20 @@ import { User, UserRole } from '../entities/User';
 import AppDataSource from '../config/db';
 import logger from '../config/logger';
 
-const webhookService = new WebhookService();
-const userRepo: Repository<User> = AppDataSource.getRepository(User);
+let defaultWebhookService: WebhookService | null = null;
+function getWebhookService(): WebhookService {
+  if (!defaultWebhookService) {
+    defaultWebhookService = new WebhookService();
+  }
+  return defaultWebhookService;
+}
 
 export class WebhookController {
+  public static getWebhookService = getWebhookService;
+  public static setWebhookService(service: WebhookService | null): void {
+    defaultWebhookService = service;
+  }
+
   static register = async (req: Request, res: Response) => {
     try {
       const userId = (req as any).user?.id;
@@ -19,7 +29,7 @@ export class WebhookController {
       if (!endpoint)
         return res.status(400).json({ success: false, message: 'endpoint is required' });
 
-      const subscription = await webhookService.registerSubscription(
+      const subscription = await getWebhookService().registerSubscription(
         userId,
         endpoint,
         eventTypes,
@@ -35,7 +45,7 @@ export class WebhookController {
     try {
       const userId = (req as any).user?.id;
       if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });
-      const subs = await webhookService.listSubscriptions(userId);
+      const subs = await getWebhookService().listSubscriptions(userId);
       return res.status(200).json({ success: true, data: subs });
     } catch (error) {
       handleError(res, error);
@@ -47,7 +57,7 @@ export class WebhookController {
       const userId = (req as any).user?.id;
       if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });
       const id = req.params.id as string;
-      await webhookService.deleteSubscription(userId, id);
+      await getWebhookService().deleteSubscription(userId, id);
       return res.status(200).json({ success: true, message: 'Webhook subscription deleted' });
     } catch (error) {
       handleError(res, error);
@@ -60,7 +70,7 @@ export class WebhookController {
       const userId = (req as any).user?.id;
       const id = req.params.id as string;
       // Simple test: publish a test event to this subscription only if owned
-      const subs = await webhookService.listSubscriptions(userId);
+      const subs = await getWebhookService().listSubscriptions(userId);
       const target = subs.find((s) => s.id === id);
       if (!target)
         return res.status(404).json({ success: false, message: 'Subscription not found' });
@@ -71,9 +81,73 @@ export class WebhookController {
         timestamp: new Date().toISOString(),
         message: 'Test webhook delivery',
       };
-      await (webhookService as any).deliver(target.endpoint, payload, target.secret);
+      await getWebhookService().deliver(target.endpoint, payload, target.secret, target.id);
       return res.status(200).json({ success: true, message: 'Test event delivered' });
     } catch (error) {
+      handleError(res, error);
+    }
+  };
+
+  /**
+   * List delivery attempts for a subscription owned by the caller (Issue #824).
+   * GET /api/webhooks/:id/deliveries
+   */
+  static listDeliveries = async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+      const id = req.params.id as string;
+      const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string, 10) || 20));
+
+      const result = await getWebhookService().listDeliveries(id, userId, page, limit);
+      return res.status(200).json({ success: true, ...result });
+    } catch (error: any) {
+      if (error.message === 'Webhook subscription not found') {
+        return res.status(404).json({ success: false, message: error.message });
+      }
+      if (error.message === 'Forbidden: You do not own this webhook subscription') {
+        return res.status(403).json({ success: false, message: error.message });
+      }
+      handleError(res, error);
+    }
+  };
+
+  /**
+   * Trigger redelivery of an earlier delivery attempt (Issue #824).
+   * POST /api/webhooks/:id/deliveries/:deliveryId/redeliver
+   */
+  static redeliver = async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+      const id = req.params.id as string;
+      const deliveryId = req.params.deliveryId as string;
+
+      const result = await getWebhookService().redeliver(id, deliveryId, userId);
+      return res.status(200).json({
+        success: true,
+        message: 'Webhook redelivered successfully',
+        data: result,
+      });
+    } catch (error: any) {
+      if (
+        error.message === 'Webhook subscription not found' ||
+        error.message === 'Webhook delivery record not found'
+      ) {
+        return res.status(404).json({ success: false, message: error.message });
+      }
+      if (error.message === 'Forbidden: You do not own this webhook subscription') {
+        return res.status(403).json({ success: false, message: error.message });
+      }
+      if (error.message?.includes('No payload available')) {
+        return res.status(400).json({ success: false, message: error.message });
+      }
+      if (error.message?.includes('Webhook delivery failed after')) {
+        return res.status(502).json({ success: false, message: error.message });
+      }
       handleError(res, error);
     }
   };

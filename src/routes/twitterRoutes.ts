@@ -7,6 +7,7 @@ import { generateCodeVerifier, generateCodeChallenge } from '../utils/helpers';
 import { authArtistMiddleware } from '../middlewares/authMiddleware';
 import redis from '../config/redis';
 import { TweetDraftController } from '../controllers/TweetDraftController';
+import logger from '../config/logger';
 
 const router = Router();
 const tweetDraftController = new TweetDraftController();
@@ -43,7 +44,7 @@ router.get('/init', authArtistMiddleware, async (req: Request, res: Response) =>
 
     return res.redirect(twitterAuthURL);
   } catch (err: any) {
-    console.error('Twitter init failed:', err?.response?.data || err?.message || err);
+    logger.error({ err }, 'Twitter init failed');
     return res.status(500).json({ error: 'Twitter init failed' });
   }
 });
@@ -153,7 +154,7 @@ router.get('/callback', async (req: Request, res: Response) => {
 
     return res.redirect(`${successRedirect}?twitter_connected=1`);
   } catch (error: any) {
-    console.error('Twitter auth failed:', error.response?.data || error.message || error);
+    logger.error({ err: error }, 'Twitter auth failed');
     await redis.del(`twitter:state:${state}`);
     return res.status(500).json({ error: 'Twitter authentication failed' });
   }
@@ -190,7 +191,7 @@ router.post('/disconnect', authArtistMiddleware, async (req: Request, res: Respo
 
     return res.status(200).json({ success: true, message: 'Twitter account disconnected' });
   } catch (err: any) {
-    console.error('Twitter disconnect failed:', err?.message || err);
+    logger.error({ err }, 'Twitter disconnect failed');
     return res.status(500).json({ error: 'Twitter disconnect failed' });
   }
 });

@@ -1,4 +1,4 @@
-import { getChannel, MAIN_QUEUE, DLQ } from '../config/rabbitmq';
+import { getChannel, MAIN_QUEUE, DLQ, closeRabbitMQConnection } from '../config/rabbitmq';
 import AppDataSource from '../config/db';
 import { Song } from '../entities/Song';
 import { TransactionLogService } from '../services/TransactionLogService';
@@ -6,12 +6,14 @@ import { SongVersionService } from '../services/Song/SongVersionService';
 import { PinataService } from '../services/PinataService';
 import { SorobanService } from '../services/Soroban/SorobanService';
 import logger from '../config/logger';
+import { registerWorkerQueue } from '../utils/gracefulShutdown';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import axios from 'axios';
-import ffmpeg from 'fluent-ffmpeg';
+import { transcodeToHLS, analyzeLoudness, generateWaveformPeaks } from '../utils/ffmpeg';
 import { S3 } from 'aws-sdk';
+import { updateRabbitMQQueueDepth } from '../services/MetricsService';
 
 function getSongRepo() {
   return AppDataSource.getRepository(Song);
@@ -26,46 +28,34 @@ interface SongPayload {
 }
 
 /**
- * Transcode an MP3 file to HLS format.
- */
-async function transcodeToHLS(localFile: string, hlsDir: string): Promise<void> {
-  if (!fs.existsSync(hlsDir)) fs.mkdirSync(hlsDir, { recursive: true });
-
-  await new Promise<void>((resolve, reject) => {
-    ffmpeg(localFile)
-      .outputOptions([
-        '-codec: copy',
-        '-start_number 0',
-        '-hls_time 10',
-        '-hls_list_size 0',
-        '-f hls',
-      ])
-      .output(path.join(hlsDir, 'master.m3u8'))
-      .on('end', () => resolve())
-      .on('error', reject)
-      .run();
-  });
-}
-
-/**
- * Upload HLS files to S3.
+ * Upload HLS files to S3 recursively (Issue #768: supports nested variant directories).
  */
 async function uploadHLSToS3(songId: string, fileId: string): Promise<string> {
   const hlsDir = `uploads/hls/${fileId}`;
   const s3BasePath = `songs/${songId}/hls/`;
-  const hlsFiles = fs.readdirSync(hlsDir);
 
-  for (const f of hlsFiles) {
-    const filePath = path.join(hlsDir, f);
-    await s3
-      .upload({
-        Bucket: process.env.AWS_BUCKET_NAME!,
-        Key: `${s3BasePath}${f}`,
-        Body: fs.createReadStream(filePath),
-      })
-      .promise();
+  async function uploadDirectory(localDir: string, s3Prefix: string): Promise<void> {
+    const entries = fs.readdirSync(localDir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const localPath = path.join(localDir, entry.name);
+      const s3Key = `${s3Prefix}${entry.name}`;
+
+      if (entry.isDirectory()) {
+        await uploadDirectory(localPath, `${s3Key}/`);
+      } else {
+        await s3
+          .upload({
+            Bucket: process.env.AWS_BUCKET_NAME!,
+            Key: s3Key,
+            Body: fs.createReadStream(localPath),
+          })
+          .promise();
+      }
+    }
   }
 
+  await uploadDirectory(hlsDir, s3BasePath);
   return `https://${process.env.AWS_BUCKET_NAME}.s3.amazonaws.com/${s3BasePath}master.m3u8`;
 }
 
@@ -88,7 +78,7 @@ async function buildMetadata(song: Song, coverCid: string, masterUrl: string) {
     animation_url: masterUrl,
     attributes: [
       { trait_type: 'duration', value: song.duration || 0 },
-      { trait_type: 'loudness', value: song.loudness || 0 },
+      { trait_type: 'loudness', value: song.loudness ?? 0 },
       { trait_type: 'genre', value: song.genre },
       { trait_type: 'cover_url', value: coverCid },
       // AI disclosure (#283): flag when any AI-generated content was accepted.
@@ -123,13 +113,44 @@ async function processSongMessage(
   const localFile = path.join('uploads/merged', `${fileId}.mp3`);
   const hlsDir = `uploads/hls/${fileId}`;
 
-  // 1. Transcode to HLS
-  await transcodeToHLS(localFile, hlsDir);
+  // 1. Measure loudness (Issue #769)
+  try {
+    const loudnessData = await analyzeLoudness(localFile);
+    song.loudness = loudnessData.integratedLoudness;
+    song.truePeakDb = loudnessData.truePeak;
+    song.loudnessRange = loudnessData.loudnessRange;
+    await getSongRepo().save(song);
+    logger.info(
+      { songId, loudness: song.loudness, truePeak: song.truePeakDb, lra: song.loudnessRange },
+      'Loudness analysis complete',
+    );
+  } catch (error) {
+    logger.warn(
+      { songId, err: error },
+      'Loudness analysis failed, continuing without loudness data',
+    );
+  }
 
-  // 2. Upload to S3
+  // 1b. Generate waveform peaks (Issue #771)
+  try {
+    const waveformPeaks = await generateWaveformPeaks(localFile, 200);
+    song.waveformPeaks = waveformPeaks;
+    await getSongRepo().save(song);
+    logger.info({ songId, peakCount: waveformPeaks.length }, 'Waveform generation complete');
+  } catch (error) {
+    logger.warn(
+      { songId, err: error },
+      'Waveform generation failed, continuing without waveform data',
+    );
+  }
+
+  // 2. Transcode to HLS
+  await transcodeToHLS(localFile, hlsDir, songId);
+
+  // 3. Upload to S3
   const masterUrl = await uploadHLSToS3(songId, fileId);
 
-  // 3. Upload cover art to IPFS
+  // 4. Upload cover art to IPFS
   const tempCoverPath = path.join(os.tmpdir(), `${fileId}-cover.jpg`);
   const coverResponse = await axios.get<ArrayBuffer>(song.coverArtPath, {
     responseType: 'arraybuffer',
@@ -277,6 +298,7 @@ export async function getWorkerHealthStatus(
     const queueInfo = await channel.checkQueue(MAIN_QUEUE);
     pendingJobsCount = queueInfo.messageCount;
     activeConsumersCount = queueInfo.consumerCount;
+    updateRabbitMQQueueDepth(MAIN_QUEUE, pendingJobsCount);
   } catch (err: any) {
     return {
       status: 'error',
@@ -368,6 +390,11 @@ export function setWorkerHealthStateForTests(state: {
 export async function startSongWorker() {
   try {
     const channel = getChannel();
+    const prefetch = Number(process.env.WORKER_PREFETCH || '1');
+    if (!Number.isSafeInteger(prefetch) || prefetch < 1) {
+      throw new Error('WORKER_PREFETCH must be a positive integer');
+    }
+    await channel.prefetch(prefetch);
     const logService = new TransactionLogService();
     const versionService = new SongVersionService();
 
@@ -377,41 +404,47 @@ export async function startSongWorker() {
     workerStartedAt = new Date();
     logger.info(`🎵 Waiting for messages in queue: ${MAIN_QUEUE} (max attempts: ${MAX_ATTEMPTS})`);
 
+    const registration = registerWorkerQueue(channel, closeRabbitMQConnection);
     const consumeResult = await channel.consume(MAIN_QUEUE, async (msg) => {
       if (!msg) return;
 
-      const payload = parsePayload(msg.content.toString());
-      if (!payload) {
-        logger.error({ raw: msg.content.toString() }, 'Malformed queue message, discarding');
-        channel.nack(msg, false, false);
-        return;
-      }
+      await registration.handle(msg, async (isActive) => {
+        const payload = parsePayload(msg.content.toString());
+        if (!payload) {
+          logger.error({ raw: msg.content.toString() }, 'Malformed queue message, discarding');
+          channel.nack(msg, false, false);
+          return;
+        }
 
-      const attempt = payload.attempt ?? 1;
-      logger.info(
-        { songId: payload.songId, attempt },
-        `Processing song (attempt ${attempt}/${MAX_ATTEMPTS})`,
-      );
+        const attempt = payload.attempt ?? 1;
+        logger.info(
+          { songId: payload.songId, attempt },
+          `Processing song (attempt ${attempt}/${MAX_ATTEMPTS})`,
+        );
 
-      lastJobStartedAt = new Date();
+        lastJobStartedAt = new Date();
 
-      try {
-        await processSongMessage(payload, logService, versionService);
-        lastJobProcessedAt = new Date();
-        jobsProcessedCount++;
-        channel.ack(msg);
-      } catch (error) {
-        jobsFailedCount++;
-        handleFailure(channel, msg, payload, error);
-      }
+        try {
+          await processSongMessage(payload, logService, versionService);
+          lastJobProcessedAt = new Date();
+          jobsProcessedCount++;
+          if (isActive()) channel.ack(msg);
+        } catch (error) {
+          jobsFailedCount++;
+          if (isActive()) handleFailure(channel, msg, payload, error);
+        }
+      });
     });
 
     if (consumeResult && consumeResult.consumerTag) {
+      await registration.setConsumerTag(consumeResult.consumerTag);
       consumerTag = consumeResult.consumerTag;
       isConsuming = true;
     }
+    return isConsuming;
   } catch (error) {
     isConsuming = false;
     logger.error({ err: error }, 'Failed to start song worker');
+    return false;
   }
 }

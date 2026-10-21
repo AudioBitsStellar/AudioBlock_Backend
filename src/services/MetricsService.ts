@@ -147,6 +147,13 @@ export const authFailuresTotal = new client.Counter({
   registers: [register],
 });
 
+export const rateLimitFallbacksTotal = new client.Counter({
+  name: 'rate_limit_fallbacks_total',
+  help: 'Total requests handled by a rate limiter fallback because Redis was unavailable',
+  labelNames: ['limiter', 'mode'] as const, // mode: 'open'|'closed'|'memory'
+  registers: [register],
+});
+
 export const privyCircuitState = new client.Gauge({
   name: 'privy_circuit_state',
   help: 'Current state of the Privy circuit breaker (1 for the active state, 0 otherwise)',
@@ -184,6 +191,43 @@ export const sorobanRpcLatencySeconds = new client.Histogram({
   buckets: [0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30],
   registers: [register],
 });
+
+// ── RabbitMQ queue metrics (Issue #377) ──────────────────────────────────────
+
+export const rabbitmqQueueDepth = new client.Gauge({
+  name: 'rabbitmq_queue_depth',
+  help: 'Current number of messages in the RabbitMQ queue (queue depth)',
+  labelNames: ['queue'] as const,
+  registers: [register],
+});
+
+/**
+ * Update the Prometheus gauge reflecting the current RabbitMQ queue depth.
+ *
+ * @param queue - The queue name (e.g. 'song_processing')
+ * @param depth - The number of pending/waiting messages in the queue
+ */
+export function updateRabbitMQQueueDepth(queue: string, depth: number): void {
+  rabbitmqQueueDepth.set({ queue }, Math.max(0, depth));
+}
+
+/**
+ * Poll and record the depth for a given RabbitMQ queue using an active channel.
+ *
+ * @param channel - RabbitMQ channel with checkQueue capability
+ * @param queueName - The queue name (defaults to 'song_processing')
+ * @returns The current message count (queue depth)
+ */
+export async function collectQueueDepth(
+  channel: {
+    checkQueue: (name: string) => Promise<{ messageCount: number; consumerCount: number }>;
+  },
+  queueName: string = 'song_processing',
+): Promise<number> {
+  const info = await channel.checkQueue(queueName);
+  rabbitmqQueueDepth.set({ queue: queueName }, info.messageCount);
+  return info.messageCount;
+}
 
 /**
  * Update the Prometheus gauges reflecting the current PostgreSQL connection

@@ -16,6 +16,8 @@ const mockMarkAsRead = jest.fn();
 const mockMarkAllAsRead = jest.fn();
 const mockGetPreferences = jest.fn();
 const mockUpdatePreferences = jest.fn();
+const mockRegisterDeviceToken = jest.fn();
+const mockRemoveDeviceToken = jest.fn();
 
 jest.mock('../services/NotificationService', () => ({
   NotificationService: jest.fn().mockImplementation(() => ({
@@ -24,6 +26,8 @@ jest.mock('../services/NotificationService', () => ({
     markAllAsRead: mockMarkAllAsRead,
     getPreferences: mockGetPreferences,
     updatePreferences: mockUpdatePreferences,
+    registerDeviceToken: mockRegisterDeviceToken,
+    removeDeviceToken: mockRemoveDeviceToken,
   })),
 }));
 
@@ -149,5 +153,38 @@ describe('NotificationController.preferences', () => {
       success: true,
       data: [{ id: 'p1', userId: 'user-1', type: 'royalty_payout', enabled: false }],
     });
+describe('NotificationController.registerDeviceToken', () => {
+  it('registers a device token for the authenticated user', async () => {
+    mockRegisterDeviceToken.mockResolvedValue({
+      id: 'dt-1',
+      userId: 'user-1',
+      token: 'fcm-token-xyz',
+      platform: 'ios',
+    });
+
+    const req = mockReq({ body: { token: 'fcm-token-xyz', platform: 'ios' } });
+    const { res, json } = mockRes();
+
+    await NotificationController.registerDeviceToken(req, res);
+
+    expect(mockRegisterDeviceToken).toHaveBeenCalledWith('user-1', 'fcm-token-xyz', 'ios');
+    expect(json).toHaveBeenCalledWith({
+      success: true,
+      data: expect.objectContaining({ token: 'fcm-token-xyz', platform: 'ios' }),
+    });
+  });
+});
+
+describe('NotificationController.removeDeviceToken', () => {
+  it('removes a device token for the authenticated user', async () => {
+    mockRemoveDeviceToken.mockResolvedValue(true);
+
+    const req = mockReq({ body: { token: 'fcm-token-xyz' } });
+    const { res, json } = mockRes();
+
+    await NotificationController.removeDeviceToken(req, res);
+
+    expect(mockRemoveDeviceToken).toHaveBeenCalledWith('user-1', 'fcm-token-xyz');
+    expect(json).toHaveBeenCalledWith({ success: true, removed: true });
   });
 });

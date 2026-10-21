@@ -12,7 +12,7 @@ import {
   AiGenerationFeature,
   AiGenerationJobPayload,
   AiGenerationService,
-} from '../services/ai/AiGenerationService';
+} from '../services/AI/AiGenerationService';
 import { registerJobHandler } from './JobQueueWorker';
 
 export function registerAiJobHandlers(): void {

@@ -33,12 +33,16 @@ export class WebhookSubscription {
   @Column()
   secret!: string;
 
-  /** Comma-separated list stored as simple-array; empty or ["*"] means all events */
-  @Column({ type: 'simple-array', nullable: true })
+  /** Postgres text[]; empty or ["*"] means all events (GIN-indexed in the migration) */
+  @Column({ type: 'text', array: true, nullable: true })
   eventTypes!: string[];
 
   @Column({ default: true })
   isActive!: boolean;
+
+  /** Number of consecutive failed event deliveries (auto-disables when threshold exceeded) */
+  @Column({ type: 'int', default: 0 })
+  consecutiveFailures!: number;
 
   @CreateDateColumn()
   createdAt!: Date;

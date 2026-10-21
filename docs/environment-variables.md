@@ -45,14 +45,22 @@ Complete reference of all environment variables used by the AudioBlocks Backend.
 
 ## Redis
 
-| Variable         | Required | Default | Description         |
-| ---------------- | -------- | ------- | ------------------- |
-| `REDIS_HOST`     | No       | `redis` | Redis host address  |
-| `REDIS_PORT`     | No       | `6379`  | Redis port          |
-| `REDIS_USERNAME` | No       | —       | Redis auth username |
-| `REDIS_PASSWORD` | No       | —       | Redis auth password |
+| Variable             | Required | Default        | Description                                                                                             |
+| -------------------- | -------- | -------------- | ------------------------------------------------------------------------------------------------------- |
+| `REDIS_HOST`         | No       | `redis`        | Redis host address                                                                                      |
+| `REDIS_PORT`         | No       | `6379`         | Redis port                                                                                              |
+| `REDIS_USERNAME`     | No       | —              | Redis auth username                                                                                     |
+| `REDIS_PASSWORD`     | No       | —              | Redis auth password                                                                                     |
+| `MANIFEST_CACHE_TTL` | No       | `300`          | Manifest cache TTL in seconds. Must be strictly less than `SIGNED_URL_EXPIRES` (#828).                  |
+| `SIGNED_URL_EXPIRES` | No       | `600`          | S3 presigned URL expiration in seconds. Must strictly exceed `MANIFEST_CACHE_TTL` (#828).               |
 
 **Sensitive:** `REDIS_PASSWORD` — never log or commit.
+
+### Eviction Policy & Memory Management (#378)
+
+- **Configured Eviction Policy:** `maxmemory-policy volatile-lru`
+- **Memory Cap:** `maxmemory 200mb` (in Docker / production container limits of 256MB)
+- **Rationale:** Redis stores a mix of persistent secondary search indices (`song:idx:*`), short-lived authentication nonces (`nonce:*`, 300s TTL), OAuth state (`twitter:state:*`, 300s TTL), and derived caches. Under `volatile-lru`, keys without a TTL (search index, job queues) are never evicted, and idle cached metadata is evicted before active in-flight authentication tokens. See [ADR-008](adrs/008-caching-strategy.md) for detailed evaluation.
 
 ---
 
@@ -203,6 +211,7 @@ _\* Required for the selected network. All five IDs must be set for the chosen `
 | `AUTH_RATE_LIMIT_MAX`        | No       | `20`              | Max requests per window for auth endpoints   |
 | `NONCE_RATE_LIMIT_WINDOW_MS` | No       | `900000` (15 min) | Time window for nonce endpoint rate limiting |
 | `NONCE_RATE_LIMIT_MAX`       | No       | `10`              | Max requests per window for nonce endpoint   |
+| `AUTH_RATE_LIMIT_MEMORY_FALLBACK` | No  | `false`           | When Redis is down, enforce per-instance in-memory limits on auth, nonce and password-reset endpoints instead of returning `503` (see [RATE_LIMITING.md](./RATE_LIMITING.md#redis-unavailable)) |
 
 ---
 
@@ -228,6 +237,12 @@ _\* Required for the selected network. All five IDs must be set for the chosen `
 
 ## Worker / Job Queue
 
+Song consumers use `WORKER_PREFETCH` (positive integer, default `1`) to bound
+unacknowledged deliveries and in-flight async processing. See the
+[worker scaling guide](worker-scaling.md) before raising it. The song consumer's
+attempt limit is currently hardcoded; the `WORKER_*` retry examples below are
+not read by that consumer.
+
 | Variable                   | Required | Default | Description                                         |
 | -------------------------- | -------- | ------- | --------------------------------------------------- |
 | `WORKER_MAX_ATTEMPTS`      | No       | `3`     | Max processing attempts before DLQ (song processor) |
@@ -239,6 +254,7 @@ _\* Required for the selected network. All five IDs must be set for the chosen `
 | `JOB_COMPLETED_TTL_S`      | No       | `3600`  | How long (seconds) to retain completed jobs         |
 | `JOB_QUEUE_WARN_THRESHOLD` | No       | `100`   | Warn when queued jobs exceed this count             |
 | `JOB_MONITOR_INTERVAL_MS`  | No       | `30000` | Interval (ms) for queue depth metrics logging       |
+| `HLS_AUDIO_BITRATE`        | No       | `256k`  | Target AAC bitrate for HLS transcoding (e.g. `128k`, `256k`) |
 
 ---
 

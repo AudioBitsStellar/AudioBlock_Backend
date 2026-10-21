@@ -61,12 +61,12 @@ export class AuthController {
         enableImplicitConversion: true,
       });
 
-      console.log('Transformed userData:', userData);
+      logger.debug({ userData: { ...userData, password: '[REDACTED]' } }, 'Transformed userData');
 
       // Validate the transformed data
       const errors = await validate(userData);
       if (errors.length > 0) {
-        console.log('Validation errors:', errors);
+        logger.warn({ errors }, 'Validation errors in register');
         throw AppError.validation('Validation failed', toValidationDetails(errors));
       }
 
@@ -97,12 +97,12 @@ export class AuthController {
         enableImplicitConversion: true,
       });
 
-      console.log('Transformed userData:', userData);
+      logger.debug({ userData: { ...userData, password: '[REDACTED]' } }, 'Transformed userData');
 
       // Validate the transformed data
       const errors = await validate(userData);
       if (errors.length > 0) {
-        console.log('Validation errors:', errors);
+        logger.warn({ errors }, 'Validation errors in register');
         throw AppError.validation('Validation failed', toValidationDetails(errors));
       }
 
@@ -134,7 +134,7 @@ export class AuthController {
 
       const errors = await validate(loginData);
       if (errors.length > 0) {
-        console.log('Validation errors:', errors);
+        logger.warn({ errors }, 'Validation errors in login');
         throw AppError.validation('Validation failed', toValidationDetails(errors));
       }
       const user = await this.authService.login(loginData);

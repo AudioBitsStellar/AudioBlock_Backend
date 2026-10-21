@@ -65,7 +65,7 @@ groups:
           rate(auth_failures_total[5m]) > 10
         for: 10m
         labels:
-        severity: warning
+          severity: warning
           team: backend
         annotations:
           summary: "High authentication failure rate detected"
@@ -74,6 +74,7 @@ groups:
             for auth_method={{ $labels.auth_method }}, failure_type={{ $labels.failure_type }}.
             This could indicate credential stuffing, expired tokens, or a service issue.
           dashboard: "http://localhost:3001/d/audioblock-app"
+          runbook: 'https://github.com/AudioBitsStellar/AudioBlock_Backend/blob/main/docs/runbooks/monitoring-alerts.md'
 
       # Fires when Privy circuit breaker opens (Issue #635)
       - alert: PrivyCircuitBreakerOpen
@@ -89,6 +90,7 @@ groups:
             The Privy authentication service circuit breaker has been open for over 5 minutes.
             Privy authentication is degraded and serving stale keys if available.
           dashboard: "http://localhost:3001/d/audioblock-app"
+          runbook: 'https://github.com/AudioBitsStellar/AudioBlock_Backend/blob/main/docs/runbooks/monitoring-alerts.md'
 
       # Fires when Privy is serving stale keys frequently (Issue #634)
       - alert: PrivyServingStaleKeys
@@ -104,6 +106,7 @@ groups:
             Privy JWKS refreshes have been failing and stale keys are being served.
             This indicates Privy API connectivity issues.
           dashboard: "http://localhost:3001/d/audioblock-app"
+          runbook: 'https://github.com/AudioBitsStellar/AudioBlock_Backend/blob/main/docs/runbooks/monitoring-alerts.md'
 
       # Fires when session revocations spike (Issue #625)
       - alert: HighSessionRevocationRate
@@ -118,5 +121,82 @@ groups:
           description: >
             {{ $value | humanize }} revoked sessions per second are being rejected.
             This could indicate users attempting to reuse revoked tokens or a session management issue.
+          dashboard: "http://localhost:3001/d/audioblock-app"
+          runbook: 'https://github.com/AudioBitsStellar/AudioBlock_Backend/blob/main/docs/runbooks/monitoring-alerts.md'
+
+  # HTTP reliability monitoring (Issue #383)
+  - name: audioblock-http
+    rules:
+      - alert: HighHttp5xxRate
+        expr: |
+          (
+            sum(rate(http_requests_total{status=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total[5m]))
+          ) > 0.05
+          and sum(rate(http_requests_total[5m])) > 0.1
+        for: 10m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: 'HTTP 5xx error rate is above 5%'
+          description: >
+            More than 5% of HTTP requests have returned 5xx responses for 10 minutes.
+            Current error ratio: {{ $value | humanizePercentage }}.
+          dashboard: 'http://localhost:3001/d/audioblock-app'
+          runbook: 'https://github.com/AudioBitsStellar/AudioBlock_Backend/blob/main/docs/runbooks/monitoring-alerts.md'
+
+      - alert: HighHttpP95Latency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(http_request_duration_seconds_bucket[5m]))
+          ) > 2.5
+        for: 10m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: 'HTTP p95 latency is above 2.5 seconds'
+          description: >
+            The estimated HTTP p95 latency has exceeded 2.5 seconds for 10 minutes.
+            Current p95: {{ $value | humanizeDuration }}.
+          dashboard: 'http://localhost:3001/d/audioblock-app'
+          runbook: 'https://github.com/AudioBitsStellar/AudioBlock_Backend/blob/main/docs/runbooks/monitoring-alerts.md'
+
+  # RabbitMQ queue backlog monitoring (Issue #377)
+  - name: audioblock-rabbitmq
+    rules:
+      # Fires when song_processing queue backs up for 5+ minutes (worker crash, ffmpeg unavailable, etc.)
+      - alert: SongProcessingQueueBacklog
+        expr: |
+          rabbitmq_queue_depth{queue="song_processing"} > 10
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "RabbitMQ song_processing queue backlog detected"
+          description: >
+            The song_processing queue has had {{ $value }} pending messages for over 5 minutes.
+            Song workers may have stalled, crashed, or encountered processing failures.
+          runbook: "https://github.com/AudioBitsStellar/AudioBlock_Backend/blob/main/docs/worker-scaling.md"
+          dashboard: "http://localhost:3001/d/audioblock-app"
+
+      # Escalates to critical when backlog is sustained at high levels
+      - alert: CriticalSongProcessingQueueBacklog
+        expr: |
+          rabbitmq_queue_depth{queue="song_processing"} > 50
+        for: 10m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "Critical backlog on RabbitMQ song_processing queue"
+          description: >
+            The song_processing queue has exceeded 50 pending messages for over 10 minutes (current: {{ $value }}).
+            Immediate worker restart or scaling intervention required.
+          runbook: "https://github.com/AudioBitsStellar/AudioBlock_Backend/blob/main/docs/worker-scaling.md"
           dashboard: "http://localhost:3001/d/audioblock-app"
 

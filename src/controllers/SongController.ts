@@ -1,7 +1,13 @@
 import { Request, Response } from 'express';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
+import { ListSongsQueryDTO } from '../dtos/ListSongsQueryDTO';
+import { formatValidationErrors } from '../middlewares/validate';
+import { routeParam } from '../utils/routeParams';
 import { generateListenerKey } from '../utils/listenerKey';
 import AppDataSource from '../config/db';
 import { Song } from '../entities/Song';
+import { UserRole } from '../entities/User';
 import { SongPlayEvent } from '../entities/SongPlayEvent';
 import { SongSave } from '../entities/SongSave';
 import redis from '../config/redis';
@@ -30,18 +36,8 @@ const coverArtService = new CoverArtService();
 export class SongController {
   static getSong = async (req: Request, res: Response) => {
     try {
-      const song = await songService.getSong(req.params.id as string);
+      const song = await songService.getSongView(routeParam(req.params.id), (req as any).user?.id);
       return res.status(200).json({ success: true, data: song });
-    } catch (error) {
-      handleError(req, res, error);
-    }
-  };
-
-  static createSong = async (req: Request, res: Response) => {
-    try {
-      const userId = (req as any).user.id;
-      const song = await songService.createSong(req.body, userId);
-      return res.status(201).json({ success: true, data: song });
     } catch (error) {
       handleError(req, res, error);
     }
@@ -49,7 +45,7 @@ export class SongController {
 
   static updateSong = async (req: Request, res: Response) => {
     try {
-      const song = await songService.updateSong(req.params.id as string, req.body);
+      const song = await songService.updateSong(req.params.id as string, req.body, req.user!);
       return res.status(200).json({ success: true, data: song });
     } catch (error) {
       handleError(req, res, error);
@@ -58,8 +54,8 @@ export class SongController {
 
   static deleteSong = async (req: Request, res: Response) => {
     try {
-      await songService.deleteSong(req.params.id as string);
-      return res.status(200).json({ success: true, data: null });
+      const result = await songService.deleteSong(req.params.id as string, req.user!);
+      return res.status(200).json({ success: true, data: { hidden: result.hidden } });
     } catch (error) {
       handleError(req, res, error);
     }
@@ -67,8 +63,15 @@ export class SongController {
 
   static listSongs = async (req: Request, res: Response) => {
     try {
-      const songs = await songService.listSongs(req.query);
-      return res.status(200).json({ success: true, data: songs });
+      const query = plainToInstance(ListSongsQueryDTO, req.query, {
+        enableImplicitConversion: true,
+      });
+      const errors = await validate(query);
+      if (errors.length > 0) {
+        throw AppError.validation('Validation failed', formatValidationErrors(errors));
+      }
+      const result = await songService.listSongs(query, (req as any).user?.id);
+      return res.status(200).json({ success: true, ...result });
     } catch (error) {
       handleError(req, res, error);
     }
@@ -210,19 +213,6 @@ export class SongController {
     }
   };
 
-  static rebuildSearchIndex = async (req: Request, res: Response) => {
-    try {
-      const indexed = await songService.rebuildSearchIndex();
-      return res.status(200).json({
-        success: true,
-        message: 'Search index rebuilt',
-        indexed,
-      });
-    } catch (error) {
-      handleError(req, res, error);
-    }
-  };
-
   static getPopularSongs = async (req: Request, res: Response) => {
     try {
       const page = parseInt(req.query.page as string) || 1;
@@ -351,25 +341,127 @@ export class SongController {
     }
   };
 
-  /** GET /api/songs/:id/stats — aggregated song statistics (Issue #87). */
+  /** GET /api/song/:id/stats — aggregated song statistics (Issue #814). */
   static getSongStats = async (req: Request, res: Response) => {
     try {
       const songId = req.params.id as string;
-      const window = parseWindow(req.query.window);
+      let window: string;
+      try {
+        window = parseWindow(req.query.window);
+      } catch (err: any) {
+        throw AppError.validation(err.message, undefined, 'INVALID_WINDOW');
+      }
+
+      const songRepo = AppDataSource.getRepository(Song);
+      const song = await songRepo.findOne({
+        where: { id: songId },
+        select: ['id', 'artistId'],
+      });
+      if (!song) {
+        throw AppError.notFound('Song not found', undefined, 'SONG_NOT_FOUND');
+      }
+
+      const caller = (req as any).user;
+      const isOwner = Boolean(
+        caller &&
+          (caller.id === song.artistId ||
+            caller.role === UserRole.ADMIN ||
+            caller.role === UserRole.MODERATOR),
+      );
+
       const stats = await songStatsService.getSongStats(songId, window);
-      return res.status(200).json({ success: true, data: stats });
+
+      const data = isOwner
+        ? stats
+        : {
+            ...stats,
+            totals: {
+              plays: stats.totals.plays,
+              saves: stats.totals.saves,
+            },
+            previous: stats.previous
+              ? {
+                  plays: stats.previous.plays,
+                  saves: stats.previous.saves,
+                }
+              : null,
+            comparison: stats.comparison
+              ? {
+                  plays: stats.comparison.plays,
+                  saves: stats.comparison.saves,
+                }
+              : null,
+          };
+
+      res.set('Cache-Control', isOwner ? 'private, max-age=300' : 'public, max-age=300');
+      res.set('Vary', 'Authorization');
+      return res.status(200).json({ success: true, data });
     } catch (error) {
       handleError(req, res, error);
     }
   };
 
-  /** GET /api/artists/:id/stats — artist-level aggregation (Issue #87). */
+  /**
+   * GET /api/artists/:id/stats?window=7d|30d|90d|all-time
+   * (aliases: /api/artist/:id/stats, /api/song/artist/:artistId/stats) — artist overview (Issues #814, #846).
+   *
+   * Auth: `optionalAuth`. Ownership-checked: the artist owner (`caller.id === artistId`)
+   * or admin/moderator receives full metrics (`plays`, `saves`, `uniqueListeners`,
+   * `revenueStroops` + all-time `followers`); everyone else receives public
+   * `plays`, `saves` and `followers` only. Financial totals must come from here —
+   * never reconstruct revenue from `/api/activity` feeds.
+   *
+   * Semantics: `window` defaults to `30d`. `revenueStroops` is gross song revenue
+   * (`SUM(grossAmount)` over `status='reconciled'` payout rows), not the artist
+   * recipient share. `followers` is all-time. No-songs result: 404
+   * `ARTIST_HAS_NO_SONGS`.
+   */
   static getArtistStats = async (req: Request, res: Response) => {
     try {
-      const artistId = req.params.id as string;
-      const window = parseWindow(req.query.window);
+      const artistId = (req.params.artistId || req.params.id) as string;
+      let window: string;
+      try {
+        window = parseWindow(req.query.window);
+      } catch (err: any) {
+        throw AppError.validation(err.message, undefined, 'INVALID_WINDOW');
+      }
+
+      const caller = (req as any).user;
+      const isOwner = Boolean(
+        caller &&
+          (caller.id === artistId ||
+            caller.role === UserRole.ADMIN ||
+            caller.role === UserRole.MODERATOR),
+      );
+
       const stats = await songStatsService.getArtistStats(artistId, window);
-      return res.status(200).json({ success: true, data: stats });
+
+      const data = isOwner
+        ? stats
+        : {
+            ...stats,
+            totals: {
+              plays: stats.totals.plays,
+              saves: stats.totals.saves,
+              followers: (stats.totals as any).followers,
+            },
+            previous: stats.previous
+              ? {
+                  plays: stats.previous.plays,
+                  saves: stats.previous.saves,
+                }
+              : null,
+            comparison: stats.comparison
+              ? {
+                  plays: stats.comparison.plays,
+                  saves: stats.comparison.saves,
+                }
+              : null,
+          };
+
+      res.set('Cache-Control', isOwner ? 'private, max-age=300' : 'public, max-age=300');
+      res.set('Vary', 'Authorization');
+      return res.status(200).json({ success: true, data });
     } catch (error) {
       handleError(req, res, error);
     }
@@ -432,8 +524,15 @@ export class SongController {
   static listVersions = async (req: Request, res: Response) => {
     try {
       const songId = req.params.id as string;
-      const versions = await songVersionService.listVersions(songId);
-      return res.status(200).json({ success: true, count: versions.length, data: versions });
+      await songVersionService.assertCanViewHistory(songId, req.user!);
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 20;
+      const result = await songVersionService.listVersions(songId, page, limit);
+      return res.status(200).json({
+        success: true,
+        data: result.versions,
+        pagination: result.pagination,
+      });
     } catch (error) {
       handleError(req, res, error);
     }
@@ -443,9 +542,29 @@ export class SongController {
   static getVersion = async (req: Request, res: Response) => {
     try {
       const songId = req.params.id as string;
+      await songVersionService.assertCanViewHistory(songId, req.user!);
       const versionNumber = Number(req.params.version);
       const version = await songVersionService.getVersion(songId, versionNumber);
       return res.status(200).json({ success: true, data: version });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  /** POST /api/songs/:id/versions/:version/rollback — rollback to a prior version (Issue #441). */
+  static rollbackVersion = async (req: Request, res: Response) => {
+    try {
+      const songId = req.params.id as string;
+      const versionNumber = Number(req.params.version);
+      const artistId = req.user?.id as string;
+      const { changeNote } = req.body || {};
+      const newVersion = await songVersionService.rollbackVersion(
+        songId,
+        versionNumber,
+        artistId,
+        changeNote,
+      );
+      return res.status(201).json({ success: true, data: newVersion });
     } catch (error) {
       handleError(req, res, error);
     }
@@ -509,6 +628,27 @@ export class SongController {
       const songId = req.params.id as string;
       const data = await coverArtService.getCoverArt(songId);
       return res.status(200).json({ success: true, data });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
+  // #792: client fires this after 30 s of continuous playback.
+  static recordPlay = async (req: Request, res: Response) => {
+    try {
+      const songId = req.params.id as string;
+      const songRepo = AppDataSource.getRepository(Song);
+      const song = await songRepo.findOne({ where: { id: songId } });
+      if (!song) {
+        return res.status(404).json({ success: false, message: 'Song not found' });
+      }
+      const sessionKey = `play:throttle:${req.ip}:${songId}`;
+      const recentlyPlayed = await redis.get(sessionKey);
+      if (!recentlyPlayed) {
+        await songRepo.increment({ id: songId }, 'playCount', 1);
+        await redis.set(sessionKey, '1', 'EX', 300);
+      }
+      return res.status(204).send();
     } catch (error) {
       handleError(req, res, error);
     }

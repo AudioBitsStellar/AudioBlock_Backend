@@ -69,10 +69,24 @@ export class Song {
   @Column({ nullable: true })
   duration!: number;
 
-  @Column({ nullable: true })
-  loudness!: number; // LUFS
+  @Column({ type: 'numeric', nullable: true })
+  loudness!: number | null; // LUFS (integrated loudness)
 
-  @Column({ default: 'processing' })
+  @Column({ type: 'numeric', nullable: true })
+  truePeakDb!: number | null; // True peak in dBTP
+
+  @Column({ type: 'numeric', nullable: true })
+  loudnessRange!: number | null; // LRA (loudness range)
+
+  /** Issue #771: JSON array of peak values for waveform visualization */
+  @Column({ type: 'simple-json', nullable: true })
+  waveformPeaks!: number[] | null;
+
+  @Column({
+    type: 'enum',
+    enum: ['processing', 'ready', 'failed'],
+    default: 'processing',
+  })
   status!: 'processing' | 'ready' | 'failed';
 
   @Column({ type: 'text', nullable: true })
@@ -85,8 +99,12 @@ export class Song {
   metadataCid!: string;
 
   /** On-chain minting state, independent of streaming readiness above. */
-  @Column({ default: 'not_minted' })
-  mintStatus!: 'not_minted' | 'pending' | 'minted' | 'failed';
+  @Column({
+    type: 'enum',
+    enum: ['not_minted', 'pending', 'minting', 'minted', 'failed'],
+    default: 'not_minted',
+  })
+  mintStatus!: 'not_minted' | 'pending' | 'minting' | 'minted' | 'failed';
 
   /** song_id returned by the catalog Soroban contract once minting succeeds. */
   @Column({ nullable: true })

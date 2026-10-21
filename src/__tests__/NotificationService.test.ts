@@ -13,6 +13,7 @@ import { NotificationPreference } from '../entities/NotificationPreference';
 const mockNotificationRepo = {
   create: jest.fn(),
   save: jest.fn(),
+  find: jest.fn().mockResolvedValue([]),
   findAndCount: jest.fn(),
   count: jest.fn(),
   findOneBy: jest.fn(),

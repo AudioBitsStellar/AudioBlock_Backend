@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AiGenerationService } from '../services/ai/AiGenerationService';
+import { AiGenerationService } from '../services/AI/AiGenerationService';
 import { TagSuggestionService } from '../services/TagSuggestionService';
 import { TweetDraftService } from '../services/TweetDraftService';
 import AppDataSource from '../config/db';

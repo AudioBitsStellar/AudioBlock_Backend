@@ -33,6 +33,93 @@ paths:
       summary: Revoke an API key
       description: Revokes an active API key.
 
+  /api/song/{id}/collaborators:
+    get:
+      summary: List song collaborators
+      description: Public. Returns the active collaborators and their royalty shares for a song.
+      responses:
+        '200':
+          description: Active collaborators.
+    post:
+      summary: Add a song collaborator
+      description: Owner only. Total shares across collaborators cannot exceed 100. The added user is notified. Returns 409 once the song is minting or minted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, role, royaltyShare]
+              properties:
+                userId:
+                  type: string
+                  format: uuid
+                role:
+                  type: string
+                  enum: [primary, featured, producer, writer, mixer]
+                royaltyShare:
+                  type: number
+                  minimum: 0.01
+                  maximum: 100
+      responses:
+        '201':
+          description: Collaborator added.
+        '400':
+          description: Invalid role or share, or total shares would exceed 100.
+        '403':
+          description: Caller is not the song owner.
+        '409':
+          description: Already a collaborator, or the song is minting or minted.
+  /api/song/{id}/collaborators/{userId}:
+    patch:
+      summary: Update a song collaborator
+      description: Owner only. Returns 409 once the song is minting or minted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role:
+                  type: string
+                  enum: [primary, featured, producer, writer, mixer]
+                royaltyShare:
+                  type: number
+                  minimum: 0.01
+                  maximum: 100
+      responses:
+        '200':
+          description: Collaborator updated.
+        '400':
+          description: Invalid role or share, or total shares would exceed 100.
+        '403':
+          description: Caller is not the song owner.
+        '404':
+          description: Collaborator not found.
+        '409':
+          description: The song is minting or minted.
+  /api/song/{id}/royalty-template:
+    post:
+      summary: Apply a saved royalty template to a song
+      description: Owner only. Returns 409 once the song is minting or minted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [templateId]
+              properties:
+                templateId:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Template applied.
+        '409':
+          description: The song is minting or minted.
+
   /api/activity/onchain:
     get:
       summary: List indexed on-chain activity
@@ -90,8 +177,678 @@ paths:
                       $ref: '#/components/schemas/IndexedEvent'
                   pagination:
                     $ref: '#/components/schemas/Pagination'
+  /api/song/{id}/stats:
+    get:
+      summary: Get song statistics
+      description: >-
+        Returns aggregated playback and engagement metrics for a song. Public callers
+        receive total plays and saves; the song artist or admins receive full metrics
+        including unique listeners and gross reconciled revenue. Window defaults to 30d.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Unique song identifier (UUID).
+          schema:
+            type: string
+            format: uuid
+        - name: window
+          in: query
+          required: false
+          description: Aggregation time window. Default is 30d.
+          schema:
+            type: string
+            enum: [7d, 30d, 90d, all-time]
+            default: 30d
+      responses:
+        '200':
+          description: Song statistics retrieved successfully.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: Caching policy (public or private with 300s TTL).
+            Vary:
+              schema:
+                type: string
+              example: Authorization
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/SongStats'
+        '400':
+          description: Invalid window parameter.
+        '404':
+          description: Song not found.
+  /api/song/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      summary: Edit a song
+      description: Owner or admin only. Only title, description, genreId, composers, lyrics and language are editable; other fields are ignored. Once a song is minted, changing title, description or genreId returns 409 because they are part of the on-chain metadata.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                description:
+                  type: string
+                genreId:
+                  type: string
+                composers:
+                  type: string
+                lyrics:
+                  type: string
+                language:
+                  type: string
+      responses:
+        '200':
+          description: The updated song.
+        '403':
+          description: The caller does not own the song.
+        '409':
+          description: The song is minted and the change touches on-chain metadata.
+    delete:
+      summary: Delete a song
+      description: Owner or admin only. An unminted song is deleted and its original upload, HLS segments and cover art are removed from S3. A minted song cannot be deleted because its on-chain token still exists, so it is hidden instead (flagged) and its files are kept; the response has data.hidden set to true.
+      responses:
+        '200':
+          description: The song was deleted or hidden.
+        '403':
+          description: The caller does not own the song.
+  /api/song/{id}/lyrics:
+    get:
+      summary: Get song lyrics
+      description: Public. Returns 404 when the song has no lyrics or the lyrics rights have not been confirmed.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Unique song identifier (UUID).
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The lyrics and their language.
+        '404':
+          description: No servable lyrics for this song.
+
+  /api/song/artist/{artistId}/stats:
+    get:
+      summary: Get artist aggregated statistics via song route
+      description: >-
+        Returns catalog-wide metrics for the specified artist (alias of
+        GET /api/artists/:id/stats). `optionalAuth` + ownership-checked: the artist
+        owner or admin/moderator receives full metrics (plays, saves, uniqueListeners,
+        revenueStroops + all-time followers); public callers receive plays, saves and
+        followers. `revenueStroops` is gross song revenue (SUM(grossAmount) over
+        status='reconciled' royalty payouts), not the artist recipient share.
+        `followers` is all-time. No-songs result: 404 ARTIST_HAS_NO_SONGS. Do not
+        reconstruct financial totals from /api/activity feeds.
+      parameters:
+        - name: artistId
+          in: path
+          required: true
+          description: Unique artist identifier (UUID).
+          schema:
+            type: string
+            format: uuid
+        - name: window
+          in: query
+          required: false
+          description: Aggregation time window. Default is 30d.
+          schema:
+            type: string
+            enum: [7d, 30d, 90d, all-time]
+            default: 30d
+      responses:
+        '200':
+          description: Artist statistics retrieved successfully.
+        '400':
+          description: Invalid window parameter.
+        '404':
+          description: Artist owns no songs (ARTIST_HAS_NO_SONGS).
+
+  /api/artist/{id}/stats:
+    get:
+      summary: Get artist aggregated statistics
+      description: >-
+        Returns catalog-wide metrics for the specified artist (also mounted at
+        GET /api/artists/:id/stats). `optionalAuth` + ownership-checked: the artist
+        owner or admin/moderator receives full metrics (plays, saves, uniqueListeners,
+        revenueStroops + all-time followers); public callers receive plays, saves and
+        followers. `revenueStroops` is gross song revenue (SUM(grossAmount) over
+        status='reconciled' royalty payouts), not the artist recipient share.
+        `followers` is all-time (user_follows count), not windowed. No-songs result:
+        404 ARTIST_HAS_NO_SONGS. Cache: private max-age=300 for owner, public max-age=300 otherwise; Vary Authorization.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Unique artist identifier (UUID).
+          schema:
+            type: string
+            format: uuid
+        - name: window
+          in: query
+          required: false
+          description: Aggregation time window. Default is 30d.
+          schema:
+            type: string
+            enum: [7d, 30d, 90d, all-time]
+            default: 30d
+      responses:
+        '200':
+          description: Artist statistics retrieved successfully.
+        '400':
+          description: Invalid window parameter.
+        '404':
+          description: Artist owns no songs (ARTIST_HAS_NO_SONGS).
+
+  /api/artists/{id}/stats:
+    get:
+      summary: Get artist aggregated statistics (plural alias)
+      description: >-
+        Plural alias of GET /api/artist/:id/stats, advertised as
+        GET /api/artists/:id/stats?window=7d|30d|90d|all-time for the artist-portal
+        overview. Same auth, ownership, window, revenue (gross reconciled), followers
+        (all-time) and 404 ARTIST_HAS_NO_SONGS semantics.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Unique artist identifier (UUID).
+          schema:
+            type: string
+            format: uuid
+        - name: window
+          in: query
+          required: false
+          description: Aggregation time window. Default is 30d.
+          schema:
+            type: string
+            enum: [7d, 30d, 90d, all-time]
+            default: 30d
+      responses:
+        '200':
+          description: Artist statistics retrieved successfully.
+        '400':
+          description: Invalid window parameter.
+        '404':
+          description: Artist owns no songs (ARTIST_HAS_NO_SONGS).
+
+  /api/activity:
+    get:
+      summary: List activity feed with artist filter
+      description: >-
+        Global feed by default (newest first, paginated). Pass `artistId` (aliases:
+        artist, artist_id, userId, user_id) to scope server-side to the artist overview:
+        rows authored by the artist plus rows involving owned songs (targetId in artist
+        songs) plus artist_follow rows targeting the artist. Use this — never count the
+        global feed for an artist overview, and never reconstruct financial totals from
+        this sampled feed; use GET /api/artists/:id/stats revenue instead.
+      parameters:
+        - name: artistId
+          in: query
+          required: false
+          description: Artist identifier to scope the overview feed (aliases artist, artist_id, userId, user_id).
+          schema:
+            type: string
+            format: uuid
+        - name: mode
+          in: query
+          required: false
+          description: Pass `following` (requires auth) to scope to the caller's follows.
+          schema:
+            type: string
+            enum: [following]
+        - name: type
+          in: query
+          required: false
+          description: Comma-separated actionType filter (applies on the artist-scoped path).
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Paginated activity feed (page, limit, total, data).
+        '401':
+          description: Authentication required for mode=following.
+
+  /api/webhooks/{id}/deliveries:
+    get:
+      summary: List webhook delivery attempts
+      description: Returns paginated delivery history for a webhook subscription (newest first). Only accessible by the subscription owner.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Unique webhook subscription identifier (UUID).
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Delivery attempts list.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WebhookDelivery'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          description: Unauthorized.
+        '403':
+          description: Forbidden - caller is not the subscription owner.
+        '404':
+          description: Webhook subscription not found.
+  /api/song/{id}/cover:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      summary: Get song cover art
+      description: Public. Returns the cover art URL, IPFS hash and thumbnail URLs for each size (150, 300, 600).
+      responses:
+        '200':
+          description: Cover art URLs.
+    put:
+      summary: Replace song cover art
+      description: Owner only. Multipart upload in the cover field (JPG or PNG, max 5 MB). Thumbnails are regenerated, the previous cover is deleted from S3 when stored there, and the song cache is cleared. For a minted song only the off-chain cover changes; the image referenced by the on-chain metadata is immutable.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                cover:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: The updated song.
+        '400':
+          description: Missing file or invalid image type.
+        '403':
+          description: The caller does not own the song.
+        '413':
+          description: The image exceeds the size limit.
+  /api/song/{id}/versions:
+    get:
+      summary: List song versions
+      description: Owner or admin only, since version history can include unreleased audio. Paginated, newest first.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Unique webhook subscription identifier (UUID).
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Delivery attempts list.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WebhookDelivery'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          description: Unauthorized.
+        '403':
+          description: Forbidden - caller is not the subscription owner.
+        '404':
+          description: Webhook subscription not found.
+
+  /api/webhooks/{id}/deliveries/{deliveryId}/redeliver:
+    post:
+      summary: Redeliver a webhook attempt
+      description: Resends the event payload of a previous delivery attempt. Only accessible by the subscription owner.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Webhook subscription UUID.
+          schema:
+            type: string
+            format: uuid
+        - name: deliveryId
+          in: path
+          required: true
+          description: Webhook delivery attempt UUID.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Webhook redelivered successfully.
+        '400':
+          description: No payload stored for this delivery.
+        '401':
+          description: Unauthorized.
+        '403':
+          description: Forbidden - caller is not the subscription owner.
+        '404':
+          description: Subscription or delivery record not found.
+        '502':
+          description: Destination endpoint failed after retry attempts.
+
+  /api/song/{id}/versions/{version}:
+    get:
+      summary: Get a song version
+      description: Owner or admin only. Returns the specified version.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Unique song identifier (UUID).
+          schema:
+            type: string
+            format: uuid
+        - name: version
+          in: path
+          required: true
+          description: 1-based version number.
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: The requested version.
+        '403':
+          description: The caller does not own the song.
+        '404':
+          description: Version not found.
+  /api/song/{id}/versions/{version}/rollback:
+    post:
+      summary: Roll back a song to a prior version
+      description: Owning artist only. Creates a new active version copying the specified historical revision's metadata and audio assets, preserving complete version history without mutation (Issue #441).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: version
+          in: path
+          required: true
+          description: 1-based historical version number to roll back to.
+          schema:
+            type: integer
+            minimum: 1
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                changeNote:
+                  type: string
+                  description: Optional explanation of why the rollback was performed.
+      responses:
+        '201':
+          description: Created new version copying the target revision's fields.
+        '403':
+          description: The caller does not own the song.
+        '404':
+          description: Song or target version not found.
+  /api/song/{id}/report:
+    post:
+      summary: Report a song
+      description: Authenticated users only. Each user can report a song once; a repeat report returns 409. Each user is limited to 10 reports per hour (429 beyond that). Reports appear in the admin moderation queue at GET /api/admin/reports.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                description:
+                  type: string
+                  maxLength: 1000
+      responses:
+        '201':
+          description: The report was submitted.
+        '404':
+          description: Song not found.
+        '409':
+          description: The caller already reported this song.
+        '429':
+          description: Too many reports in the last hour.
+
+  /api/batch:
+    post:
+      summary: Execute a batch of sub-requests or a native catalog operation
+      description: |
+        Executes up to 10 sub-requests in a single HTTP call. Each sub-request is
+        processed independently and reports its own status/body, so partial
+        failures do not abort the whole batch. Supports two kinds of items:
+
+        * Generic sub-request: `{ method, path, body? }` — dispatched internally
+          to the matching route (GET/POST/PUT/PATCH/DELETE).
+        * Native catalog operation: `{ operation, songIds, genre }` — e.g.
+          `bulkGenreUpdate` updates the genre of several songs in the caller's
+          catalog in one call. One failure does not abort the rest; every song
+          produces a result row.
+
+        Overall HTTP status is 200 when the request is well-formed, regardless of
+        per-sub-request outcomes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              maxItems: 10
+              items:
+                oneOf:
+                  - title: Generic sub-request
+                    type: object
+                    required: [method, path]
+                    properties:
+                      method:
+                        type: string
+                        enum: [GET, POST, PUT, PATCH, DELETE]
+                      path:
+                        type: string
+                      body:
+                        type: object
+                  - title: Native catalog operation
+                    type: object
+                    required: [operation, songIds]
+                    properties:
+                      operation:
+                        type: string
+                        enum: [bulkGenreUpdate]
+                      songIds:
+                        type: array
+                        items:
+                          type: string
+                        maxItems: 50
+                      genre:
+                        type: string
+      responses:
+        '200':
+          description: Batch processed. Per-item results are in `data`.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        status:
+                          type: integer
+                          example: 200
+                        body:
+                          type: object
+        '400':
+          description: Validation error (bad body, unknown operation, ...).
+        '413':
+          description: Request body exceeds 100 KB batch limit.
 components:
   schemas:
+    Song:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        artist:
+          type: object
+          nullable: true
+          properties:
+            id:
+              type: string
+              format: uuid
+            username:
+              type: string
+              nullable: true
+            name:
+              type: string
+              nullable: true
+            profileImage:
+              type: string
+              nullable: true
+        cover:
+          type: object
+          properties:
+            path:
+              type: string
+            thumbnails:
+              type: object
+              nullable: true
+              additionalProperties:
+                type: string
+        genre:
+          type: string
+          nullable: true
+        genreId:
+          type: string
+          nullable: true
+        duration:
+          type: integer
+          nullable: true
+        playCount:
+          type: integer
+        status:
+          type: string
+          enum: [processing, ready, failed]
+        mintStatus:
+          type: string
+          enum: [not_minted, pending, minted, failed]
+        onChainSongId:
+          type: string
+          nullable: true
+        onChainTokenId:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        errorReason:
+          type: string
+          nullable: true
+          description: Only present for the owning artist.
     IndexedEvent:
       type: object
       properties:
@@ -130,6 +887,123 @@ components:
         updatedAt:
           type: string
           format: date-time
+    SongStats:
+      type: object
+      properties:
+        window:
+          type: string
+          example: 30d
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        totals:
+          type: object
+          properties:
+            plays:
+              type: integer
+              example: 120
+            saves:
+              type: integer
+              example: 30
+            uniqueListeners:
+              type: integer
+              description: Owner and admin only.
+              example: 45
+            revenueStroops:
+              type: string
+              description: Owner and admin only. Gross reconciled revenue, not recipient share.
+              example: "5000000"
+    ArtistStats:
+      type: object
+      properties:
+        artistId:
+          type: string
+          format: uuid
+        window:
+          type: string
+          example: 30d
+        periodStart:
+          type: string
+          format: date-time
+          nullable: true
+        periodEnd:
+          type: string
+          format: date-time
+        songCount:
+          type: integer
+          example: 4
+        totals:
+          type: object
+          properties:
+            plays:
+              type: integer
+              example: 120
+            saves:
+              type: integer
+              example: 30
+            uniqueListeners:
+              type: integer
+              description: Owner and admin only.
+              example: 45
+            revenueStroops:
+              type: string
+              description: Owner and admin only. Gross song revenue over reconciled payouts.
+              example: "5000000"
+            followers:
+              type: integer
+              description: All-time follower count, not windowed. Visible to public and owner.
+              example: 12
+        topSongs:
+          type: array
+          items:
+            type: object
+            properties:
+              songId:
+                type: string
+                format: uuid
+              title:
+                type: string
+              plays:
+                type: integer
+    WebhookDelivery:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        subscriptionId:
+          type: string
+          format: uuid
+        eventId:
+          type: string
+        eventType:
+          type: string
+        attempt:
+          type: integer
+          example: 1
+        status:
+          type: string
+          enum: [pending, succeeded, failed]
+        responseStatus:
+          type: integer
+          nullable: true
+          example: 200
+        durationMs:
+          type: integer
+          nullable: true
+          example: 45
+        error:
+          type: string
+          nullable: true
+        payload:
+          type: object
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
     Pagination:
       type: object
       properties:
@@ -145,3 +1019,46 @@ components:
         totalPages:
           type: integer
           example: 3
+
+    BatchResponseItem:
+      type: object
+      properties:
+        status:
+          type: integer
+          example: 200
+        body:
+          type: object
+
+    BulkCatalogItemResult:
+      type: object
+      properties:
+        songId:
+          type: string
+          format: uuid
+        status:
+          type: integer
+          example: 200
+        body:
+          type: object
+
+    BulkCatalogResponse:
+      type: object
+      properties:
+        operation:
+          type: string
+          enum: [bulkGenreUpdate]
+          example: bulkGenreUpdate
+        requested:
+          type: integer
+          example: 2
+        succeeded:
+          type: integer
+          example: 1
+        failed:
+          type: integer
+          example: 1
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BulkCatalogItemResult'
+

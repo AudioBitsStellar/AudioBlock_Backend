@@ -11,4 +11,8 @@ router.put('/preferences', requireAuth, NotificationController.updatePreferences
 router.put('/:id/read', requireAuth, NotificationController.markAsRead);
 router.post('/read-all', requireAuth, NotificationController.markAllAsRead);
 
+// Device token management for push notifications (Issue #429)
+router.post('/device-token', requireAuth, NotificationController.registerDeviceToken);
+router.delete('/device-token', requireAuth, NotificationController.removeDeviceToken);
+
 export default router;

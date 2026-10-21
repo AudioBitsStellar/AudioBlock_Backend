@@ -3,7 +3,8 @@ import AppDataSource from '../../config/db';
 import { Song } from '../../entities/Song';
 import { SongPlayEvent } from '../../entities/SongPlayEvent';
 import { SongSave } from '../../entities/SongSave';
-import { RoyaltyPayout } from '../../entities/RoyaltyPayout';
+import { RoyaltyPayout, RoyaltyPayoutStatus } from '../../entities/RoyaltyPayout';
+import { UserFollow } from '../../entities/UserFollow';
 import { AppError } from '../../errors/AppError';
 import { CacheService } from '../CacheService';
 
@@ -21,12 +22,18 @@ const WINDOW_DAYS: Record<Exclude<StatsWindow, 'all-time'>, number> = {
   '90d': 90,
 };
 
-/** Aggregated counters for one period. */
+/** Aggregated counters for one period.
+ *
+ * `followers` is only populated on artist totals and is always an all-time
+ * count (follows are not windowed). Omitted on song stats and on artist
+ * `previous` snapshots.
+ */
 export interface StatsTotals {
   plays: number;
   saves: number;
   revenueStroops: string;
   uniqueListeners: number;
+  followers?: number;
 }
 
 /** Percentage deltas of the current period against the immediately previous one. */
@@ -54,11 +61,20 @@ export interface ArtistStats {
   periodStart: string | null;
   periodEnd: string;
   songCount: number;
+  /** `totals.followers` is an all-time count; `previous` carries no followers. */
   totals: StatsTotals;
   previous: StatsTotals | null;
   comparison: StatsComparison | null;
   topSongs: { songId: string; title: string; plays: number }[];
   generatedAt: string;
+}
+
+/** Lifetime stream figures for an artist, derived from play events. */
+export interface ArtistLifetimeTotals {
+  totalStreams: number;
+  /** Sum of the played songs' durations (seconds), one full duration per play. */
+  totalStreamTime: number;
+  uniqueListeners: number;
 }
 
 /** Parse and validate a `window` query parameter, defaulting to 30d. */
@@ -129,12 +145,14 @@ export class SongStatsService {
   private playRepo: Repository<SongPlayEvent>;
   private saveRepo: Repository<SongSave>;
   private payoutRepo: Repository<RoyaltyPayout>;
+  private followRepo: Repository<UserFollow>;
 
   constructor() {
     this.songRepo = AppDataSource.getRepository(Song);
     this.playRepo = AppDataSource.getRepository(SongPlayEvent);
     this.saveRepo = AppDataSource.getRepository(SongSave);
     this.payoutRepo = AppDataSource.getRepository(RoyaltyPayout);
+    this.followRepo = AppDataSource.getRepository(UserFollow);
   }
 
   /**
@@ -182,6 +200,19 @@ export class SongStatsService {
    * Artist-level aggregation across every song the artist owns, plus their
    * top 5 songs by plays inside the window.
    *
+   * Returned `totals` contain `plays`, `saves`, `uniqueListeners`,
+   * `revenueStroops` and `followers`:
+   * - `revenueStroops` is **gross song revenue** — `SUM(grossAmount)` over
+   *   `royalty_payouts` rows with `status = 'reconciled'` (settled sales) for
+   *   the artist's songs in the window. It is NOT the artist recipient share
+   *   (per-recipient amounts live in `expectedSplits[].expectedAmount`).
+   * - `followers` is an **all-time** `user_follows` count
+   *   (`followingId = artistId`); it is not windowed, has no `previous` and
+   *   no `comparison` entry.
+   *
+   * No-songs result: 404 `ARTIST_HAS_NO_SONGS` when the artist owns zero
+   * songs. Use `getArtistLifetimeTotals` when zeros are preferable.
+   *
    * @param artistId - ID of the artist User.
    * @param window - One of 7d / 30d / 90d / all-time.
    * @throws {AppError} 404 when the artist owns no songs.
@@ -203,18 +234,15 @@ export class SongStatsService {
     const now = new Date();
     const period = resolvePeriod(window, now);
 
-    const totals = await this.totalsForSongs(songIds, period.start, period.end);
-    const previous =
+    const [baseTotals, previous, followers] = await Promise.all([
+      this.totalsForSongs(songIds, period.start, period.end),
       period.prevStart && period.prevEnd
-        ? await this.totalsForSongs(songIds, period.prevStart, period.prevEnd)
-        : null;
+        ? this.totalsForSongs(songIds, period.prevStart, period.prevEnd)
+        : Promise.resolve(null),
+      this.countFollowers(artistId),
+    ]);
 
-    const playsBySong = await this.playsPerSong(songIds, period.start, period.end);
-    const titles = new Map(songs.map((s) => [s.id, s.title]));
-    const topSongs = [...playsBySong.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([songId, plays]) => ({ songId, title: titles.get(songId) ?? '', plays }));
+    const totals: StatsTotals = { ...baseTotals, followers };
 
     const stats: ArtistStats = {
       artistId,
@@ -225,12 +253,62 @@ export class SongStatsService {
       totals,
       previous,
       comparison: previous ? comparisonOf(totals, previous) : null,
-      topSongs,
+      topSongs: await this.topSongsForArtist(songs, songIds, period.start, period.end),
       generatedAt: now.toISOString(),
     };
 
     await CacheService.set(cacheKey, stats, STATS_CACHE_TTL_MS);
     return stats;
+  }
+
+  private async topSongsForArtist(
+    songs: Song[],
+    songIds: string[],
+    start: Date | null,
+    end: Date,
+  ): Promise<ArtistStats['topSongs']> {
+    const playsBySong = await this.playsPerSong(songIds, start, end);
+    const titles = new Map(songs.map((s) => [s.id, s.title]));
+    return [...playsBySong.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([songId, plays]) => ({ songId, title: titles.get(songId) ?? '', plays }));
+  }
+
+  /**
+   * Lifetime plays, listening time and unique listeners across every song the
+   * artist owns, computed from `song_play_events` (Issue #807). An artist with
+   * no songs gets zeros rather than a 404.
+   *
+   * @param artistId - ID of the artist User.
+   */
+  async getArtistLifetimeTotals(artistId: string): Promise<ArtistLifetimeTotals> {
+    const cacheKey = `stats:artist:${artistId}:lifetime`;
+    const cached = await CacheService.get<ArtistLifetimeTotals>(cacheKey);
+    if (cached) return cached;
+
+    const songs = await this.songRepo.find({ where: { artistId }, select: ['id'] });
+    const songIds = songs.map((s) => s.id);
+
+    let totals: ArtistLifetimeTotals = { totalStreams: 0, totalStreamTime: 0, uniqueListeners: 0 };
+    if (songIds.length > 0) {
+      const end = new Date();
+      const [totalStreams, uniqueListeners, timeRow] = await Promise.all([
+        this.countPlays(songIds, null, end),
+        this.countUniqueListeners(songIds, null, end),
+        this.playRepo
+          .createQueryBuilder('play')
+          .innerJoin('play.song', 'song')
+          .select('COALESCE(SUM(song.duration), 0)', 'total')
+          .where('play.songId IN (:...songIds)', { songIds })
+          .andWhere('play.playedAt < :end', { end })
+          .getRawOne<{ total: string | number | null }>(),
+      ]);
+      totals = { totalStreams, totalStreamTime: Number(timeRow?.total ?? 0), uniqueListeners };
+    }
+
+    await CacheService.set(cacheKey, totals, STATS_CACHE_TTL_MS);
+    return totals;
   }
 
   /** Drop cached statistics for a song and its artist after a data change. */
@@ -239,6 +317,11 @@ export class SongStatsService {
     if (artistId) {
       await CacheService.invalidatePattern(`stats:artist:${artistId}:*`);
     }
+  }
+
+  /** Drop cached artist statistics after a follow/unfollow (followers count). */
+  async invalidateArtist(artistId: string): Promise<void> {
+    await CacheService.invalidatePattern(`stats:artist:${artistId}:*`);
   }
 
   /** Sum plays, saves, revenue, and unique listeners for a set of songs. */
@@ -278,12 +361,17 @@ export class SongStatsService {
   /**
    * Gross revenue in stroops attributed to the given songs. RoyaltyPayout is
    * the settled-sale record, so it is the authoritative revenue source.
+   *
+   * Only `status = 'reconciled'` rows count (settled sales). Pending and
+   * discrepancy rows are excluded. The figure is gross song revenue
+   * (`grossAmount`), not the artist recipient share.
    */
   private async sumRevenue(songIds: string[], start: Date | null, end: Date): Promise<string> {
     const qb = this.payoutRepo
       .createQueryBuilder('payout')
-      .select('COALESCE(SUM(payout.grossAmountStroops), 0)', 'total')
+      .select('COALESCE(SUM(payout.grossAmount), 0)', 'total')
       .where('payout.songId IN (:...songIds)', { songIds })
+      .andWhere('payout.status = :status', { status: RoyaltyPayoutStatus.RECONCILED })
       .andWhere('payout.createdAt < :end', { end });
     if (start) qb.andWhere('payout.createdAt >= :start', { start });
 
@@ -291,6 +379,11 @@ export class SongStatsService {
     // SUM over bigint comes back as a string in postgres; normalise to string
     // so large stroop totals never lose precision through a JS number.
     return String(row?.total ?? 0);
+  }
+
+  /** All-time follower count for an artist (`followingId = artistId`). */
+  private async countFollowers(artistId: string): Promise<number> {
+    return this.followRepo.count({ where: { followingId: artistId } });
   }
 
   /**
