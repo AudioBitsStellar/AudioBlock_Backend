@@ -1,0 +1,43 @@
+# Keep pull request labels in sync with the part of the repository being changed.
+# These mappings intentionally use broad, stable top-level paths so new files are
+# automatically covered without requiring workflow changes.
+
+backend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/**'
+          - 'tests/**'
+          - 'package.json'
+          - 'package-lock.json'
+
+infrastructure:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'Dockerfile'
+          - 'docker-compose.yml'
+          - 'docker-compose*.yml'
+          - 'infra/**'
+          - 'terraform/**'
+
+ci/cd:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/workflows/**'
+          - '.github/dependabot.yml'
+          - '.github/release-drafter.yml'
+
+observability:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'monitoring/**'
+          - '**/*prometheus*'
+          - '**/*grafana*'
+
+configuration:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '*.yml'
+          - '*.yaml'
+          - '*.json'
+          - '*.toml'
+          - '*.ini'
