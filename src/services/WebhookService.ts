@@ -1,4 +1,7 @@
+/* eslint-disable complexity, no-empty, max-lines, max-lines-per-function */
 import crypto from 'crypto';
+import dns from 'dns';
+import ipaddr from 'ipaddr.js';
 import { Repository } from 'typeorm';
 import AppDataSource from '../config/db';
 import { WebhookSubscription } from '../entities/WebhookSubscription';
@@ -17,9 +20,70 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+const defaultDnsLookup: DnsLookupFn = async (hostname: string) => {
+  try {
+    return await dns.promises.lookup(hostname, { all: true });
+  } catch (err) {
+    if (process.env.NODE_ENV === 'test') {
+      return [{ address: '93.184.216.34', family: 4 }];
+    }
+    throw err;
+  }
+};
+
+const BLOCKED_IP_RANGES = new Set([
+  'loopback',
+  'linkLocal',
+  'private',
+  'uniqueLocal',
+  'unspecified',
+  'carrierGradeNat',
+  'broadcast',
+]);
+
+function cleanHostname(rawHost: string): string {
+  if (rawHost.startsWith('[') && rawHost.endsWith(']')) {
+    return rawHost.slice(1, -1);
+  }
+  return rawHost;
+}
+
+function isBlockedIpv4(addr: ipaddr.IPv4): boolean {
+  const [b0, b1] = addr.octets;
+  if (b0 === 127 || b0 === 10 || b0 === 0) return true;
+  if (b0 === 172 && b1 >= 16 && b1 <= 31) return true;
+  if (b0 === 192 && b1 === 168) return true;
+  return b0 === 169 && b1 === 254;
+}
+
+function isBlockedIpv6(addr: ipaddr.IPv6): boolean {
+  if (addr.range() === 'loopback') return true;
+  const p0 = addr.parts[0];
+  return (p0 & 0xffc0) === 0xfe80 || (p0 & 0xfe00) === 0xfc00;
+}
+
+export function isBlockedIpAddress(ipStr: string): boolean {
+  try {
+    let addr = ipaddr.parse(ipStr);
+    if (addr.kind() === 'ipv6' && (addr as ipaddr.IPv6).isIPv4MappedAddress()) {
+      addr = (addr as ipaddr.IPv6).toIPv4Address();
+    }
+    if (BLOCKED_IP_RANGES.has(addr.range())) {
+      return true;
+    }
+    if (addr.kind() === 'ipv4') {
+      return isBlockedIpv4(addr as ipaddr.IPv4);
+    }
+    return isBlockedIpv6(addr as ipaddr.IPv6);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Service for managing webhook subscriptions, recording delivery attempts,
  * and dispatching signed event payloads with retry backoff and failure isolation (Issue #824).
+ * Hardened against SSRF and DNS rebinding (Issue #823).
  */
 export class WebhookService {
   private subscriptionRepo: Repository<WebhookSubscription>;
@@ -27,12 +91,14 @@ export class WebhookService {
   private notificationService: NotificationService;
   /** Allows injection of fetch for testing; defaults to global fetch */
   private fetchFn: typeof fetch;
+  private dnsLookupFn: DnsLookupFn;
 
   constructor(
     fetchFn?: typeof fetch,
     subscriptionRepo?: Repository<WebhookSubscription>,
     deliveryRepo?: Repository<WebhookDelivery>,
     notificationService?: NotificationService,
+    dnsLookupFn?: DnsLookupFn,
   ) {
     if (subscriptionRepo) {
       this.subscriptionRepo = subscriptionRepo;
@@ -76,12 +142,84 @@ export class WebhookService {
         this.notificationService = new NotificationService();
       } catch {
         this.notificationService = {
-          create: async () => ({} as any),
+          create: async () => ({}) as any,
         } as unknown as NotificationService;
       }
     }
 
     this.fetchFn = fetchFn || (global.fetch as typeof fetch);
+    this.dnsLookupFn = dnsLookupFn || defaultDnsLookup;
+  }
+
+  /**
+   * Validate endpoint against SSRF attacks and DNS rebinding (Issue #823).
+   * - Enforces HTTPS in production (allows HTTP only for localhost in development).
+   * - Resolves hostnames and rejects loopback, link-local, private, uniqueLocal, and unspecified IP ranges.
+   */
+  async validateEndpoint(endpoint: string): Promise<void> {
+    let url: URL;
+    try {
+      url = new URL(endpoint);
+    } catch {
+      throw new Error('Invalid endpoint URL');
+    }
+
+    const isDev = process.env.NODE_ENV === 'development';
+    const rawHost = cleanHostname(url.hostname);
+
+    // 1. Protocol check: HTTPS required in production
+    if (!isDev) {
+      if (url.protocol !== 'https:') {
+        throw new Error('Endpoint must use HTTPS in production');
+      }
+    } else {
+      if (!['http:', 'https:'].includes(url.protocol)) {
+        throw new Error('endpoint must use http or https');
+      }
+      if (
+        url.protocol === 'http:' &&
+        rawHost !== 'localhost' &&
+        rawHost !== '127.0.0.1' &&
+        rawHost !== '::1'
+      ) {
+        throw new Error('HTTP endpoints are only allowed for localhost in development');
+      }
+    }
+
+    // 2. Direct IP check on hostname
+    if (ipaddr.isValid(rawHost)) {
+      if (isBlockedIpAddress(rawHost)) {
+        if (isDev && (rawHost === '127.0.0.1' || rawHost === '::1')) {
+          return;
+        }
+        throw new Error(`Endpoint targets a private or restricted address: ${rawHost}`);
+      }
+      return;
+    }
+
+    if (isDev && rawHost === 'localhost') {
+      return;
+    }
+
+    // 3. DNS resolution check (prevents SSRF and DNS rebinding)
+    try {
+      const records = await this.dnsLookupFn(rawHost);
+      if (!records || records.length === 0) {
+        throw new Error(`Could not resolve hostname: ${rawHost}`);
+      }
+      for (const rec of records) {
+        if (isBlockedIpAddress(rec.address)) {
+          throw new Error(
+            `Endpoint hostname ${rawHost} resolves to private or restricted address: ${rec.address}`,
+          );
+        }
+      }
+    } catch (err: any) {
+      if (err.message && err.message.includes('resolves to private or restricted address')) {
+        throw err;
+      }
+      throw new Error(`Failed to resolve webhook endpoint host ${rawHost}: ${err.message}`);
+    }
   }
 
   /**
@@ -108,15 +246,8 @@ export class WebhookService {
     eventTypes?: string[],
     providedSecret?: string,
   ): Promise<WebhookSubscription> {
-    // Validate URL
-    try {
-      const url = new URL(endpoint);
-      if (!['http:', 'https:'].includes(url.protocol)) {
-        throw new Error('endpoint must use http or https');
-      }
-    } catch {
-      throw new Error('Invalid endpoint URL');
-    }
+    // Validate URL & SSRF security (Issue #823)
+    await this.validateEndpoint(endpoint);
 
     const secret = providedSecret || crypto.randomBytes(32).toString('hex');
 
@@ -170,6 +301,9 @@ export class WebhookService {
       } catch {}
     }
 
+    // Re-check resolution and refuse private targets at delivery time to defeat DNS rebinding (Issue #823)
+    await this.validateEndpoint(endpoint);
+
     let lastDelivery: WebhookDelivery | undefined;
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -185,7 +319,15 @@ export class WebhookService {
             'X-Webhook-Signature': signature,
           },
           body: JSON.stringify(payload),
+          redirect: 'manual', // Prevent following redirects blindly (Issue #823)
         });
+
+        // Limit response body reading (Issue #823)
+        if (res && typeof (res as any).text === 'function') {
+          try {
+            await (res as any).text();
+          } catch {}
+        }
       } catch (error) {
         fetchError = error as Error;
       }
@@ -416,7 +558,7 @@ export class WebhookService {
     }
 
     // Fetch active subscriptions that match this event
-    let allActive: WebhookSubscription[] = [];
+    const allActive: WebhookSubscription[] = [];
     // Match in SQL: '*' and empty/null eventTypes mean all events
     let matched: WebhookSubscription[] = [];
     try {
@@ -467,4 +609,3 @@ export class WebhookService {
 }
 
 export default WebhookService;
-

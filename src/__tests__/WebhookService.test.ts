@@ -1,3 +1,4 @@
+/* eslint-disable max-lines, max-lines-per-function */
 import 'reflect-metadata';
 
 jest.mock('../config/db', () => ({
@@ -231,6 +232,109 @@ describe('WebhookService', () => {
       const svc = new WebhookService(fetchMock);
       await expect(svc.deleteSubscription('u1', 'missing')).rejects.toThrow(
         'Webhook subscription not found',
+      );
+    });
+  });
+
+  describe('SSRF Hardening and IP Blocking (Issue #823)', () => {
+    it('rejects loopback addresses (127.0.0.1 and ::1) in production and registration', async () => {
+      const origEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = 'production';
+      try {
+        const svc = new WebhookService(fetchMock);
+        await expect(svc.registerSubscription('u1', 'http://127.0.0.1/hook')).rejects.toThrow();
+
+        await expect(svc.registerSubscription('u1', 'https://127.0.0.1/hook')).rejects.toThrow(
+          /private or restricted address/,
+        );
+
+        await expect(svc.registerSubscription('u1', 'https://[::1]/hook')).rejects.toThrow(
+          /private or restricted address/,
+        );
+      } finally {
+        process.env.NODE_ENV = origEnv;
+      }
+    });
+
+    it('rejects cloud metadata and link-local address (169.254.169.254 and fe80::/10)', async () => {
+      const svc = new WebhookService(fetchMock);
+      await expect(
+        svc.registerSubscription('u1', 'https://169.254.169.254/latest/meta-data'),
+      ).rejects.toThrow(/private or restricted address/);
+
+      await expect(svc.registerSubscription('u1', 'https://[fe80::1]/hook')).rejects.toThrow(
+        /private or restricted address/,
+      );
+    });
+
+    it('rejects private IPv4 ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16)', async () => {
+      const svc = new WebhookService(fetchMock);
+      await expect(svc.registerSubscription('u1', 'https://10.10.1.1/hook')).rejects.toThrow(
+        /private or restricted address/,
+      );
+
+      await expect(svc.registerSubscription('u1', 'https://172.16.5.1/hook')).rejects.toThrow(
+        /private or restricted address/,
+      );
+
+      await expect(svc.registerSubscription('u1', 'https://192.168.1.100/hook')).rejects.toThrow(
+        /private or restricted address/,
+      );
+    });
+
+    it('rejects IPv6 unique local addresses (fc00::/7)', async () => {
+      const svc = new WebhookService(fetchMock);
+      await expect(svc.registerSubscription('u1', 'https://[fc00::1]/hook')).rejects.toThrow(
+        /private or restricted address/,
+      );
+    });
+
+    it('rejects hostnames resolving to private IP addresses (anti-DNS rebinding)', async () => {
+      const mockDns = jest.fn().mockResolvedValue([{ address: '10.0.0.5', family: 4 }]);
+      const svc = new WebhookService(fetchMock, undefined, undefined, undefined, mockDns);
+
+      await expect(
+        svc.registerSubscription('u1', 'https://malicious-rebinding.example.com/hook'),
+      ).rejects.toThrow(/resolves to private or restricted address/);
+
+      expect(mockDns).toHaveBeenCalledWith('malicious-rebinding.example.com');
+    });
+
+    it('re-verifies endpoint at delivery time and refuses private targets', async () => {
+      const mockDns = jest.fn().mockResolvedValue([{ address: '192.168.1.1', family: 4 }]);
+      const svc = new WebhookService(fetchMock, undefined, undefined, undefined, mockDns);
+
+      const payload = {
+        eventId: 'evt-1',
+        eventType: 'song.minted',
+        timestamp: new Date().toISOString(),
+      };
+
+      await expect(
+        svc.deliver('https://rebound.internal.com/hook', payload, 'secret'),
+      ).rejects.toThrow(/resolves to private or restricted address/);
+
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('sets redirect: manual during delivery to prevent redirect-based SSRF', async () => {
+      fetchMock.mockResolvedValue({ ok: true, status: 200 } as any);
+      const svc = new WebhookService(fetchMock);
+
+      const payload = {
+        eventId: 'evt-1',
+        eventType: 'sale.completed',
+        timestamp: new Date().toISOString(),
+      };
+
+      await svc.deliver('https://external-webhook.example.com/hook', payload, 'secret');
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://external-webhook.example.com/hook',
+        expect.objectContaining({
+          redirect: 'manual',
+          method: 'POST',
+        }),
       );
     });
   });
