@@ -101,8 +101,50 @@ Baseline any sizing decision on measurements rather than defaults:
 
 Document any deviation from this guide alongside the metric that justified it.
 
+## Database connection-pool sizing (#948)
+
+Each Node.js process holds its own pool of Postgres connections. The pool is
+configured in `src/config/constants.ts` (`DB_POOL`). Size each process type's
+pool so that the total connections across all running replicas stays comfortably
+below Postgres's `max_connections` (default 100 on a standard RDS/Cloud SQL
+instance; set explicitly in `docker-compose.prod.yml`).
+
+### Per-process pool defaults
+
+| Process type          | `DB_POOL.MIN` | `DB_POOL.MAX` | Notes                                                     |
+| --------------------- | ------------- | ------------- | --------------------------------------------------------- |
+| API server            | 2             | 10            | Scales with concurrent HTTP requests                      |
+| Dedicated song worker | 2             | 5             | Long-running transcodes hold connections briefly for state updates |
+| Job-queue worker      | 2             | 5             | Low-frequency batch jobs; keep headroom for API replicas  |
+
+### Sizing formula
+
+```
+total_connections ≤ postgres_max_connections × 0.80
+total_connections = (api_replicas × API_MAX)
+                  + (worker_replicas × WORKER_MAX)
+                  + pgBouncer_overhead (≈ 5 if used)
+```
+
+**Alert threshold:** `DBPoolHighUtilization` fires when a pool's active
+connections exceed **80%** of its `MAX` for 10 minutes (see
+[`db-pool-alerting.md`](db-pool-alerting.md)).  Treat a sustained warning as a
+prompt to either raise `DB_POOL.MAX` (and verify Postgres headroom) or add a
+`pgBouncer` sidecar to multiplex connections.
+
+### Example: 3 API replicas + 2 dedicated workers
+
+```
+(3 × 10) + (2 × 5) = 40 connections  → well under max_connections=100 (40%)
+```
+
+If you scale to 8 API replicas: `(8 × 10) + (2 × 5) = 90` — that is 90% of
+100, over the alert threshold. Either reduce `DB_POOL.MAX` or raise
+`max_connections` before scaling.
+
 ## References
 
 - Resource limits in the production overlay: `docker-compose.prod.yml`
 - Background job architecture: [`adrs/004-background-job-processing.md`](adrs/004-background-job-processing.md)
 - Metrics/monitoring setup: `monitoring/`
+- Pool alert rules: [`db-pool-alerting.md`](db-pool-alerting.md)
