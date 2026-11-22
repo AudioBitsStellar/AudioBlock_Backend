@@ -1,43 +1,35 @@
 version: 2
 updates:
-  - package-ecosystem: "npm"
-    directory: "/"
-    schedule:
-      interval: "monthly"
-    open-pull-requests-limit: 10
-    labels:
-      - "dependencies"
-    ignore:
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
-    groups:
-      testing:
-        patterns:
-          - "jest*"
-          - "@types/jest"
-          - "ts-jest"
-      linting:
-        patterns:
-          - "eslint*"
-          - "prettier*"
-          - "@typescript-eslint/*"
-
-  # Keep GitHub Actions up to date (#365)
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+      time: "09:00"
     open-pull-requests-limit: 5
-    labels:
-      - "dependencies"
-      - "ci"
-
-  # Keep Docker base images up to date (#365)
+    commit-message:
+      prefix: " Dependabot"
+    ignore:
+      - dependency-name: "*"
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      time: "09:00"
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: " Dependabot"
+    branches:
+      - main
+    ignore:
+      - dependency-name: "lodash"
+      - dependency-name: "moment"
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
-      interval: "monthly"
+      interval: "weekly"
+      time: "09:00"
     open-pull-requests-limit: 5
-    labels:
-      - "dependencies"
-      - "docker"
+    commit-message:
+      prefix: " Dependabot"
+    branches:
+      - main
