@@ -111,7 +111,7 @@ function maxLengthForField(key: string): number | undefined {
  *   5. Collapse runs of whitespace and trim.
  *   6. Apply the field-specific max length.
  */
-function sanitizeString(value: string, key: string): string {
+export function sanitizeString(value: string, key: string): string {
   let result = value.normalize('NFKC');
 
   result = result.replace(HTML_COMMENT_REGEX, '');

@@ -1,0 +1,82 @@
+# CI-gated load test baselines (#937, TEST-06)
+# Runs k6 stream and upload load tests on every push to main and weekly.
+# Thresholds are enforced by k6 itself; a threshold breach fails the step.
+# Results are archived as workflow artifacts for trend comparison.
+name: Load Test Baselines
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Weekly at 03:00 UTC on Monday
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+
+jobs:
+  load-tests:
+    name: k6 load tests
+    runs-on: ubuntu-latest
+
+    services:
+      app:
+        image: node:20-alpine
+        # The job starts the app inline below; this block is a placeholder
+        # so the service network is available.
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install k6
+        run: |
+          curl -sSL https://github.com/grafana/k6/releases/download/v0.57.0/k6-v0.57.0-linux-amd64.tar.gz \
+            | tar -xz --strip-components=1 -C /usr/local/bin k6-v0.57.0-linux-amd64/k6
+
+      - name: Start server
+        run: npm run build && node dist/src/server.js &
+        env:
+          NODE_ENV: test
+          PORT: 3000
+          # Minimal env — tests run against a local in-process server
+          JWT_SECRET: ci-load-test-secret-do-not-use-in-prod
+
+      - name: Wait for server
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3000/health && break
+            sleep 2
+          done
+
+      # ── Stream baseline ───────────────────────────────────────────────────
+      # Thresholds (defined in tests/load/stream-k6.js):
+      #   http_req_duration p(95) < 250 ms, p(99) < 500 ms
+      #   stream_success_rate > 99%
+      #   http_req_failed    < 1%
+      - name: k6 stream baseline
+        run: k6 run --out json=results/stream-k6.json tests/load/stream-k6.js
+        env:
+          BASE_URL: http://localhost:3000
+
+      # ── Upload baseline ───────────────────────────────────────────────────
+      # Thresholds (defined in tests/load/upload-k6.js):
+      #   http_req_duration p(95) < 500 ms
+      #   upload_success_rate > 98%
+      - name: k6 upload baseline
+        run: k6 run --out json=results/upload-k6.json tests/load/upload-k6.js
+        env:
+          BASE_URL: http://localhost:3000
+
+      - name: Archive load test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: load-test-results-${{ github.run_id }}
+          path: results/
+          retention-days: 90
