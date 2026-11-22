@@ -7,7 +7,16 @@
  * - indexer_events_processed_total: Total blockchain events processed
  * - indexer_errors_total: Total indexer errors
  *
- * See monitoring/dashboards/audioblock-indexer.json for visualization.
+ * Business metrics (Issue #957, OBS-07):
+ * - business_signups_total: User registrations
+ * - business_uploads_total: Song upload completions
+ * - business_mints_total: NFT mint transactions
+ * - business_plays_total: Song play events
+ * - business_payouts_total: Royalty payout transactions
+ * - business_payout_amount_stroops_total: Cumulative payout value in stroops
+ *
+ * See monitoring/dashboards/audioblock-business.json for visualization.
+ * See monitoring/prometheus-slo-rules.yml for SLO recording/alerting rules.
  */
 import client from 'prom-client';
 
@@ -249,6 +258,44 @@ export async function updateDbPoolMetrics(pool: {
   const exhausted = pool.waitingCount > 0 && active >= pool.totalCount ? 1 : 0;
   dbPoolExhausted.set(exhausted);
 }
+
+// ── Business metrics (Issue #957, OBS-07) ────────────────────────────────────
+
+export const businessSignupsTotal = new client.Counter({
+  name: 'business_signups_total',
+  help: 'Total number of user registrations',
+  registers: [register],
+});
+
+export const businessUploadsTotal = new client.Counter({
+  name: 'business_uploads_total',
+  help: 'Total number of song uploads completed',
+  registers: [register],
+});
+
+export const businessMintsTotal = new client.Counter({
+  name: 'business_mints_total',
+  help: 'Total number of NFT mint transactions',
+  registers: [register],
+});
+
+export const businessPlaysTotal = new client.Counter({
+  name: 'business_plays_total',
+  help: 'Total number of song play events',
+  registers: [register],
+});
+
+export const businessPayoutsTotal = new client.Counter({
+  name: 'business_payouts_total',
+  help: 'Total number of royalty payout transactions',
+  registers: [register],
+});
+
+export const businessPayoutAmountStroopsTotal = new client.Counter({
+  name: 'business_payout_amount_stroops_total',
+  help: 'Cumulative royalty payout value in stroops',
+  registers: [register],
+});
 
 /**
  * Get the content type string for the Prometheus metrics endpoint.

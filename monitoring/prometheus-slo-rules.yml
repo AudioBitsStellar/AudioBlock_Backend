@@ -1,0 +1,158 @@
+# AudioBlock SLO recording rules and alerting rules (Issue #951, OBS-01).
+#
+# SLO targets
+# ──────────────────────────────────────────────────────────────────────────────
+# availability:        99.5 % of HTTP requests return 2xx/3xx (30-day window)
+# p95 latency:         95th-percentile HTTP response time < 500 ms
+# song processing:     95th-percentile song-processing queue drain time < 60 s
+# indexer lag:         < 1 000 ledgers behind Stellar tip (covered by
+#                      prometheus-alerts.yml; not duplicated here)
+#
+# Error budget burn-rate thresholds follow the Google SRE Book multi-window
+# approach: a 1-hour fast burn (>14×) together with a 5-minute fast burn fires
+# a critical page; a 6-hour slow burn (>6×) together with a 30-minute burn
+# fires a warning ticket.
+
+groups:
+  # ── Availability recording rules ─────────────────────────────────────────────
+  - name: audioblock-slo-availability-recording
+    interval: 60s
+    rules:
+      - record: job:http_requests_total:rate5m
+        expr: |
+          sum(rate(http_requests_total[5m])) by (job)
+
+      - record: job:http_requests_errors:rate5m
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m])) by (job)
+
+      - record: job:http_error_ratio:rate5m
+        expr: |
+          job:http_requests_errors:rate5m / job:http_requests_total:rate5m
+
+      # 1-hour and 6-hour error ratios for multi-window burn-rate
+      - record: job:http_error_ratio:rate1h
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[1h])) by (job)
+          /
+          sum(rate(http_requests_total[1h])) by (job)
+
+      - record: job:http_error_ratio:rate6h
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[6h])) by (job)
+          /
+          sum(rate(http_requests_total[6h])) by (job)
+
+  # ── Availability alerting (burn-rate) ────────────────────────────────────────
+  - name: audioblock-slo-availability-alerts
+    rules:
+      - alert: SloAvailabilityCriticalBurn
+        expr: |
+          job:http_error_ratio:rate1h > (14 * 0.005)
+          and
+          job:http_error_ratio:rate5m > (14 * 0.005)
+        for: 2m
+        labels:
+          severity: critical
+          slo: availability
+          team: backend
+        annotations:
+          summary: "AudioBlock availability SLO: critical burn rate"
+          description: >
+            Error rate is burning the 30-day availability error budget at >14×
+            over both the last 1 h and 5 min windows. At this rate the entire
+            monthly budget will be exhausted in < 2 hours.
+          runbook: "https://github.com/AudioBitsStellar/AudioBlock_Backend/blob/main/docs/INCIDENT_RESPONSE.md"
+
+      - alert: SloAvailabilityWarningBurn
+        expr: |
+          job:http_error_ratio:rate6h > (6 * 0.005)
+          and
+          job:http_error_ratio:rate30m > (6 * 0.005)
+        for: 15m
+        labels:
+          severity: warning
+          slo: availability
+          team: backend
+        annotations:
+          summary: "AudioBlock availability SLO: elevated burn rate"
+          description: >
+            Error rate is burning the 30-day availability error budget at >6×
+            over both the last 6 h and 30 min windows.
+          runbook: "https://github.com/AudioBitsStellar/AudioBlock_Backend/blob/main/docs/INCIDENT_RESPONSE.md"
+
+  # ── p95 Latency recording + alerting ─────────────────────────────────────────
+  - name: audioblock-slo-latency
+    rules:
+      - record: job:http_request_p95_seconds:5m
+        expr: |
+          histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, job))
+
+      - alert: SloLatencyP95Exceeded
+        expr: |
+          job:http_request_p95_seconds:5m > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          slo: latency
+          team: backend
+        annotations:
+          summary: "AudioBlock p95 latency SLO breached (> 500 ms)"
+          description: >
+            The 95th-percentile HTTP response time has been above 500 ms for
+            5 consecutive minutes. Current value: {{ $value | humanizeDuration }}.
+          runbook: "https://github.com/AudioBitsStellar/AudioBlock_Backend/blob/main/docs/INCIDENT_RESPONSE.md"
+
+      - alert: SloLatencyP95Critical
+        expr: |
+          job:http_request_p95_seconds:5m > 2
+        for: 5m
+        labels:
+          severity: critical
+          slo: latency
+          team: backend
+        annotations:
+          summary: "AudioBlock p95 latency critically high (> 2 s)"
+          description: >
+            The 95th-percentile HTTP response time has been above 2 s for
+            5 consecutive minutes. Current value: {{ $value | humanizeDuration }}.
+          runbook: "https://github.com/AudioBitsStellar/AudioBlock_Backend/blob/main/docs/INCIDENT_RESPONSE.md"
+
+  # ── Song processing time ──────────────────────────────────────────────────────
+  - name: audioblock-slo-processing
+    rules:
+      - alert: SloSongProcessingP95Exceeded
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket{route=~".*/songs/process.*"}[5m]))
+            by (le)
+          ) > 60
+        for: 10m
+        labels:
+          severity: warning
+          slo: processing_time
+          team: backend
+        annotations:
+          summary: "Song processing p95 latency SLO breached (> 60 s)"
+          description: >
+            The 95th-percentile song-processing response time has been above
+            60 s for 10 consecutive minutes.
+          runbook: "https://github.com/AudioBitsStellar/AudioBlock_Backend/blob/main/docs/INCIDENT_RESPONSE.md"
+
+  # ── RabbitMQ queue depth ──────────────────────────────────────────────────────
+  - name: audioblock-slo-queue
+    rules:
+      - alert: SloIndexerQueueDepthHigh
+        expr: |
+          rabbitmq_queue_depth{queue="song_processing"} > 500
+        for: 10m
+        labels:
+          severity: warning
+          slo: indexer_lag
+          team: backend
+        annotations:
+          summary: "Song processing queue depth high (> 500 messages)"
+          description: >
+            The song_processing RabbitMQ queue has had > 500 pending messages
+            for 10 consecutive minutes. Worker throughput may be degraded.
+          runbook: "https://github.com/AudioBitsStellar/AudioBlock_Backend/blob/main/docs/INCIDENT_RESPONSE.md"
