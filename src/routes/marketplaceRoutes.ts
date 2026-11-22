@@ -3,6 +3,7 @@ import { MarketplaceController } from '../controllers/MarketplaceController';
 import { authArtistMiddleware, authListenerMiddleware } from '../middlewares/authMiddleware';
 import { validateDTO } from '../middlewares/validate';
 import { SubmitSignedXdrDTO } from '../dtos/SubmitSignedXdrDTO';
+import { idempotency } from '../middlewares/idempotency';
 
 const router = Router();
 
@@ -11,6 +12,7 @@ router.post('/prepare-listing', authArtistMiddleware, MarketplaceController.prep
 router.post(
   '/submit-listing',
   authArtistMiddleware,
+  idempotency(),
   validateDTO(SubmitSignedXdrDTO),
   MarketplaceController.submitListing,
 );
@@ -20,6 +22,7 @@ router.post('/prepare-buy', authListenerMiddleware, MarketplaceController.prepar
 router.post(
   '/submit-buy',
   authListenerMiddleware,
+  idempotency(),
   validateDTO(SubmitSignedXdrDTO),
   MarketplaceController.submitBuy,
 );
@@ -29,6 +32,7 @@ router.post('/prepare-auction', authArtistMiddleware, MarketplaceController.prep
 router.post(
   '/submit-auction',
   authArtistMiddleware,
+  idempotency(),
   validateDTO(SubmitSignedXdrDTO),
   MarketplaceController.submitAuction,
 );
@@ -37,6 +41,7 @@ router.post('/prepare-bid', authListenerMiddleware, MarketplaceController.prepar
 router.post(
   '/submit-bid',
   authListenerMiddleware,
+  idempotency(),
   validateDTO(SubmitSignedXdrDTO),
   MarketplaceController.submitBid,
 );
