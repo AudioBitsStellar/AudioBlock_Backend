@@ -131,5 +131,8 @@
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.65.0"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }
