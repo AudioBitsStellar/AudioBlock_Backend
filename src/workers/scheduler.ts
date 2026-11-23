@@ -9,6 +9,7 @@
  *   SCHED_ONCHAIN_RECONCILE_MS      default: 6 hours
  *   SCHED_GDPR_PURGE_MS             default: 24 hours
  *   SCHED_PLAYBACK_AGGREGATION_MS   default: 24 hours
+ *   SCHED_MARKETPLACE_LISTINGS_MS   default: 15 minutes
  *
  * Start: npm run scheduler
  */
@@ -20,9 +21,11 @@ import { runRoyaltyReconciliationJob } from '../jobs/RoyaltyReconciliationJob';
 import { runAccountDeletionJob } from '../jobs/AccountDeletionJob';
 import { runOnChainReconciliationJob } from '../jobs/OnChainReconciliationJob';
 import { runPlaybackAggregationJob } from '../jobs/DailyPlaybackAggregationJob';
+import { runMarketplaceListingLifecycleJob } from '../jobs/MarketplaceListingLifecycleJob';
 
 const SIX_HOURS = 6 * 60 * 60 * 1000;
 const ONE_DAY = 24 * 60 * 60 * 1000;
+const FIFTEEN_MINUTES = 15 * 60 * 1000;
 
 interface JobDef {
   name: string;
@@ -50,6 +53,11 @@ const JOBS: JobDef[] = [
     name: 'playback_aggregation',
     intervalMs: Number(process.env.SCHED_PLAYBACK_AGGREGATION_MS ?? ONE_DAY),
     run: runPlaybackAggregationJob,
+  },
+  {
+    name: 'marketplace_listings',
+    intervalMs: Number(process.env.SCHED_MARKETPLACE_LISTINGS_MS ?? FIFTEEN_MINUTES),
+    run: () => runMarketplaceListingLifecycleJob(),
   },
 ];
 

@@ -13,6 +13,7 @@
  *   ts-node src/jobs/scheduler.ts --job=account-deletion
  *   ts-node src/jobs/scheduler.ts --job=webhook-retention
  *   ts-node src/jobs/scheduler.ts --job=onchain-reconciliation
+ *   ts-node src/jobs/scheduler.ts --job=marketplace-listings
  *
  * To run all jobs in one pass (not recommended for production):
  *   ts-node src/jobs/scheduler.ts --job=all
@@ -26,6 +27,7 @@ import { runRoyaltyReconciliationJob } from './RoyaltyReconciliationJob';
 import { runAccountDeletionJob } from './AccountDeletionJob';
 import { runWebhookRetentionJob } from './WebhookRetentionJob';
 import { runOnChainReconciliationJob } from './OnChainReconciliationJob';
+import { runMarketplaceListingLifecycleJob } from './MarketplaceListingLifecycleJob';
 
 /** TTL for the distributed lock — must exceed the worst-case job duration. */
 const LOCK_TTL_SECONDS = 300; // 5 minutes
@@ -52,9 +54,16 @@ type JobRunner = () => Promise<void>;
 const JOBS: Record<string, JobRunner> = {
   'daily-playback': runPlaybackAggregationJob,
   'royalty-reconciliation': runRoyaltyReconciliationJob,
-  'account-deletion': async () => { await runAccountDeletionJob(); },
-  'webhook-retention': async () => { await runWebhookRetentionJob(); },
+  'account-deletion': async () => {
+    await runAccountDeletionJob();
+  },
+  'webhook-retention': async () => {
+    await runWebhookRetentionJob();
+  },
   'onchain-reconciliation': runOnChainReconciliationJob,
+  'marketplace-listings': async () => {
+    await runMarketplaceListingLifecycleJob();
+  },
 };
 
 async function runJob(jobName: string): Promise<void> {
@@ -83,8 +92,8 @@ if (require.main === module) {
   const jobName = jobArg?.split('=')[1];
 
   if (!jobName) {
-    console.error('Usage: ts-node src/jobs/scheduler.ts --job=<name>');
-    console.error(`Known jobs: ${Object.keys(JOBS).join(', ')}, all`);
+    process.stderr.write('Usage: ts-node src/jobs/scheduler.ts --job=<name>\n');
+    process.stderr.write(`Known jobs: ${Object.keys(JOBS).join(', ')}, all\n`);
     process.exit(1);
   }
 
