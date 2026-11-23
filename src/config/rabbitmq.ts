@@ -5,9 +5,20 @@ import logger from './logger';
 let connection: Awaited<ReturnType<typeof amqp.connect>> | null = null;
 let stopping = false;
 let retryTimer: NodeJS.Timeout | undefined;
+let retryAttempt = 0;
+
+const BACKOFF_BASE_MS = 1_000;
+const BACKOFF_MAX_MS = 30_000;
+
+function backoffDelay(): number {
+  const delay = Math.min(BACKOFF_BASE_MS * 2 ** retryAttempt, BACKOFF_MAX_MS);
+  retryAttempt += 1;
+  return delay;
+}
 
 export async function closeRabbitMQConnection(): Promise<void> {
   stopping = true;
+  retryAttempt = 0;
   if (retryTimer) clearTimeout(retryTimer);
   const current = connection;
   connection = null;
@@ -41,12 +52,16 @@ export async function initRabbitMQ(): Promise<void> {
         return;
       }
       channel = await connected.createChannel();
+      retryAttempt = 0;
       logger.info('RabbitMQ connected and channel created');
 
       connected.on('close', () => {
-        logger.warn('RabbitMQ connection closed, retrying...');
         channel = null;
-        if (!stopping && !isShuttingDown()) retryTimer = setTimeout(connect, 5000);
+        if (!stopping && !isShuttingDown()) {
+          const delay = backoffDelay();
+          logger.warn({ attempt: retryAttempt, delayMs: delay }, 'RabbitMQ connection closed, reconnecting with backoff');
+          retryTimer = setTimeout(connect, delay);
+        }
       });
 
       connected.on('error', (err) => {
@@ -55,7 +70,11 @@ export async function initRabbitMQ(): Promise<void> {
     } catch (error: any) {
       logger.error({ err: error }, 'RabbitMQ connection failed');
       channel = null;
-      if (!stopping && !isShuttingDown()) retryTimer = setTimeout(connect, 5000);
+      if (!stopping && !isShuttingDown()) {
+        const delay = backoffDelay();
+        logger.warn({ attempt: retryAttempt, delayMs: delay }, 'RabbitMQ reconnecting with backoff');
+        retryTimer = setTimeout(connect, delay);
+      }
     }
   };
 

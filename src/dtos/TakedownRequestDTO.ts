@@ -1,5 +1,5 @@
-import { IsString, IsNotEmpty, IsOptional, IsEnum } from 'class-validator';
-import { TakedownReason } from '../entities/TakedownRequest';
+import { IsString, IsNotEmpty, IsOptional, IsEnum, MaxLength } from 'class-validator';
+import { TakedownReason, TAKEDOWN_COUNTER_NOTICE_MAX_LENGTH } from '../entities/TakedownRequest';
 
 export class CreateTakedownRequestDTO {
   @IsString()
@@ -29,4 +29,14 @@ export class ReviewTakedownRequestDTO {
   @IsOptional()
   @IsString()
   reviewNotes?: string;
+}
+
+/** Body for `POST /api/takedown/:id/counter-notice` (#981). */
+export class CounterNoticeTakedownDTO {
+  @IsString()
+  @IsNotEmpty({ message: 'statement is required' })
+  @MaxLength(TAKEDOWN_COUNTER_NOTICE_MAX_LENGTH, {
+    message: `statement must be at most ${TAKEDOWN_COUNTER_NOTICE_MAX_LENGTH} characters`,
+  })
+  statement!: string;
 }

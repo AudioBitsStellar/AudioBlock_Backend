@@ -11,7 +11,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import axios from 'axios';
-import { transcodeToHLS } from '../utils/ffmpeg';
+import { transcodeToHLS, analyzeLoudness, generateWaveformPeaks } from '../utils/ffmpeg';
 import { S3 } from 'aws-sdk';
 import { updateRabbitMQQueueDepth } from '../services/MetricsService';
 
@@ -28,24 +28,34 @@ interface SongPayload {
 }
 
 /**
- * Upload HLS files to S3.
+ * Upload HLS files to S3 recursively (Issue #768: supports nested variant directories).
  */
 async function uploadHLSToS3(songId: string, fileId: string): Promise<string> {
   const hlsDir = `uploads/hls/${fileId}`;
   const s3BasePath = `songs/${songId}/hls/`;
-  const hlsFiles = fs.readdirSync(hlsDir);
 
-  for (const f of hlsFiles) {
-    const filePath = path.join(hlsDir, f);
-    await s3
-      .upload({
-        Bucket: process.env.AWS_BUCKET_NAME!,
-        Key: `${s3BasePath}${f}`,
-        Body: fs.createReadStream(filePath),
-      })
-      .promise();
+  async function uploadDirectory(localDir: string, s3Prefix: string): Promise<void> {
+    const entries = fs.readdirSync(localDir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const localPath = path.join(localDir, entry.name);
+      const s3Key = `${s3Prefix}${entry.name}`;
+
+      if (entry.isDirectory()) {
+        await uploadDirectory(localPath, `${s3Key}/`);
+      } else {
+        await s3
+          .upload({
+            Bucket: process.env.AWS_BUCKET_NAME!,
+            Key: s3Key,
+            Body: fs.createReadStream(localPath),
+          })
+          .promise();
+      }
+    }
   }
 
+  await uploadDirectory(hlsDir, s3BasePath);
   return `https://${process.env.AWS_BUCKET_NAME}.s3.amazonaws.com/${s3BasePath}master.m3u8`;
 }
 
@@ -68,7 +78,7 @@ async function buildMetadata(song: Song, coverCid: string, masterUrl: string) {
     animation_url: masterUrl,
     attributes: [
       { trait_type: 'duration', value: song.duration || 0 },
-      { trait_type: 'loudness', value: song.loudness || 0 },
+      { trait_type: 'loudness', value: song.loudness ?? 0 },
       { trait_type: 'genre', value: song.genre },
       { trait_type: 'cover_url', value: coverCid },
       // AI disclosure (#283): flag when any AI-generated content was accepted.
@@ -103,13 +113,44 @@ async function processSongMessage(
   const localFile = path.join('uploads/merged', `${fileId}.mp3`);
   const hlsDir = `uploads/hls/${fileId}`;
 
-  // 1. Transcode to HLS
+  // 1. Measure loudness (Issue #769)
+  try {
+    const loudnessData = await analyzeLoudness(localFile);
+    song.loudness = loudnessData.integratedLoudness;
+    song.truePeakDb = loudnessData.truePeak;
+    song.loudnessRange = loudnessData.loudnessRange;
+    await getSongRepo().save(song);
+    logger.info(
+      { songId, loudness: song.loudness, truePeak: song.truePeakDb, lra: song.loudnessRange },
+      'Loudness analysis complete',
+    );
+  } catch (error) {
+    logger.warn(
+      { songId, err: error },
+      'Loudness analysis failed, continuing without loudness data',
+    );
+  }
+
+  // 1b. Generate waveform peaks (Issue #771)
+  try {
+    const waveformPeaks = await generateWaveformPeaks(localFile, 200);
+    song.waveformPeaks = waveformPeaks;
+    await getSongRepo().save(song);
+    logger.info({ songId, peakCount: waveformPeaks.length }, 'Waveform generation complete');
+  } catch (error) {
+    logger.warn(
+      { songId, err: error },
+      'Waveform generation failed, continuing without waveform data',
+    );
+  }
+
+  // 2. Transcode to HLS
   await transcodeToHLS(localFile, hlsDir, songId);
 
-  // 2. Upload to S3
+  // 3. Upload to S3
   const masterUrl = await uploadHLSToS3(songId, fileId);
 
-  // 3. Upload cover art to IPFS
+  // 4. Upload cover art to IPFS
   const tempCoverPath = path.join(os.tmpdir(), `${fileId}-cover.jpg`);
   const coverResponse = await axios.get<ArrayBuffer>(song.coverArtPath, {
     responseType: 'arraybuffer',

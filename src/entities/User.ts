@@ -24,6 +24,15 @@ export enum UserRole {
   SUPER_ADMIN = 'super_admin',
 }
 
+/**
+ * Why an account is restricted (#980). `suspended` is a restriction an admin can
+ * lift; `banned` is intended to be permanent. Both block API access the same way.
+ */
+export enum AccountSuspensionType {
+  SUSPENDED = 'suspended',
+  BANNED = 'banned',
+}
+
 @Entity('users')
 @Unique(['walletAddress', 'email', 'username'])
 export class User {
@@ -165,6 +174,29 @@ export class User {
   @Column({ default: false })
   aiStudioEnabled!: boolean;
 
+  /** Visible artist verification badge flag (Issue #92, #426). */
+  @Column({ default: false })
+  isVerified!: boolean;
+
+  // ── Account restriction (Issue #980) ────────────────────────────────────────
+  // Set by an admin to suspend or ban an account. A non-null suspendedAt blocks
+  // every authenticated request until an admin reinstates the account.
+
+  /** When the account was suspended or banned. Null for an active account. */
+  @Column({ type: 'timestamp', nullable: true })
+  suspendedAt?: Date | null;
+
+  /** Admin who applied the restriction. */
+  @Column({ type: 'uuid', nullable: true })
+  suspendedBy?: string | null;
+
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  suspensionType?: AccountSuspensionType | null;
+
+  /** Reason given by the admin, shown to them in the audit log. */
+  @Column({ type: 'text', nullable: true })
+  suspensionReason?: string | null;
+
   // ── Account lifecycle (Issue #633, GDPR Art. 12/17) ─────────────────────────
   // A deletion request does not erase immediately. The user gets a grace window
   // in which they can export their data or cancel, after which a background job
@@ -189,6 +221,20 @@ export class User {
   /** Free-text reason the user gave for leaving, if any. Retained, never PII-bearing. */
   @Column({ nullable: true })
   deletionReason?: string;
+
+  // ── Payout compliance hold (#985) ───────────────────────────────────────────
+  // While set, the account is excluded from royalty payouts. Placed by sanctions
+  // screening or an admin; cleared only by an admin. `varchar` is explicit because
+  // the `string | null` union would otherwise be inferred as Object (see
+  // docs/migrations.md).
+
+  /** Why payouts are held, or null when the account is not on hold. */
+  @Column({ type: 'varchar', nullable: true })
+  payoutHoldReason?: string | null;
+
+  /** When the current payout hold was placed, or null when there is none. */
+  @Column({ type: 'timestamp', nullable: true })
+  payoutHoldPlacedAt?: Date | null;
 
   @CreateDateColumn()
   createdAt!: Date;

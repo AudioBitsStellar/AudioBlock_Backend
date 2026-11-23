@@ -38,6 +38,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { AuthService } from '../services/AuthService';
 import { UserRole } from '../entities/User';
+import { JobQueueService } from '../services/JobQueueService';
 
 const mockUserRepo = {
   findOneBy: jest.fn(),
@@ -66,7 +67,12 @@ describe('AuthService.registerWithEmail', () => {
     mockUserRepo.findOneBy.mockResolvedValue({ id: 'existing' });
     const svc = new AuthService();
     await expect(
-      svc.registerWithEmail({ email: 'a@b.com', password: 'password123', role: UserRole.ARTIST }),
+      svc.registerWithEmail({
+        email: 'a@b.com',
+        password: 'password123',
+        role: UserRole.ARTIST,
+        dateOfBirth: '1990-01-01',
+      }),
     ).rejects.toThrow('User already exists');
   });
 
@@ -89,6 +95,7 @@ describe('AuthService.registerWithEmail', () => {
       email: 'a@b.com',
       password: 'password123',
       role: UserRole.ARTIST,
+      dateOfBirth: '1990-01-01',
     });
 
     expect(bcrypt.hash).toHaveBeenCalledWith('password123', 12);
@@ -102,8 +109,175 @@ describe('AuthService.registerWithEmail', () => {
   it('throws on validation error (short password)', async () => {
     const svc = new AuthService();
     await expect(
-      svc.registerWithEmail({ email: 'a@b.com', password: 'short', role: UserRole.ARTIST }),
+      svc.registerWithEmail({
+        email: 'a@b.com',
+        password: 'short',
+        role: UserRole.ARTIST,
+        dateOfBirth: '1990-01-01',
+      }),
     ).rejects.toThrow();
+  });
+});
+
+/** Returns a `YYYY-MM-DD` date of birth for someone exactly `years` old today (UTC). */
+function dobForAge(years: number): string {
+  const d = new Date();
+  d.setUTCFullYear(d.getUTCFullYear() - years);
+  return d.toISOString().slice(0, 10);
+}
+
+describe('AuthService.registerWithEmail minimum-age gate (COMP-06)', () => {
+  const originalMinimum = process.env.MINIMUM_SIGNUP_AGE;
+
+  afterEach(() => {
+    if (originalMinimum === undefined) delete process.env.MINIMUM_SIGNUP_AGE;
+    else process.env.MINIMUM_SIGNUP_AGE = originalMinimum;
+  });
+
+  it('rejects a signup below the minimum age before any account lookup or write', async () => {
+    delete process.env.MINIMUM_SIGNUP_AGE;
+    const svc = new AuthService();
+    await expect(
+      svc.registerWithEmail({
+        email: 'a@b.com',
+        password: 'password123',
+        role: UserRole.LISTENER,
+        dateOfBirth: dobForAge(17),
+      }),
+    ).rejects.toThrow('You must be at least 18 years old to create an account.');
+    expect(mockUserRepo.findOneBy).not.toHaveBeenCalled();
+    expect(mockUserRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('honours a configured MINIMUM_SIGNUP_AGE', async () => {
+    process.env.MINIMUM_SIGNUP_AGE = '16';
+    const svc = new AuthService();
+    await expect(
+      svc.registerWithEmail({
+        email: 'a@b.com',
+        password: 'password123',
+        role: UserRole.LISTENER,
+        dateOfBirth: dobForAge(15),
+      }),
+    ).rejects.toThrow('You must be at least 16 years old');
+  });
+
+  it('rejects an impossible calendar date', async () => {
+    const svc = new AuthService();
+    await expect(
+      svc.registerWithEmail({
+        email: 'a@b.com',
+        password: 'password123',
+        role: UserRole.LISTENER,
+        dateOfBirth: '1990-02-30',
+      }),
+    ).rejects.toThrow('valid past date');
+  });
+
+  it('accepts a signup exactly at the minimum age and never stores the date of birth', async () => {
+    delete process.env.MINIMUM_SIGNUP_AGE;
+    mockUserRepo.findOneBy.mockResolvedValue(null);
+    (bcrypt.hash as jest.Mock).mockResolvedValue('hashed_pw');
+    const created = { id: 'u2', email: 'a@b.com', role: UserRole.LISTENER };
+    mockUserRepo.create.mockReturnValue(created);
+    mockUserRepo.save.mockResolvedValue(created);
+    (jwt.sign as jest.Mock).mockReturnValue('jwt.token');
+    process.env.JWT_SECRET = 'test_secret';
+
+    const svc = new AuthService();
+    await svc.registerWithEmail({
+      email: 'a@b.com',
+      password: 'password123',
+      role: UserRole.LISTENER,
+      dateOfBirth: dobForAge(18),
+    });
+
+    const createdArg = mockUserRepo.create.mock.calls[0][0] as Record<string, unknown>;
+    expect(createdArg).not.toHaveProperty('dateOfBirth');
+  });
+});
+
+describe('AuthService.resendVerificationEmail (PROD-04)', () => {
+  let enqueueSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    enqueueSpy = jest.spyOn(JobQueueService, 'enqueue').mockResolvedValue('job-1' as any);
+  });
+
+  afterEach(() => {
+    enqueueSpy.mockRestore();
+  });
+
+  it('is a silent no-op for an unknown address', async () => {
+    mockUserRepo.findOneBy.mockResolvedValue(null);
+    const svc = new AuthService();
+    await expect(svc.resendVerificationEmail('nobody@b.com')).resolves.toBeUndefined();
+    expect(mockUserRepo.save).not.toHaveBeenCalled();
+    expect(enqueueSpy).not.toHaveBeenCalled();
+  });
+
+  it('is a silent no-op for an already verified account', async () => {
+    mockUserRepo.findOneBy.mockResolvedValue({ id: 'u1', emailVerified: true, passwordHash: 'h' });
+    const svc = new AuthService();
+    await svc.resendVerificationEmail('a@b.com');
+    expect(mockUserRepo.save).not.toHaveBeenCalled();
+    expect(enqueueSpy).not.toHaveBeenCalled();
+  });
+
+  it('is a silent no-op for a wallet-only account with no password', async () => {
+    mockUserRepo.findOneBy.mockResolvedValue({ id: 'u1', emailVerified: false });
+    const svc = new AuthService();
+    await svc.resendVerificationEmail('a@b.com');
+    expect(mockUserRepo.save).not.toHaveBeenCalled();
+    expect(enqueueSpy).not.toHaveBeenCalled();
+  });
+
+  it('replaces the token with a fresh 24-hour one and queues the email', async () => {
+    const user: Record<string, unknown> = {
+      id: 'u1',
+      emailVerified: false,
+      passwordHash: 'h',
+      emailVerificationToken: 'stale-token',
+    };
+    mockUserRepo.findOneBy.mockResolvedValue(user);
+    mockUserRepo.save.mockResolvedValue(user);
+
+    const svc = new AuthService();
+    await svc.resendVerificationEmail('a@b.com');
+
+    const token = user.emailVerificationToken as string;
+    expect(token).not.toBe('stale-token');
+    expect(token).toMatch(/^[0-9a-f]{64}$/);
+    const expiry = (user.emailVerificationTokenExpiry as Date).getTime();
+    expect(expiry).toBeGreaterThan(Date.now() + 23 * 60 * 60 * 1000);
+    expect(enqueueSpy).toHaveBeenCalledWith(
+      'email.send',
+      expect.objectContaining({
+        to: 'a@b.com',
+        html: expect.stringContaining(`/verify-email/${token}`),
+      }),
+      expect.anything(),
+    );
+  });
+});
+
+describe('AuthService.resetPassword session and verification effects (PROD-04)', () => {
+  it('revokes every refresh token and marks the mailbox as verified', async () => {
+    const user: Record<string, unknown> = {
+      id: 'u1',
+      emailVerified: false,
+      passwordResetToken: 'tok',
+      passwordResetTokenExpiry: new Date(Date.now() + 60 * 60 * 1000),
+    };
+    mockUserRepo.findOne.mockResolvedValue(user);
+    (bcrypt.hash as jest.Mock).mockResolvedValue('new_hash');
+    mockUserRepo.save.mockResolvedValue(user);
+
+    const svc = new AuthService();
+    await svc.resetPassword('tok', 'newpassword123');
+
+    expect(mockRefreshTokenRepo.update).toHaveBeenCalledWith({ userId: 'u1' }, { revoked: true });
+    expect(user.emailVerified).toBe(true);
   });
 });
 

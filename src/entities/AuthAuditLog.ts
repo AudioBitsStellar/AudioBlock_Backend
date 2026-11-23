@@ -58,4 +58,16 @@ export class AuthAuditLog {
 
   @CreateDateColumn()
   createdAt!: Date;
+
+  /**
+   * HMAC-SHA256 of this record's immutable fields concatenated with the
+   * previous entry's hash, forming a hash chain. A broken chain (computed
+   * hash ≠ stored hash, or previousHash mismatch) indicates tampering.
+   * Null only on the very first record where no prior hash exists.
+   */
+  @Column({ nullable: true })
+  previousHash?: string;
+
+  @Column({ nullable: true })
+  hash?: string;
 }

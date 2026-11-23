@@ -143,6 +143,7 @@ describe('Login Flow Integration Tests (Issue #622)', () => {
       const userData = {
         email: 'flowuser@example.com',
         password: 'Password123!',
+        dateOfBirth: '1990-01-01',
         username: 'flowuser',
         name: 'Flow User',
         role: 'listener',

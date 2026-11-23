@@ -23,6 +23,7 @@ import {
   PrivyUserNotSyncedError,
 } from '../services/privy/PrivyErrors';
 import { PrivyUserResolver } from '../services/privy/PrivyUserResolver';
+import { AccountSuspensionService } from '../services/AccountSuspensionService';
 
 export interface JwtPayload {
   id: string;
@@ -287,6 +288,7 @@ export async function authenticateRequest(
       user = authenticateLegacyToken(token);
     }
 
+    await assertAccountNotSuspended(user);
     (req as any).user = user;
     next();
   } catch (error) {
@@ -303,6 +305,18 @@ export async function authenticateRequest(
     }
 
     handleError(req, res, authError);
+  }
+}
+
+/**
+ * Refuse a request whose account is suspended or banned (#980).
+ *
+ * A JWT is stateless, so a restriction applied after the token was issued only
+ * takes effect if the account is checked on each request.
+ */
+async function assertAccountNotSuspended(user: JwtPayload): Promise<void> {
+  if (await AccountSuspensionService.isSuspended(user.id)) {
+    throw AppError.authorization('Account suspended', undefined, 'ACCOUNT_SUSPENDED');
   }
 }
 
@@ -335,9 +349,14 @@ export const optionalAuth = (req: Request, res: Response, next: NextFunction) =>
         if (!isLegacyAuthEnabled()) return next();
         (req as any).user = authenticateLegacyToken(token);
       }
+      if (await AccountSuspensionService.isSuspended((req as any).user?.id)) {
+        delete (req as any).user;
+      }
     } catch {
       // An optional-auth route treats a bad credential as anonymous rather than
-      // as an error — that is the point of this variant.
+      // as an error — that is the point of this variant. A restricted account, or
+      // one whose status cannot be checked, is also served as anonymous (#980).
+      delete (req as any).user;
     }
     next();
   })();

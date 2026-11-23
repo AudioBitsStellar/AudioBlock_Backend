@@ -6,6 +6,7 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
+  Index,
 } from 'typeorm';
 import { User } from './User';
 
@@ -15,7 +16,14 @@ export enum ReleaseType {
   SINGLE = 'single',
 }
 
+export enum ReleaseStatus {
+  DRAFT = 'draft',
+  SCHEDULED = 'scheduled',
+  PUBLISHED = 'published',
+}
+
 @Entity('releases')
+@Index(['status', 'scheduledAt'])
 export class Release {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
@@ -35,6 +43,25 @@ export class Release {
 
   @Column({ type: 'varchar', default: ReleaseType.ALBUM })
   type!: ReleaseType;
+
+  @Column({
+    type: 'varchar',
+    length: 50,
+    default: ReleaseStatus.PUBLISHED,
+  })
+  status!: ReleaseStatus;
+
+  /**
+   * Future timestamp when the release should automatically be published (Issue #423).
+   */
+  @Column({ type: 'timestamp', nullable: true })
+  scheduledAt?: Date | null;
+
+  /**
+   * Timestamp when the release became publicly live/published.
+   */
+  @Column({ type: 'timestamp', nullable: true })
+  publishedAt?: Date | null;
 
   @Column({ nullable: true })
   coverArt?: string;

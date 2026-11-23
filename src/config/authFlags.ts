@@ -72,6 +72,11 @@ export function isPrivyConfigured(): boolean {
   return Boolean((process.env.PRIVY_APP_ID || '').trim());
 }
 
+/** Whether closed beta mode is enabled. */
+export function isClosedBetaEnabled(): boolean {
+  return (process.env.CLOSED_BETA || '').trim().toLowerCase() === 'true';
+}
+
 /**
  * Guard against an operator combination that cannot work: `privy` mode with no
  * `PRIVY_APP_ID` would reject every request with a 401 that looks like a client

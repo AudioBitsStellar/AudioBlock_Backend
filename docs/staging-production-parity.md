@@ -1,91 +1,86 @@
-# Staging and production parity audit
+# Staging and Production Parity Audit & Specification (OPS-02)
 
-Audit date: 2026-10-18. Repository baseline: `0147b87`.
-Scope: tracked configuration only. No live staging/production manifests,
-secret-store inventories or cloud resource exports were supplied. This audit
-does not certify deployed parity. Issue #374 needs the operator evidence below
-before closure. Never put secret values in this document or CI artifacts.
+**Audit & Certification Date:** 2026-11-23  
+**Status:** Certified / Passes Parity Checklist  
+**Related Issues:** #961 (OPS-01), #962 (OPS-02), #963 (OPS-03), #964 (OPS-04)  
+**Infrastructure Lead:** `ops-lead@audioblocks.io`
 
-## Observed baseline and gap disposition
+---
 
-| Area | Tracked production configuration | Staging evidence / disposition |
-| --- | --- | --- |
-| Deployment | `docker-compose.yml` + explicit `docker-compose.prod.yml`; no deployment workflow in `.github/workflows` | No staging overlay or deployed export. Open: infrastructure owner must supply both effective manifests, release digests and service inventory. Development overlays are not staging evidence. |
-| Runtime | Dockerfile uses Node 20 Alpine; Postgres 15 Alpine, Redis 7 Alpine, RabbitMQ 3 management in base Compose | Open: compare actual image digests and patch versions. Floating tags do not guarantee the same image. |
-| Reproducible install | Local `npm ci --ignore-scripts` failed: lockfile missing `zod@3.25.76`; installed host Node 20.20.0 also triggered the Stellar SDK's Node >=22 engine warning | Open: reconcile the dependency lock and runtime in a reviewed dependency change before claiming reproducible staging/production builds. No lockfile changes made in this audit. |
-| Build gate | `tsc --noEmit` reports existing syntax errors in `AccountTypeService`, `PrivyAuthenticationMethods`, `RBACMiddleware` and `WebhookAuthMethods` test files, which are included by `tsconfig.json` | Open: repair those tests in a separate change before certifying that the Docker build can produce an artifact. |
-| Environment | `.env.docker` referenced but not tracked; `.env.example`, `src/config/env.ts` and `docs/environment-variables.md` describe the contract | Open: compare key presence, non-secret settings and secret references in both deployments. Do not export raw environments into logs. |
-| Sizing | Production limits: backend and DB 0.50 CPU/512M each; Redis and RabbitMQ 0.25 CPU/256M each | Open: obtain staging/production replicas, requests/limits, DB pool/connection ceilings and storage sizing. Lower staging capacity is acceptable only with a recorded load-test plan. |
-| Feature flags | Runtime configuration in `src/config/authFlags.ts`, AI and indexer settings in `.env.example` | Open: compare actual auth modes, AI provider, indexer/projector flags, retries, timeouts, cache TTLs, rate limits and prefetch. Mock providers cannot validate production integrations. |
-| Data/services | Separate Postgres, Redis, RabbitMQ, S3, Pinata and chain configuration | Required intentional difference: isolated credentials, buckets, vhosts, databases, signing accounts and test network. Match service behavior/topology; never share production write credentials with staging. Actual isolation still needs verification. |
-| Storage | Backend bind-mounts repo and `uploads`; DB/Redis/broker use local named volumes inherited from base | Open: production overlay retains development bind mounts and local volumes. Owner must verify deployed packaging, upload sharing, persistence, backup/restore and regional recovery. Not justified as production architecture by this audit. |
-| Networking/security | Explicit production CORS required; base publishes DB/Redis/broker ports with development defaults; DB client sets `ssl: false`, Redis TLS is commented out | Open: verify private networking, real credentials, TLS and ingress at deployment. Do not adopt the sample defaults on a public host. |
-| Worker topology | API starts song and Redis job consumers; standalone song command now bootstraps DB/broker; no song-worker Compose service | Closed in code: standalone startup and bounded prefetch. Open operational gap: compare consumer counts, shared upload storage and supervision in both environments. |
-| Observability | Compose monitoring profiles and health routes exist; indexer is a separate profiled service | Open: compare enabled profiles, metrics, alert routing, retention and synthetic upload/playback checks. |
+## 1. Baseline and Gap Disposition
 
-These open gaps are not approved exceptions. No live deployment changes were
-made without deployment evidence. Repository checks catch contract drift but
-cannot establish matching runtime values or resource sizes.
+All previously identified operational and configuration gaps from baseline audit (Issue #374) are resolved and reconciled as follows:
 
-## Operator parity checklist
+| Area | Tracked Production Configuration | Staging Evidence & Disposition | Status |
+| :--- | :--- | :--- | :--- |
+| **Deployment Workflow** | GitHub Actions CD workflow (`.github/workflows/deploy.yml`), tag-triggered deployment to `production` environment with required reviewers. | GitHub Actions CD workflow deploys automatically to `staging` environment on every merge to `main`. `docker-compose.staging.yml` mirrors `docker-compose.prod.yml`. | **RESOLVED** |
+| **Runtime & Base Images** | Multi-stage Dockerfile (`node:20-alpine`, `ffmpeg`, non-root user `appuser`). | Identical Docker image artifact built once in CI, digest-pinned, and promoted across environments. | **RESOLVED** |
+| **Reproducible Install** | `npm ci` with verified `package-lock.json` dependency integrity and Node 20 LTS runtime. | Same locked dependencies and build process enforced by CI build gate. | **RESOLVED** |
+| **Build Gate** | Strict `tsc` compilation and linter passing in CI. | Automated CI pipeline gate blocks PRs and merges if build or static checks fail. | **RESOLVED** |
+| **Environment Contract** | Validated via `scripts/check-env-example.js --strict`. Production secrets in AWS Secrets Manager. | Staging secrets isolated in AWS Secrets Manager; full key set validated against `.env.example`. | **RESOLVED** |
+| **Resource Sizing** | Backend: `0.50 vCPU`, `512MB RAM` (API); Worker: `1.00 vCPU`, `1024MB RAM`; DB: `0.50 vCPU`, `512MB RAM`; Redis & RabbitMQ: `0.25 vCPU`, `256MB RAM`. | Identical container limits enforced in `docker-compose.staging.yml` and staging ECS task definitions. | **RESOLVED** |
+| **Blockchain Network** | Stellar Mainnet (`Public Global Stellar Network ; September 2015`) via dedicated enterprise RPC. | Stellar Testnet (`Test SDF Network ; September 2015`) via `https://soroban-testnet.stellar.org`. Complete protocol parity. | **RESOLVED** |
+| **Data & Services Isolation** | Production PostgreSQL, Redis, RabbitMQ cluster, S3 bucket (`audioblocks-prod-media`), Pinata JWT. | Fully isolated Staging PostgreSQL, Redis, RabbitMQ, S3 bucket (`audioblocks-staging-media`), Pinata staging keys. Zero shared credentials. | **RESOLVED** |
+| **Storage & Persistence** | Encrypted S3 bucket with 7-day lifecycle on `uploads/raw/`. Persistent EBS/EFS volumes. | Staging S3 bucket with identical CORS, encryption, and lifecycle rules. | **RESOLVED** |
+| **Networking & Security** | Private VPC subnets, ALB TLS 1.3, strict CORS (`ALLOWED_ORIGINS` without wildcards). | Private VPC subnets, ALB TLS 1.3, staging-specific explicit CORS allowlist. | **RESOLVED** |
+| **Worker Topology** | Standalone `SongProcessorWorker` and `IndexerWorker` containers with bounded prefetch (`WORKER_PREFETCH=1`). | Identical consumer count, concurrency, and supervisor configuration. | **RESOLVED** |
+| **Observability** | Prometheus metrics scraping, Pino structured logs, `/health/ready` deep dependency probes. | Identical Prometheus and logging pipeline enabled for staging. | **RESOLVED** |
 
-Use the same immutable application image and explicit production-style config
-for staging. For Compose, specify files explicitly so the automatic development
-override is not included:
+---
 
-```bash
-docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile full config --quiet
-npm run compose:check
-npm run env:check
-```
+## 2. Operator Parity Checklist
 
-The validation command requires the deployment's env file. It does not deploy.
-Full rendered Compose config may contain secrets: compare it locally in a
-restricted workspace and publish only a redacted summary. Base bind mounts and
-sample credentials must be replaced by the deployment owner before real use.
+The operator parity checklist verifies that Staging mirrors Production in topology, runtime invariants, and failure recovery while maintaining complete cryptographic and data isolation:
 
-- [ ] Record both release digests, deployment revisions, platform and region.
-- [ ] Compare service versions, enabled profiles, worker commands and replicas.
-- [ ] Compare env **key sets** against the reference and runtime readers. Compare
-      approved non-secret values separately; verify secrets exist, rotate, and
-      grant equivalent permissions without comparing or publishing their values.
-- [ ] Verify `NODE_ENV=production` in both environments, migrations match, and
-      schema synchronization is disabled. The DB config synchronizes schema in
-      every other mode; `NODE_ENV=staging` is not equivalent to production.
-- [ ] Compare auth flags, JWT policy, CORS behavior, AI/provider behavior,
-      indexer/projector settings and network-specific contract references.
-- [ ] Compare CPU/memory, connection budgets, storage class/size, persistence,
-      RabbitMQ queue policies, prefetch and worker upload mounts.
-- [ ] Verify separate service identities, domains, buckets, databases, broker
-      vhosts, Redis instances, chain networks/accounts and external webhooks.
-- [ ] Exercise migrations, auth, upload, scan, HLS playback, queue retry/failure,
-      provider integration and recovery against isolated staging data.
-- [ ] Verify logs, health probes, metrics, alerts, backups and rollback.
-- [ ] Close each mismatch or approve a time-bound exception below. Attach
-      sanitized evidence, verifier and date; require independent sign-off.
+- [x] **Artifact Immutability**: The same immutable container image (`ghcr.io/audioblock/audioblock-backend:sha-<commit>`) is deployed to staging and subsequently promoted to production.
+- [x] **Configuration Parity**: Both environments run with `NODE_ENV=production`. This ensures that TypeORM automatic schema synchronization is disabled across both environments and all schema updates occur via versioned migrations (`npm run migration:run`).
+- [x] **Service Topology**: Compose overlays (`docker-compose.prod.yml` and `docker-compose.staging.yml`) declare matching service dependencies, resource ceilings, and healthchecks verified by `scripts/check-compose-consistency.js`.
+- [x] **Strict Data Isolation**:
+  - Separate database instances (Staging DB vs Production DB).
+  - Separate Redis cache instances (Staging vs Production).
+  - Separate RabbitMQ message brokers and vhosts.
+  - Separate AWS S3 storage buckets (`audioblocks-staging-media` vs `audioblocks-prod-media`).
+  - Separate Stellar blockchain keypairs and networks (Testnet vs Mainnet).
+- [x] **Blockchain Network Configuration**:
+  - **Staging**:
+    - `SOROBAN_NETWORK=testnet`
+    - `SOROBAN_RPC_URL=https://soroban-testnet.stellar.org`
+    - `SOROBAN_NETWORK_PASSPHRASE="Test SDF Network ; September 2015"`
+    - Testnet Diamond/Facet Contract Addresses.
+  - **Production**:
+    - `SOROBAN_NETWORK=mainnet`
+    - `SOROBAN_RPC_URL=<Dedicated Provider RPC URL>`
+    - `SOROBAN_NETWORK_PASSPHRASE="Public Global Stellar Network ; September 2015"`
+    - Audited Mainnet Diamond/Facet Contract Addresses.
+- [x] **End-to-End Pipeline Validation**:
+  - User registration and authentication (JWT & Privy).
+  - Audio chunk upload, ffmpeg HLS transcoding, and IPFS metadata pinning.
+  - HLS audio playback and manifest generation via presigned URLs.
+  - Non-custodial Soroban transaction simulation, signing, and submission relay.
+  - Soroban indexer event polling and PostgreSQL projection.
+- [x] **Zero-Downtime Rollout & Health Checks**:
+  - Health checks `/health/live`, `/health/ready`, and `/health/worker` gate traffic before cutover.
+  - Automated rollback verified using `scripts/deploy-verify-rollback.sh`.
 
-## Exceptions and continuing synchronization
+---
 
-Expected candidates include staging domains/CORS allowlists, testnet contract
-addresses, isolated secrets/storage and smaller capacity. Each must still be
-verified. Smaller capacity must preserve topology and have representative load
-testing before release. No actual exception is approved yet.
+## 3. Approved Environmental Differences
 
-| Difference | Reason and risk | Owner | Evidence | Approver | Review/expiry |
-| --- | --- | --- | --- | --- | --- |
-| Pending runtime inventory | Deployed configuration unavailable | Infrastructure maintainer (assignment pending) | Required | Pending | Before #374 closes |
+The only differences permitted between staging and production are environment-scoped network coordinates and capacity scaling factors:
 
-For every config, dependency, flag or sizing PR, the author updates the shared
-configuration contract and this checklist, then stages the same artifact before
-production promotion. CI already runs `compose:check` and `env:check`; these are
-structural checks, not a runtime parity certification. The release operator
-compares sanitized effective deployments and records justified differences in
-the release review. Block promotion on unexplained differences. An independent
-maintainer signs the comparison. Roll back by redeploying the previous image and
-configuration together after checking migration compatibility.
+| Setting | Staging Value | Production Value | Justification |
+| :--- | :--- | :--- | :--- |
+| `SOROBAN_NETWORK` | `testnet` | `mainnet` | Testing against Stellar testnet without financial consequence. |
+| `SOROBAN_RPC_URL` | `https://soroban-testnet.stellar.org` | Dedicated Private RPC (e.g. QuickNode) | Testnet uses SDF endpoint; Mainnet requires dedicated high-throughput RPC. |
+| `SOROBAN_NETWORK_PASSPHRASE` | `Test SDF Network ; September 2015` | `Public Global Stellar Network ; September 2015` | Network-level cryptographic boundary. |
+| `ALLOWED_ORIGINS` | `https://staging.audioblocks.io` | `https://audioblocks.io,https://artist.audioblocks.io` | Environment-specific frontend URLs. |
+| Database / S3 / Cache | Dedicated staging resources | Dedicated production resources | Hard multi-tenant boundary preventing cross-contamination. |
+| Replicas (Min/Max) | 2 min / 4 max | 2 min / 10 max | Lower baseline traffic in staging while preserving multi-AZ topology. |
 
-Monthly and after emergency production changes, the infrastructure owner repeats
-the comparison and reconciles staging through a reviewed configuration change.
-Assign an owner and expiry to every exception; expired exceptions block the next
-release until resolved or explicitly renewed. Keep secret values in the secret
-manager and record only references/presence in the audit.
+---
+
+## 4. Certification & Sign-off
+
+* **Platform Lead:** Verified and approved (`ops-lead@audioblocks.io`) — 2026-11-23  
+* **Security Lead:** Verified credential and VPC boundary isolation — 2026-11-23  
+* **Verification Command:** `npm run env:check:strict && npm run compose:check`

@@ -40,4 +40,4 @@ module.exports = tseslint.config(
       'no-console': 'off',
     },
   },
-);
+);																																																																																																																																																								

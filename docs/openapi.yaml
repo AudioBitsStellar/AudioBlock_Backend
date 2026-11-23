@@ -780,6 +780,238 @@ paths:
           description: Validation error (bad body, unknown operation, ...).
         '413':
           description: Request body exceeds 100 KB batch limit.
+  /api/admin/users/{id}/suspend:
+    post:
+      summary: Suspend or ban a user account (admin)
+      description: >-
+        Restricts an account. A restricted account is refused on every authenticated
+        request until reinstated; the restriction is checked on each request, so it
+        takes effect without waiting for the user's token to expire. Requires the
+        `user:manage` permission (admins and super admins). Admin and super admin
+        accounts can only be restricted by a super admin, and admins cannot restrict
+        themselves. The action is written to the admin audit log.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Unique identifier (UUID) of the user to restrict.
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, reason]
+              properties:
+                type:
+                  type: string
+                  enum: [suspended, banned]
+                reason:
+                  type: string
+                  minLength: 1
+                  maxLength: 500
+      responses:
+        '200':
+          description: Account restricted.
+        '400':
+          description: Validation failed, or the caller tried to restrict their own account.
+        '403':
+          description: Caller lacks `user:manage`, or may not restrict this user's role.
+        '404':
+          description: User not found.
+
+  /api/admin/users/{id}/reinstate:
+    post:
+      summary: Reinstate a suspended or banned user account (admin)
+      description: >-
+        Lifts a suspension or ban. Reinstating an active account is a no-op. Requires
+        the `user:manage` permission. Written to the admin audit log.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Unique identifier (UUID) of the user to reinstate.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Account reinstated.
+        '403':
+          description: Caller lacks `user:manage`.
+        '404':
+          description: User not found.
+
+  /api/admin/comments/{id}:
+    delete:
+      summary: Remove a comment regardless of its author (moderator)
+      description: >-
+        Removes a comment and its replies. Requires the `content:moderate` permission
+        (moderators and above). Written to the admin audit log.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Unique identifier (UUID) of the comment.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Comment removed.
+        '403':
+          description: Caller lacks `content:moderate`.
+        '404':
+          description: Comment not found.
+
+  /api/admin/audit-logs:
+    get:
+      summary: List admin audit log entries (admin)
+      description: >-
+        Paginated record of every mutating admin request, newest first, including
+        denied attempts (for which `actorId` is null when the caller was not
+        authenticated). Requires the `audit-log:view` permission.
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: actorId
+          in: query
+          required: false
+          description: Only return entries made by this admin (UUID).
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: A page of audit log entries.
+        '403':
+          description: Caller lacks `audit-log:view`.
+
+  /api/takedown/{id}/counter-notice:
+    post:
+      summary: File a counter-notice against an approved takedown (artist)
+      description: >-
+        The artist who owns the song can dispute an approved takedown. Filed once,
+        and only before the counter-notice window closes (14 days after approval).
+        Filing it does not change the takedown's status; an admin still decides
+        whether to reverse it. Returns 403 when the caller does not own the song,
+        409 when the takedown is not approved, a counter-notice already exists, or
+        the window has closed.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Unique takedown request identifier (UUID).
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [statement]
+              properties:
+                statement:
+                  type: string
+                  minLength: 1
+                  maxLength: 5000
+      responses:
+        '201':
+          description: Counter-notice filed.
+        '400':
+          description: Statement missing, blank, or too long.
+        '403':
+          description: Caller does not own the song.
+        '404':
+          description: Takedown request not found.
+        '409':
+          description: Takedown not approved, counter-notice already filed, or window closed.
+
+  /api/takedown:
+    get:
+      summary: List takedown requests (admin)
+      description: >-
+        Admin-only. Filter by status or song. `overdue=true` returns pending requests
+        whose review deadline (3 days after filing) has passed. Requests filed before
+        deadlines existed have no deadline and are never returned as overdue.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, approved, rejected, reversed]
+        - name: songId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: overdue
+          in: query
+          required: false
+          description: Set to true to return only overdue pending requests.
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Takedown requests.
+
+  /api/artist/analytics/export:
+    get:
+      summary: Export per-song analytics as CSV (artist)
+      description: >-
+        Downloads one CSV row per song in the caller's catalogue, ordered by title,
+        with the song's plays, saves and gross revenue (stroops) inside the window.
+        Covers only songs the caller owns; the artist is taken from the token. Plays
+        and saves are counted in the window, and revenue is gross song revenue from
+        reconciled payouts, matching the artist overview. Cells that a spreadsheet
+        would run as formulas are escaped. Catalogues above 1000 songs are refused
+        with 413 EXPORT_TOO_LARGE rather than truncated. Also served under
+        /api/artists/analytics/export.
+      parameters:
+        - name: window
+          in: query
+          required: false
+          description: Time window. Default is 30d.
+          schema:
+            type: string
+            enum: [7d, 30d, 90d, all-time]
+            default: 30d
+      responses:
+        '200':
+          description: CSV document (text/csv; charset=utf-8) as an attachment.
+          content:
+            text/csv:
+              schema:
+                type: string
+        '400':
+          description: Invalid window parameter.
+        '401':
+          description: Not authenticated.
+        '403':
+          description: Caller is not an artist or admin.
+        '413':
+          description: Catalogue exceeds the export size limit (EXPORT_TOO_LARGE).
+
 components:
   schemas:
     Song:

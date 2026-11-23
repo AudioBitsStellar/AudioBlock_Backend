@@ -21,19 +21,20 @@ export class EmailService {
    * @param to - Recipient email address.
    * @param subject - Email subject line.
    * @param html - HTML body content.
+   * @returns Message ID from the provider, or null if no API key.
    */
-  async sendEmail(to: string, subject: string, html: string): Promise<void> {
+  async sendEmail(to: string, subject: string, html: string): Promise<string | null> {
     if (!this.apiKey) {
       console.log(
         `[EmailService] Skipping email send (no API key). To: ${to}, Subject: ${subject}`,
       );
-      return;
+      return null;
     }
 
     const provider = process.env.EMAIL_PROVIDER || 'resend';
 
     if (provider === 'resend') {
-      await axios.post(
+      const response = await axios.post(
         'https://api.resend.com/v1/emails',
         {
           from: this.fromEmail,
@@ -48,8 +49,9 @@ export class EmailService {
           },
         },
       );
+      return response.data?.id || null;
     } else if (provider === 'sendgrid') {
-      await axios.post(
+      const response = await axios.post(
         'https://api.sendgrid.com/v3/mail/send',
         {
           from: { email: this.fromEmail },
@@ -64,7 +66,9 @@ export class EmailService {
           },
         },
       );
+      return response.headers['x-message-id'] || null;
     }
+    return null;
   }
 
   /**

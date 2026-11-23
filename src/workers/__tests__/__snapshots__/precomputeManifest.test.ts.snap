@@ -1,0 +1,28 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`precomputeManifest (#828) Master Playlist with Variants Handling (ABR ladder support) matches snapshot for a representative master playlist with variants 1`] = `
+"#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-INDEPENDENT-SEGMENTS
+#EXT-X-STREAM-INF:BANDWIDTH=128000,CODECS="mp4a.40.2"
+https://test-audio-bucket.s3.amazonaws.com/songs/song-abr-snapshot/hls/128k/prog_index.m3u8?signed=true&expires=600
+#EXT-X-STREAM-INF:BANDWIDTH=256000,CODECS="mp4a.40.2"
+https://test-audio-bucket.s3.amazonaws.com/songs/song-abr-snapshot/hls/256k/prog_index.m3u8?signed=true&expires=600
+#EXT-X-STREAM-INF:BANDWIDTH=320000,CODECS="mp4a.40.2"
+https://test-audio-bucket.s3.amazonaws.com/songs/song-abr-snapshot/hls/variant_high.m3u8?signed=true&expires=600"
+`;
+
+exports[`precomputeManifest (#828) Single Media Playlist Handling matches snapshot for a representative single media manifest 1`] = `
+"#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-TARGETDURATION:10
+#EXT-X-MEDIA-SEQUENCE:0
+
+#EXTINF:10.000,
+https://test-audio-bucket.s3.amazonaws.com/songs/song-snapshot-test/hls/segment000.ts?signed=true&expires=600
+#EXTINF:10.000,
+https://test-audio-bucket.s3.amazonaws.com/songs/song-snapshot-test/hls/segment001.ts?signed=true&expires=600
+#EXTINF:5.500,
+https://test-audio-bucket.s3.amazonaws.com/songs/song-snapshot-test/hls/segment002.ts?signed=true&expires=600
+#EXT-X-ENDLIST"
+`;

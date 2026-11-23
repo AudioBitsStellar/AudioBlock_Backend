@@ -2,76 +2,136 @@ import AWS from 'aws-sdk';
 import AppDataSource from '../config/db';
 import { Song } from '../entities/Song';
 import redis from '../config/redis';
+import { AppError, ErrorType } from '../errors/AppError';
 
 const s3 = new AWS.S3({ region: process.env.AWS_REGION });
 
-const CACHE_TTL = Number(process.env.MANIFEST_CACHE_TTL || 300); // seconds
+export const DEFAULT_MANIFEST_CACHE_TTL = 300; // seconds (5 minutes)
+export const DEFAULT_SIGNED_URL_EXPIRES = 600; // seconds (10 minutes) — strictly exceeds cache TTL (#828)
 
-// #352 — Presigned URL expiry rationale:
-// 5 minutes (300s) balances usability against exposure window.
-// - HLS segments are short (~2-10s each); a 5-min URL covers many segments
-//   and re-fetching on expiry is cheap (CDN-cached).
-// - Longer expiry (e.g. 1hr) increases the window if a URL leaks.
-// - Shorter expiry (e.g. 60s) causes frequent re-fetches during continuous
-//   playback and increases latency when seeking.
-// Override via SIGNED_URL_EXPIRES for deployments with different CDN/latency profiles.
-const SIGNED_EXPIRES = Number(process.env.SIGNED_URL_EXPIRES || 300);
+/**
+ * Typed error thrown when an HLS manifest cannot be found or loaded (#828).
+ */
+export class ManifestNotFoundError extends AppError {
+  constructor(message: string = 'No HLS manifest for song') {
+    super(message, ErrorType.NOT_FOUND, 404, true, undefined, 'MANIFEST_NOT_FOUND');
+    this.name = 'ManifestNotFoundError';
+    Object.setPrototypeOf(this, ManifestNotFoundError.prototype);
+  }
+}
 
-function getSignedUrl(key: string) {
+/**
+ * Returns the cache TTL for precomputed manifests.
+ */
+export function getManifestCacheTtl(): number {
+  return Number(process.env.MANIFEST_CACHE_TTL || DEFAULT_MANIFEST_CACHE_TTL);
+}
+
+/**
+ * Returns the signed URL expiry in seconds.
+ * Strictly enforces that signed URL expiry exceeds manifest cache TTL (#828)
+ * so that cached manifests never contain expired segment URLs.
+ */
+export function getSignedUrlExpiry(): number {
+  const configured = Number(process.env.SIGNED_URL_EXPIRES || DEFAULT_SIGNED_URL_EXPIRES);
+  const cacheTtl = getManifestCacheTtl();
+  if (configured <= cacheTtl) {
+    return cacheTtl + 300;
+  }
+  return configured;
+}
+
+export const CACHE_TTL = DEFAULT_MANIFEST_CACHE_TTL;
+export const SIGNED_EXPIRES = DEFAULT_SIGNED_URL_EXPIRES;
+
+export function getSignedUrl(key: string, expiry: number = getSignedUrlExpiry()): string {
   return s3.getSignedUrl('getObject', {
     Bucket: process.env.AWS_BUCKET_NAME!,
     Key: key,
-    Expires: SIGNED_EXPIRES,
+    Expires: expiry,
   });
 }
 
-export async function precomputeSignedManifest(songId: string) {
-  const songRepo = AppDataSource.getRepository(Song);
-  const song = await songRepo.findOneBy({ id: songId });
+export function s3KeyFromUrl(url: string): string {
+  if (!url || typeof url !== 'string') {
+    throw new ManifestNotFoundError('Invalid S3 URL');
+  }
 
-  if (!song || !song.hlsMasterUrl) throw new Error('No HLS manifest for song');
-
-  // derive the S3 key for master.m3u8
-  const masterKey = s3KeyFromUrl(song.hlsMasterUrl); // helper below
-
-  const masterObj = await s3
-    .getObject({
-      Bucket: process.env.AWS_BUCKET_NAME!,
-      Key: masterKey,
-    })
-    .promise();
-  const manifest = masterObj.Body!.toString('utf-8');
-
-  // rewrite manifest: replace relative ts lines or absolute paths
-  const signedManifest = await rewriteManifest(manifest, songId);
-
-  await redis.setex(`manifest:${songId}`, CACHE_TTL, signedManifest);
-  return signedManifest;
+  try {
+    const parsed = new URL(url);
+    const key = parsed.pathname.replace(/^\/+/, '');
+    if (!key) throw new Error('Empty path');
+    return key;
+  } catch {
+    const parts = url.split('.com/');
+    if (parts.length < 2 || !parts[1]) {
+      throw new ManifestNotFoundError(`Invalid S3 URL: ${url}`);
+    }
+    return parts[1].replace(/^\/+/, '');
+  }
 }
 
-function s3KeyFromUrl(url: string) {
-  // e.g. https://bucket.s3.eu-north-1.amazonaws.com/songs/<id>/hls/master.m3u8
-  const parts = url.split('.com/');
-  if (parts.length < 2) throw new Error('Invalid S3 URL');
-  return parts[1];
-}
-
-async function rewriteManifest(manifest: string, songId: string) {
-  // This handles simple manifests where segment lines are relative filenames (e.g., segment000.ts)
-  // It also handles lines already absolute URLs by extracting filename.
-  // For variant playlists (multi-bit-rate), more logic required to rewrite nested playlists — see notes later.
-
+/**
+ * Rewrites an HLS manifest (both master playlist with variants and single media playlist).
+ * Preserves comments and tag lines (lines starting with #) unchanged.
+ * Replaces each segment / variant playlist URI line with a presigned S3 URL.
+ */
+export async function rewriteManifest(manifest: string, songId: string): Promise<string> {
   const lines = manifest.split('\n');
   const rewrittenLines = await Promise.all(
     lines.map(async (line) => {
-      line = line.trim();
-      if (!line || line.startsWith('#')) return line; // comment/metadata
-      // candidate segment or nested playlist path
-      const filename = line.split('/').pop() || line; // get last part
-      const key = `songs/${songId}/hls/${filename}`;
-      const signed = getSignedUrl(key);
-      return signed;
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) return line; // comment, metadata, or tag
+
+      let key: string;
+      if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+        key = s3KeyFromUrl(trimmed);
+      } else {
+        const cleanPath = trimmed.replace(/^\.?\//, '');
+        if (cleanPath.startsWith(`songs/${songId}/hls/`)) {
+          key = cleanPath;
+        } else {
+          key = `songs/${songId}/hls/${cleanPath}`;
+        }
+      }
+
+      return getSignedUrl(key);
     }),
   );
   return rewrittenLines.join('\n');
+}
+
+export async function precomputeSignedManifest(songId: string): Promise<string> {
+  const songRepo = AppDataSource.getRepository(Song);
+  const song = await songRepo.findOneBy({ id: songId });
+
+  if (!song || !song.hlsMasterUrl) {
+    throw new ManifestNotFoundError(`No HLS manifest for song ${songId}`);
+  }
+
+  const masterKey = s3KeyFromUrl(song.hlsMasterUrl);
+
+  let masterObj: AWS.S3.GetObjectOutput;
+  try {
+    masterObj = await s3
+      .getObject({
+        Bucket: process.env.AWS_BUCKET_NAME!,
+        Key: masterKey,
+      })
+      .promise();
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'unknown error';
+    throw new ManifestNotFoundError(`Source manifest not found in storage: ${message}`);
+  }
+
+  if (!masterObj.Body) {
+    throw new ManifestNotFoundError(`Empty manifest retrieved for song ${songId}`);
+  }
+
+  const manifest = masterObj.Body.toString('utf-8');
+  const signedManifest = await rewriteManifest(manifest, songId);
+
+  const cacheTtl = getManifestCacheTtl();
+  await redis.setex(`manifest:${songId}`, cacheTtl, signedManifest);
+  return signedManifest;
 }

@@ -131,6 +131,46 @@ PASSWORD_RESET_RATE_LIMIT_MAX=3
 2. Prevents attacker from flooding user's inbox
 3. Mitigates token brute-forcing via email collection
 
+#### 3a. Email Verification Rate Limiter (issue PROD-04)
+
+**Applied to:** `GET /api/auth/verify-email/:token`
+
+**Key:** `emailverify:rl:${IP}`
+
+**Default Limits:**
+
+- Window: 15 minutes (900,000 ms)
+- Max Requests: 20
+
+**Configuration:**
+
+```bash
+EMAIL_VERIFICATION_RATE_LIMIT_WINDOW_MS=900000  # 15 minutes
+EMAIL_VERIFICATION_RATE_LIMIT_MAX=20
+```
+
+**Rationale:** Verification tokens are 256-bit random values, so they cannot be guessed. The limit only stops scripted abuse of the public link.
+
+#### 3b. Resend Verification Rate Limiter (issue PROD-04)
+
+**Applied to:** `POST /api/auth/resend-verification`
+
+**Key:** `resendverify:rl:${email}`. Keyed by the target address alone, not IP plus address, so one inbox cannot be flooded from many IPs.
+
+**Default Limits:**
+
+- Window: 1 hour (3,600,000 ms)
+- Max Requests: 3
+
+**Configuration:**
+
+```bash
+RESEND_VERIFICATION_RATE_LIMIT_WINDOW_MS=3600000  # 1 hour
+RESEND_VERIFICATION_RATE_LIMIT_MAX=3
+```
+
+**Rationale:** Same reasoning as password reset. Each request sends email, so the limit prevents inbox flooding. The endpoint always returns the same generic message, so the limit does not reveal which accounts exist.
+
 #### 4. Two-Factor Authentication Rate Limiter
 
 **Applied to:** 2FA enable, verify, disable endpoints (Issue #328)

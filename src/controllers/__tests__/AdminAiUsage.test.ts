@@ -12,7 +12,7 @@ jest.mock('../../config/redis', () => ({
 }));
 
 const mockGetUsageSummary = jest.fn();
-jest.mock('../../services/ai/AiUsageService', () => ({
+jest.mock('../../services/AI/AiUsageService', () => ({
   AiUsageService: jest.fn().mockImplementation(() => ({
     getUsageSummary: (...args: unknown[]) => mockGetUsageSummary(...args),
   })),

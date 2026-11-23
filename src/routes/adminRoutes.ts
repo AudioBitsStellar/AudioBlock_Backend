@@ -11,8 +11,14 @@ import { AdminController } from '../controllers/AdminController';
 import { bulkModerationRateLimiter } from '../middlewares/bulkModerationRateLimiter';
 import { ResolveReportDTO } from '../dtos/ReportSongDTO';
 import { ResolveCommentReportDTO } from '../dtos/ReportCommentDTO';
+import { SupportController } from '../controllers/SupportController';
+import { SetPayoutHoldDTO } from '../dtos/SetPayoutHoldDTO';
 
 const router = Router();
+
+// Audit every mutating admin request, including ones that are then denied (#980).
+// Mounted first so the audit hook is registered before any route handler runs.
+router.use(adminAuditMiddleware);
 
 // RBAC (Issue #100): each route requires the specific permission it needs
 // rather than a blanket admin check. requirePermission returns 401 when the
@@ -128,6 +134,22 @@ router.get(
   '/users/:id/linked-accounts',
   requirePermission(Permission.ROLE_ASSIGN),
   AdminController.getLinkedAccounts,
+);
+
+// Support user lookup (#983) — read-only and audited. Admins and super_admins only.
+router.get(
+  '/users/lookup',
+  requirePermission(Permission.USER_MANAGE),
+  SupportController.lookupUser,
+);
+
+// Payout compliance hold (#985) — places or clears a hold that excludes the
+// account from royalty payouts. Every change is audited.
+router.put(
+  '/users/:id/payout-hold',
+  requirePermission(Permission.USER_MANAGE),
+  validateDTO(SetPayoutHoldDTO),
+  SupportController.setPayoutHold,
 );
 
 export default router;

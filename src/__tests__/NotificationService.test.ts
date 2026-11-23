@@ -8,6 +8,7 @@ jest.mock('../config/db', () => ({
 import AppDataSource from '../config/db';
 import { NotificationService } from '../services/NotificationService';
 import { Notification } from '../entities/Notification';
+import { NotificationPreference } from '../entities/NotificationPreference';
 
 const mockNotificationRepo = {
   create: jest.fn(),
@@ -19,9 +20,21 @@ const mockNotificationRepo = {
   update: jest.fn(),
 };
 
+const mockPreferenceRepo = {
+  create: jest.fn(),
+  save: jest.fn(),
+  findOneBy: jest.fn(),
+  findBy: jest.fn(),
+};
+
 beforeEach(() => {
   jest.clearAllMocks();
-  (AppDataSource.getRepository as jest.Mock).mockReturnValue(mockNotificationRepo);
+  (AppDataSource.getRepository as jest.Mock).mockImplementation((entity) => {
+    if (entity === NotificationPreference) {
+      return mockPreferenceRepo;
+    }
+    return mockNotificationRepo;
+  });
 });
 
 function makeSvc(): NotificationService {
@@ -41,7 +54,8 @@ const notification = (overrides: Partial<Notification> = {}): Notification =>
   }) as Notification;
 
 describe('NotificationService.create', () => {
-  it('creates an unread notification', async () => {
+  it('creates an unread notification when no preference is set (defaults to enabled)', async () => {
+    mockPreferenceRepo.findOneBy.mockResolvedValue(null);
     mockNotificationRepo.create.mockImplementation((input: unknown) => input);
     mockNotificationRepo.save.mockImplementation(async (n: Notification) => n);
 
@@ -62,7 +76,121 @@ describe('NotificationService.create', () => {
         data: { amount: '100' },
       }),
     );
-    expect(result.isRead).toBe(false);
+    expect(result?.isRead).toBe(false);
+  });
+
+  it('creates a notification when user explicitly enabled the notification type', async () => {
+    mockPreferenceRepo.findOneBy.mockResolvedValue({
+      id: 'p1',
+      userId: 'user-1',
+      type: 'royalty_payout',
+      enabled: true,
+    });
+    mockNotificationRepo.create.mockImplementation((input: unknown) => input);
+    mockNotificationRepo.save.mockImplementation(async (n: Notification) => n);
+
+    const svc = makeSvc();
+    const result = await svc.create({
+      userId: 'user-1',
+      type: 'royalty_payout',
+      title: 'Payout',
+      message: 'You got paid',
+    });
+
+    expect(mockNotificationRepo.create).toHaveBeenCalled();
+    expect(result).not.toBeNull();
+  });
+
+  it('suppresses and does not create notification when user disabled the notification type', async () => {
+    mockPreferenceRepo.findOneBy.mockResolvedValue({
+      id: 'p1',
+      userId: 'user-1',
+      type: 'royalty_payout',
+      enabled: false,
+    });
+
+    const svc = makeSvc();
+    const result = await svc.create({
+      userId: 'user-1',
+      type: 'royalty_payout',
+      title: 'Payout',
+      message: 'You got paid',
+    });
+
+    expect(result).toBeNull();
+    expect(mockNotificationRepo.create).not.toHaveBeenCalled();
+    expect(mockNotificationRepo.save).not.toHaveBeenCalled();
+  });
+});
+
+describe('NotificationService preferences management (Issue #427)', () => {
+  it('gets all preferences for a user', async () => {
+    const prefs = [
+      { id: 'p1', userId: 'user-1', type: 'royalty_payout', enabled: false },
+      { id: 'p2', userId: 'user-1', type: 'comment', enabled: true },
+    ];
+    mockPreferenceRepo.findBy.mockResolvedValue(prefs);
+
+    const svc = makeSvc();
+    const result = await svc.getPreferences('user-1');
+
+    expect(mockPreferenceRepo.findBy).toHaveBeenCalledWith({ userId: 'user-1' });
+    expect(result).toEqual(prefs);
+  });
+
+  it('creates a new preference when setting preference for the first time', async () => {
+    mockPreferenceRepo.findOneBy.mockResolvedValue(null);
+    mockPreferenceRepo.create.mockImplementation((obj: unknown) => obj);
+    mockPreferenceRepo.save.mockImplementation(async (obj: unknown) => ({
+      id: 'new-id',
+      ...(obj as object),
+    }));
+
+    const svc = makeSvc();
+    const result = await svc.setPreference('user-1', 'follow', false);
+
+    expect(mockPreferenceRepo.create).toHaveBeenCalledWith({
+      userId: 'user-1',
+      type: 'follow',
+      enabled: false,
+    });
+    expect(result.enabled).toBe(false);
+  });
+
+  it('updates existing preference when user already has a row', async () => {
+    const existing = {
+      id: 'p1',
+      userId: 'user-1',
+      type: 'follow',
+      enabled: false,
+    };
+    mockPreferenceRepo.findOneBy.mockResolvedValue(existing);
+    mockPreferenceRepo.save.mockImplementation(async (obj: unknown) => obj);
+
+    const svc = makeSvc();
+    const result = await svc.setPreference('user-1', 'follow', true);
+
+    expect(existing.enabled).toBe(true);
+    expect(mockPreferenceRepo.save).toHaveBeenCalledWith(existing);
+    expect(result.enabled).toBe(true);
+  });
+
+  it('batch updates preferences', async () => {
+    mockPreferenceRepo.findOneBy.mockResolvedValue(null);
+    mockPreferenceRepo.create.mockImplementation((obj: unknown) => obj);
+    mockPreferenceRepo.save.mockImplementation(async (obj: unknown) => obj);
+
+    const svc = makeSvc();
+    const result = await svc.updatePreferences('user-1', [
+      { type: 'comment', enabled: false },
+      { type: 'follow', enabled: false },
+    ]);
+
+    expect(result).toHaveLength(2);
+    expect(result[0].type).toBe('comment');
+    expect(result[0].enabled).toBe(false);
+    expect(result[1].type).toBe('follow');
+    expect(result[1].enabled).toBe(false);
   });
 });
 

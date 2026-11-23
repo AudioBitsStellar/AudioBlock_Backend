@@ -143,6 +143,9 @@ router.post(
 );
 router.post('/upload/suggest-tags', authArtistMiddleware, uploadController.suggestTagsAndGenres);
 
+// Search songs — must be before /:id to avoid being captured as an id param (#812)
+router.get('/search', SongController.searchSongs);
+
 // Stream Songs
 router.get('/stream/:id', SongController.streamSong);
 router.get('/popular', SongController.getPopularSongs);
@@ -160,6 +163,11 @@ router.get('/embed/:id', EmbedController.getSongEmbed);
 // above so it cannot capture them.
 router.get('/', optionalAuth, SongController.listSongs);
 router.get('/:id', optionalAuth, etagCache({ visibility: 'no-cache' }), SongController.getSong);
+
+// Play count: clients call this after 30 s of continuous playback (#792).
+// Incrementing on the HLS manifest fetch would inflate counts for buffering
+// and scrubbing; a dedicated POST fired by the player gives an accurate count.
+router.post('/:id/play', SongController.recordPlay);
 
 // Soroban on-chain song minting: the artist's wallet signs, the backend
 // only builds and relays the transaction.

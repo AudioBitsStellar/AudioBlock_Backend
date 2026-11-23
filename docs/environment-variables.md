@@ -21,6 +21,7 @@ Complete reference of all environment variables used by the AudioBlocks Backend.
 - [Worker / Job Queue](#worker--job-queue)
 - [Server](#server)
 - [CORS](#cors)
+- [Compliance](#compliance)
 
 ---
 
@@ -33,10 +34,6 @@ Complete reference of all environment variables used by the AudioBlocks Backend.
 | `POSTGRES_USER`               | Yes      | —        | PostgreSQL username                             |
 | `POSTGRES_PASSWORD`           | Yes      | —        | PostgreSQL password                             |
 | `POSTGRES_DATABASE`           | Yes      | —        | Database name                                   |
-| `DB_POOL_MAX`                 | No       | `20`     | Maximum connections in the pool                 |
-| `DB_POOL_MIN`                 | No       | `5`      | Minimum idle connections maintained             |
-| `DB_CONNECTION_TIMEOUT_MS`    | No       | `30000`  | Timeout (ms) to acquire a connection            |
-| `DB_IDLE_TIMEOUT_MS`          | No       | `300000` | Time (ms) before an idle connection is released |
 | `DB_POOL_METRICS_INTERVAL_MS` | No       | `30000`  | Interval (ms) for pool metrics logging          |
 
 **Sensitive:** `POSTGRES_PASSWORD` — never log or commit.
@@ -45,14 +42,22 @@ Complete reference of all environment variables used by the AudioBlocks Backend.
 
 ## Redis
 
-| Variable         | Required | Default | Description         |
-| ---------------- | -------- | ------- | ------------------- |
-| `REDIS_HOST`     | No       | `redis` | Redis host address  |
-| `REDIS_PORT`     | No       | `6379`  | Redis port          |
-| `REDIS_USERNAME` | No       | —       | Redis auth username |
-| `REDIS_PASSWORD` | No       | —       | Redis auth password |
+| Variable             | Required | Default        | Description                                                                                             |
+| -------------------- | -------- | -------------- | ------------------------------------------------------------------------------------------------------- |
+| `REDIS_HOST`         | No       | `redis`        | Redis host address                                                                                      |
+| `REDIS_PORT`         | No       | `6379`         | Redis port                                                                                              |
+| `REDIS_USERNAME`     | No       | —              | Redis auth username                                                                                     |
+| `REDIS_PASSWORD`     | No       | —              | Redis auth password                                                                                     |
+| `MANIFEST_CACHE_TTL` | No       | `300`          | Manifest cache TTL in seconds. Must be strictly less than `SIGNED_URL_EXPIRES` (#828).                  |
+| `SIGNED_URL_EXPIRES` | No       | `600`          | S3 presigned URL expiration in seconds. Must strictly exceed `MANIFEST_CACHE_TTL` (#828).               |
 
 **Sensitive:** `REDIS_PASSWORD` — never log or commit.
+
+### Eviction Policy & Memory Management (#378)
+
+- **Configured Eviction Policy:** `maxmemory-policy volatile-lru`
+- **Memory Cap:** `maxmemory 200mb` (in Docker / production container limits of 256MB)
+- **Rationale:** Redis stores a mix of persistent secondary search indices (`song:idx:*`), short-lived authentication nonces (`nonce:*`, 300s TTL), OAuth state (`twitter:state:*`, 300s TTL), and derived caches. Under `volatile-lru`, keys without a TTL (search index, job queues) are never evicted, and idle cached metadata is evicted before active in-flight authentication tokens. See [ADR-008](adrs/008-caching-strategy.md) for detailed evaluation.
 
 ---
 
@@ -190,8 +195,17 @@ _\* Required for the selected network. All five IDs must be set for the chosen `
 | `EMAIL_PROVIDER` | No       | `resend`                  | Email provider: `resend` or `sendgrid`  |
 | `EMAIL_API_KEY`  | Yes      | —                         | API key for the selected email provider |
 | `EMAIL_FROM`     | No       | `noreply@audioblocks.com` | Sender email address                    |
+| `EMAIL_EVENTS_WEBHOOK_SECRET` | No | — (endpoint disabled) | Shared secret in the bounce/complaint webhook path, `POST /api/email-events/<secret>`. See [EMAIL_DELIVERABILITY.md](EMAIL_DELIVERABILITY.md). |
 
-**Sensitive:** `EMAIL_API_KEY` — never log or commit.
+**Sensitive:** `EMAIL_API_KEY` and `EMAIL_EVENTS_WEBHOOK_SECRET`: never log or commit. The webhook secret appears in the request path, so proxy access logs must redact it.
+
+---
+
+## Age policy
+
+| Variable             | Required | Default | Description                                                                                                |
+| -------------------- | -------- | ------- | ---------------------------------------------------------------------------------------------------------- |
+| `MINIMUM_SIGNUP_AGE` | No       | `18`    | Minimum age to create an account, 13 to 99. Unset or invalid falls back to 18. See [AGE_POLICY.md](AGE_POLICY.md). |
 
 ---
 
@@ -232,14 +246,10 @@ _\* Required for the selected network. All five IDs must be set for the chosen `
 Song consumers use `WORKER_PREFETCH` (positive integer, default `1`) to bound
 unacknowledged deliveries and in-flight async processing. See the
 [worker scaling guide](worker-scaling.md) before raising it. The song consumer's
-attempt limit is currently hardcoded; the `WORKER_*` retry examples below are
-not read by that consumer.
+attempt limit is currently hardcoded.
 
 | Variable                   | Required | Default | Description                                         |
 | -------------------------- | -------- | ------- | --------------------------------------------------- |
-| `WORKER_MAX_ATTEMPTS`      | No       | `3`     | Max processing attempts before DLQ (song processor) |
-| `WORKER_BACKOFF_BASE_MS`   | No       | `2000`  | Base delay (ms) for exponential backoff             |
-| `WORKER_BACKOFF_MAX_MS`    | No       | `30000` | Maximum backoff delay (ms)                          |
 | `JOB_MAX_ATTEMPTS`         | No       | `3`     | Default max attempts per background job             |
 | `JOB_BACKOFF_BASE_MS`      | No       | `2000`  | Base backoff delay for job retries                  |
 | `JOB_BACKOFF_MAX_MS`       | No       | `30000` | Maximum backoff for job retries                     |
@@ -270,6 +280,24 @@ not read by that consumer.
 ```
 ALLOWED_ORIGINS=https://listener.audioblockz.com,https://artist.audioblockz.com
 ```
+
+---
+
+## Compliance
+
+Used by royalty payout screening (#985) and the public takedown policy (#986).
+See [SANCTIONS_SCREENING.md](./SANCTIONS_SCREENING.md) and
+[DMCA_TAKEDOWN_POLICY.md](./DMCA_TAKEDOWN_POLICY.md).
+
+| Variable                          | Required | Default    | Description                                                                                                       |
+| --------------------------------- | -------- | ---------- | ----------------------------------------------------------------------------------------------------------------- |
+| `SANCTIONS_SCREENING_PROVIDER`    | No       | `denylist` | Screening provider for payout recipients. Only `denylist` is built in. Any other value blocks payouts (fail closed). |
+| `SANCTIONS_DENYLIST`              | No       | empty      | Comma-separated Stellar public keys (`G...`) that payouts must never reach.                                       |
+| `DMCA_AGENT_NAME`                 | No       | empty      | Designated DMCA agent name. Published at `GET /api/takedown/policy`.                                              |
+| `DMCA_AGENT_EMAIL`                | No       | empty      | Designated DMCA agent contact email. Published.                                                                   |
+| `DMCA_AGENT_ADDRESS`              | No       | empty      | Designated DMCA agent postal address. Published.                                                                  |
+| `DMCA_AGENT_REGISTRATION_NUMBER`  | No       | empty      | Registration number from the U.S. Copyright Office designation. The agent is reported as `recorded` only when all four `DMCA_AGENT_*` required fields are set. |
+| `DMCA_AGENT_REGISTERED_AT`        | No       | empty      | ISO 8601 date the designation was filed. Published when set.                                                      |
 
 ---
 

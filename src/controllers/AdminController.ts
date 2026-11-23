@@ -13,7 +13,7 @@ import { VerificationStatus } from '../entities/ArtistVerification';
 import { TransactionLogService } from '../services/TransactionLogService';
 import { IndexerService } from '../services/IndexerService';
 import { SongModerationService } from '../services/Song/SongModerationService';
-import { AiUsageService } from '../services/ai/AiUsageService';
+import { AiUsageService } from '../services/AI/AiUsageService';
 
 const MAX_AI_USAGE_ARTISTS = 200;
 

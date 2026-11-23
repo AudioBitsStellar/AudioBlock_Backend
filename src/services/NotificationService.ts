@@ -1,6 +1,7 @@
 import { Repository } from 'typeorm';
 import AppDataSource from '../config/db';
 import { Notification, NotificationType } from '../entities/Notification';
+import { NotificationPreference } from '../entities/NotificationPreference';
 import { DeviceToken } from '../entities/DeviceToken';
 import {
   IPushNotificationProvider,
@@ -18,6 +19,15 @@ export interface CreateNotificationInput {
 }
 
 /**
+ * Database-backed user notifications (Issue #79, #427).
+ *
+ * Notifications are created programmatically (e.g. by the royalty payout,
+ * song processing, and marketplace flows) and read through the API.
+ * Users can manage preferences per notification type.
+ */
+export class NotificationService {
+  private notificationRepo: Repository<Notification>;
+  private preferenceRepo: Repository<NotificationPreference>;
  * Database-backed user notifications with multi-channel push delivery (Issues #79, #429).
  *
  * Notifications are created programmatically (e.g. by the royalty payout,
@@ -31,6 +41,11 @@ export class NotificationService {
 
   constructor(pushProvider?: IPushNotificationProvider) {
     this.notificationRepo = AppDataSource.getRepository(Notification);
+    this.preferenceRepo = AppDataSource.getRepository(NotificationPreference);
+  }
+
+  /**
+   * Check if a specific notification type is enabled for a user (Issue #427).
     this.deviceTokenRepo = AppDataSource.getRepository(DeviceToken);
     this.pushProvider = pushProvider || new DefaultPushNotificationProvider();
   }
@@ -118,7 +133,21 @@ export class NotificationService {
    * Saves the in-app notification record and dispatches a push notification
    * alongside in-app delivery to all registered user devices.
    */
-  async create(input: CreateNotificationInput): Promise<Notification> {
+  async isTypeEnabled(userId: string, type: NotificationType | string): Promise<boolean> {
+    const pref = await this.preferenceRepo.findOneBy({ userId, type });
+    return pref ? pref.enabled : true;
+  }
+
+  /**
+   * Create a notification for a user unless they have opted out of this type (Issue #427).
+   * Returns null if the user has disabled this notification type.
+   */
+  async create(input: CreateNotificationInput): Promise<Notification | null> {
+    const enabled = await this.isTypeEnabled(input.userId, input.type);
+    if (!enabled) {
+      return null;
+    }
+
     const notification = this.notificationRepo.create({
       userId: input.userId,
       type: input.type,
@@ -153,6 +182,45 @@ export class NotificationService {
     }
 
     return savedNotification;
+  }
+
+  /**
+   * Get all explicit notification preferences for a user (Issue #427).
+   */
+  async getPreferences(userId: string): Promise<NotificationPreference[]> {
+    return this.preferenceRepo.findBy({ userId });
+  }
+
+  /**
+   * Set or update a notification preference for a user (Issue #427).
+   */
+  async setPreference(
+    userId: string,
+    type: NotificationType | string,
+    enabled: boolean,
+  ): Promise<NotificationPreference> {
+    let pref = await this.preferenceRepo.findOneBy({ userId, type });
+    if (pref) {
+      pref.enabled = enabled;
+    } else {
+      pref = this.preferenceRepo.create({ userId, type, enabled });
+    }
+    return this.preferenceRepo.save(pref);
+  }
+
+  /**
+   * Batch update notification preferences for a user (Issue #427).
+   */
+  async updatePreferences(
+    userId: string,
+    preferences: Array<{ type: NotificationType | string; enabled: boolean }>,
+  ): Promise<NotificationPreference[]> {
+    const results: NotificationPreference[] = [];
+    for (const item of preferences) {
+      const updated = await this.setPreference(userId, item.type, item.enabled);
+      results.push(updated);
+    }
+    return results;
   }
 
   /**

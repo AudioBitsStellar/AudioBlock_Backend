@@ -17,6 +17,14 @@ const SENSITIVE_BODY_FIELDS = /password|token|secret|key|signature|pin|otp|code|
 
 const MAX_BODY_LOG_BYTES = 1024;
 
+// The email provider event webhook carries its shared secret in the path (issue PROD-03).
+const EMAIL_EVENT_SECRET_PATH = /^(\/api\/email-events\/)[^/?]+/;
+
+/** Masks the webhook secret so it never reaches log output. */
+export function redactWebhookSecretPath(url: string): string {
+  return url.replace(EMAIL_EVENT_SECRET_PATH, '$1[REDACTED]');
+}
+
 function redactSensitive(obj: unknown, depth = 0): unknown {
   if (depth > 5) return '[max-depth]';
   if (typeof obj === 'string') return obj;
@@ -88,7 +96,7 @@ export const requestLoggerMiddleware: RequestHandler = (
         timestamp: new Date().toISOString(),
         reqId: req.id,
         method: req.method,
-        route: req.originalUrl,
+        route: redactWebhookSecretPath(req.originalUrl),
         status: res.statusCode,
         durationMs: duration,
         ip: req.ip,
@@ -102,7 +110,7 @@ export const requestLoggerMiddleware: RequestHandler = (
           ? { requestBodyBytes: Number(req.headers['content-length']) }
           : {}),
       },
-      `${req.method} ${req.originalUrl} ${res.statusCode} (${duration}ms)`,
+      `${req.method} ${redactWebhookSecretPath(req.originalUrl)} ${res.statusCode} (${duration}ms)`,
     );
   });
 

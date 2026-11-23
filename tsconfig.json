@@ -6,6 +6,7 @@
     "rootDir": "src",
     "outDir": "dist",
     "strict": true,
+    "forceConsistentCasingInFileNames": true,
     "noImplicitAny": true,
     "strictNullChecks": true,
     "strictFunctionTypes": true,

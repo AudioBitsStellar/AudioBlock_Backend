@@ -31,7 +31,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [1.0.0] - 2024-01-01
+## [1.0.0] - 2025-07-15
 
 ### Added
 - Initial release of AudioBlock Backend
@@ -44,5 +44,5 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Royalty reconciliation job
 - Pinata IPFS integration for metadata
 
-[Unreleased]: https://github.com/Darkvader-ship-it/AudioBlock_Backend/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/Darkvader-ship-it/AudioBlock_Backend/releases/tag/v1.0.0
+[Unreleased]: https://github.com/AudioBitsStellar/AudioBlock_Backend/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/AudioBitsStellar/AudioBlock_Backend/releases/tag/v1.0.0

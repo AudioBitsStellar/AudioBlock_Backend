@@ -4,7 +4,7 @@
  *
  * Usage:
  *   node scripts/check-env-example.js           # reports mismatches, exits 1 if required var missing from .env.example
- *   node scripts/check-env-example.js --strict  # also exits 1 if .env.example contains extra keys not in required list
+ *   node scripts/check-env-example.js --strict  # also exits 1 if .env.example documents keys no code reads
  *   node scripts/check-env-example.js --json    # machine-readable output
  *
  * Source of truth for "required" is the `requiredVars` array in src/config/env.ts
@@ -18,11 +18,15 @@
  *
  * Rationale: .env.example is intentionally a superset of requiredVars — it
  * documents optional tuning vars (REDIS_HOST, LOG_LEVEL, rate limits, etc.) that
- * have sensible defaults and are not validated as required at startup. Treating
- * every extra key as a hard error would force callers to either trim useful
- * documentation or bloat the required set. Therefore the default mode warns on
- * extras but only fails on truly missing required keys. Pass --strict in CI if
- * you want exact-set parity (e.g. for a dedicated "required-only" example file).
+ * have sensible defaults and are not validated as required at startup, so
+ * exact-set parity with requiredVars is NOT enforced. Instead, --strict fails
+ * when .env.example documents a key that nothing in the codebase reads — i.e.
+ * dead configuration that would silently drift out of sync with the docs.
+ *
+ * "Referenced" means the key appears as a token in non-test source under src/
+ * or scripts/, or in deployment config (docker-compose, Dockerfile, workflows).
+ * Keys built dynamically at runtime (e.g. SOROBAN_<NET>_<TYPE>_CONTRACT_ID)
+ * are covered by DYNAMIC_ENV_PATTERNS below.
  */
 
 const fs = require('fs');
@@ -31,6 +35,56 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..');
 const ENV_TS = path.join(ROOT, 'src/config/env.ts');
 const ENV_EXAMPLE = path.join(ROOT, '.env.example');
+
+// Env vars assembled at runtime (e.g. `SOROBAN_${network}_NFT_CONTRACT_ID`)
+// never appear as literals, so strict mode whitelists their shapes here.
+const DYNAMIC_ENV_PATTERNS = [
+  /^SOROBAN_(TESTNET|MAINNET)_(NFT|ARTIST|CATALOG|ROYALTY|MARKETPLACE)_CONTRACT_ID$/,
+  /^SOROBAN_(TESTNET|MAINNET)_(RPC_URL|NETWORK_PASSPHRASE)$/,
+];
+
+const CODE_SCAN_DIRS = ['src', 'scripts'];
+const CODE_SCAN_FILES = ['docker-compose.yml', 'docker-compose.yaml', 'Dockerfile', 'Dockerfile.dev'];
+const CODE_SCAN_GLOBS = [/^docker-compose.*\.ya?ml$/, /^Dockerfile/, /^ecosystem.*\.js$/];
+const SKIP_PATH = /(__tests__|\.test\.|\.spec\.|^tests\/|node_modules)/;
+
+function* walk(dir) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (SKIP_PATH.test(full)) continue;
+    if (entry.isDirectory()) yield* walk(full);
+    else if (/\.(ts|tsx|js|jsx|yml|yaml)$/.test(entry.name)) yield full;
+  }
+}
+
+function collectReferencedEnvVars() {
+  const tokens = new Set();
+  const files = [];
+  for (const dir of CODE_SCAN_DIRS) {
+    const abs = path.join(ROOT, dir);
+    if (fs.existsSync(abs)) files.push(...walk(abs));
+  }
+  for (const name of fs.readdirSync(ROOT)) {
+    if (CODE_SCAN_GLOBS.some((re) => re.test(name)) && fs.statSync(path.join(ROOT, name)).isFile()) {
+      files.push(path.join(ROOT, name));
+    }
+  }
+  for (const file of CODE_SCAN_FILES) {
+    const abs = path.join(ROOT, file);
+    if (fs.existsSync(abs)) files.push(abs);
+  }
+  const tokenRe = /\b[A-Z][A-Z0-9_]{2,}\b/g;
+  for (const file of files) {
+    const content = fs.readFileSync(file, 'utf8');
+    let m;
+    while ((m = tokenRe.exec(content)) !== null) tokens.add(m[0]);
+  }
+  return tokens;
+}
+
+function isReferenced(key, referenced) {
+  return referenced.has(key) || DYNAMIC_ENV_PATTERNS.some((re) => re.test(key));
+}
 
 function parseRequiredVars() {
   if (!fs.existsSync(ENV_TS)) {
@@ -110,8 +164,11 @@ function main() {
 
   const missingInExample = required.filter((k) => !exampleActiveSet.has(k));
   const extraInExample = example.active.filter((k) => !requiredSet.has(k));
+  const referenced = collectReferencedEnvVars();
+  const unreferencedInExample = extraInExample.filter((k) => !isReferenced(k, referenced));
 
-  const ok = missingInExample.length === 0 && (!strict || extraInExample.length === 0);
+  const ok =
+    missingInExample.length === 0 && (!strict || unreferencedInExample.length === 0);
 
   if (asJson) {
     console.log(
@@ -124,6 +181,7 @@ function main() {
           envExampleCommentedKeys: example.commented,
           missingInExample,
           extraInExample,
+          unreferencedInExample,
         },
         null,
         2,
@@ -155,17 +213,25 @@ function main() {
   }
 
   if (extraInExample.length) {
-    const level = strict ? '❌' : '⚠';
+    const level = strict && unreferencedInExample.length ? '❌' : '⚠';
     console.log(
       `${level} Extra in .env.example (${extraInExample.length}): documented but not in requiredVars`,
     );
     extraInExample.forEach((k) => console.log(`   - ${k}`));
     if (strict) {
-      console.log('   Strict mode: this is an error. Either add the key to requiredVars or remove it from .env.example.');
+      if (unreferencedInExample.length) {
+        console.log(
+          `   Strict mode: ${unreferencedInExample.length} key(s) are not read by any code — dead config.`,
+        );
+        unreferencedInExample.forEach((k) => console.log(`   - ${k}`));
+        console.log('   Fix: remove the key from .env.example (and docs/environment-variables.md), or wire it up in code.');
+      } else {
+        console.log('   Strict mode: all extra keys are referenced by the codebase. ✅');
+      }
     } else {
       console.log('   This is informational — .env.example is allowed to document optional vars with defaults.');
       console.log('   If any of these should be required at startup, add them to requiredVars in src/config/env.ts.');
-      console.log('   Run with --strict to enforce exact parity.');
+      console.log('   Run with --strict to fail on keys that no code reads.');
     }
     console.log('');
   } else {
@@ -180,8 +246,8 @@ function main() {
     if (missingInExample.length) {
       console.log(`❌ Env sync failed: ${missingInExample.length} required var(s) missing from .env.example`);
     }
-    if (strict && extraInExample.length) {
-      console.log(`❌ Env sync failed (strict): ${extraInExample.length} extra key(s) in .env.example`);
+    if (strict && unreferencedInExample.length) {
+      console.log(`❌ Env sync failed (strict): ${unreferencedInExample.length} key(s) in .env.example are not read by any code`);
     }
     process.exit(1);
   }

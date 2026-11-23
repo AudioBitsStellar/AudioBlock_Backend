@@ -53,6 +53,7 @@ describe('Auth integration tests', () => {
   const userPayload = {
     email: 'test@example.com',
     password: 'password123',
+    dateOfBirth: '1990-01-01',
     role: 'artist',
     username: 'testuser',
     name: 'Test User',

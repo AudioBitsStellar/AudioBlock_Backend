@@ -43,6 +43,7 @@ jest.mock('@dynamic-labs-wallet/node-evm', () => ({
 const signupPayload = {
   email: 'signup-flow@example.com',
   password: 'Sup3rSecret!',
+  dateOfBirth: '1990-01-01',
   role: 'artist',
   username: 'signupflow',
   name: 'Signup Flow',

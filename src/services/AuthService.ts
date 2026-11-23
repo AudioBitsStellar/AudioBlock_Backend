@@ -20,6 +20,9 @@ import { AuthEventType } from '../entities/AuthAuditLog';
 import { AccountMergeService } from './AccountMergeService';
 import { Request } from 'express';
 import logger from '../config/logger';
+import { JobQueueService } from './JobQueueService';
+import { EMAIL_VERIFICATION_EXPIRATION_MS } from '../config/constants';
+import { assertMeetsMinimumAge } from '../utils/minimumAge';
 
 const PASSWORD_SALT_ROUNDS = 12;
 const RECOVERY_CODE_COUNT = 8;
@@ -102,13 +105,17 @@ export class AuthService {
       );
     }
 
+    // Minimum-age gate (issue COMP-06). It runs before the account lookup. The date of
+    // birth is checked and then discarded, so it is never stored.
+    assertMeetsMinimumAge(dto.dateOfBirth);
+
     if (await this.userRepo.findOneBy({ email: dto.email })) {
       throw AppError.conflict('User already exists');
     }
 
     const passwordHash = await bcrypt.hash(dto.password, PASSWORD_SALT_ROUNDS);
     const verificationToken = this.emailService.generateVerificationToken();
-    const tokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const tokenExpiry = new Date(Date.now() + EMAIL_VERIFICATION_EXPIRATION_MS);
 
     const user = this.userRepo.create({
       email: dto.email,
@@ -122,17 +129,26 @@ export class AuthService {
     });
     const savedUser = await this.userRepo.save(user);
 
-    const appUrl = process.env.APP_URL || 'http://localhost:3000';
-    await this.emailService.sendEmail(
-      dto.email,
-      'Verify your email',
-      `<p>Please click <a href="${appUrl}/verify-email/${verificationToken}">here</a> to verify your email.</p>`,
-    );
+    await this.enqueueVerificationEmail(dto.email, verificationToken);
 
     const token = this.signToken(savedUser);
     const refreshToken = this.signRefreshToken(savedUser);
     await this.storeRefreshToken(savedUser.id, refreshToken);
     return { user: savedUser, token, refreshToken };
+  }
+
+  /** Queues the verification email for `to`. Shared by signup and resend. */
+  private async enqueueVerificationEmail(to: string, verificationToken: string): Promise<void> {
+    const appUrl = process.env.APP_URL || 'http://localhost:3000';
+    await JobQueueService.enqueue(
+      'email.send',
+      {
+        to,
+        subject: 'Verify your email',
+        html: `<p>Please click <a href="${appUrl}/verify-email/${verificationToken}">here</a> to verify your email.</p>`,
+      },
+      { priority: 'critical' },
+    );
   }
 
   /** Logs in a user with email + password instead of a wallet signature. */
@@ -633,6 +649,26 @@ export class AuthService {
   }
 
   /**
+   * Issues a new verification link for an unverified email/password account (issue
+   * PROD-04). Issuing a token overwrites any earlier one, so only the newest link works.
+   * Unknown, already-verified and wallet-only accounts are a silent no-op, which keeps
+   * the public endpoint from revealing which emails are registered.
+   *
+   * @param email - Address the verification link should be sent to.
+   */
+  async resendVerificationEmail(email: string): Promise<void> {
+    const user = await this.userRepo.findOneBy({ email });
+    if (!user || user.emailVerified || !user.passwordHash) return;
+
+    const verificationToken = this.emailService.generateVerificationToken();
+    user.emailVerificationToken = verificationToken;
+    user.emailVerificationTokenExpiry = new Date(Date.now() + EMAIL_VERIFICATION_EXPIRATION_MS);
+    await this.userRepo.save(user);
+
+    await this.enqueueVerificationEmail(email, verificationToken);
+  }
+
+  /**
    * Initiate a password reset flow. Generates a URL-safe reset token with a
    * 1-hour expiry and sends a reset link via email. Issuing a fresh token
    * overwrites (and thereby invalidates) any previously issued token, so only
@@ -654,10 +690,14 @@ export class AuthService {
     await this.userRepo.save(user);
 
     const appUrl = process.env.APP_URL || 'http://localhost:3000';
-    await this.emailService.sendEmail(
-      email,
-      'Reset your password',
-      `<p>Please click <a href="${appUrl}/reset-password/${resetToken}">here</a> to reset your password. This link expires in 1 hour.</p>`,
+    await JobQueueService.enqueue(
+      'email.send',
+      {
+        to: email,
+        subject: 'Reset your password',
+        html: `<p>Please click <a href="${appUrl}/reset-password/${resetToken}">here</a> to reset your password. This link expires in 1 hour.</p>`,
+      },
+      { priority: 'critical' },
     );
   }
 
@@ -685,7 +725,15 @@ export class AuthService {
     user.passwordHash = await bcrypt.hash(newPassword, PASSWORD_SALT_ROUNDS);
     user.passwordResetToken = undefined;
     user.passwordResetTokenExpiry = undefined;
+    // Following the reset link proves control of the mailbox, so the address counts as verified.
+    user.emailVerified = true;
+    user.emailVerificationToken = undefined;
+    user.emailVerificationTokenExpiry = undefined;
     await this.userRepo.save(user);
+
+    // A reset is a recovery event: end every existing refresh-token session, including any
+    // session an attacker may hold. Access tokens are short-lived and expire on their own.
+    await this.refreshTokenRepo.update({ userId: user.id }, { revoked: true });
   }
 
   /**

@@ -33,6 +33,9 @@ export interface ValidatedEnv {
   AI_DATA_RETENTION_OPT_OUT: string;
   // #793 — anonymous listener IP HMAC salt
   LISTENER_KEY_SALT?: string;
+  // PROD-02 — closed beta mode: signup gated by flag; admin allowlist tooling
+  CLOSED_BETA?: string;
+  CLOSED_BETA_ALLOWLIST?: string;
 }
 
 const requiredVars: (keyof ValidatedEnv)[] = [

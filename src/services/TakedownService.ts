@@ -1,8 +1,16 @@
-import { Repository } from 'typeorm';
+import { LessThan, Repository } from 'typeorm';
 import AppDataSource from '../config/db';
-import { TakedownRequest, TakedownStatus, TakedownReason } from '../entities/TakedownRequest';
+import {
+  TakedownRequest,
+  TakedownStatus,
+  TakedownReason,
+  TAKEDOWN_COUNTER_NOTICE_MAX_LENGTH,
+  TAKEDOWN_COUNTER_NOTICE_WINDOW_MS,
+  TAKEDOWN_REVIEW_SLA_MS,
+} from '../entities/TakedownRequest';
 import { Song } from '../entities/Song';
 import { TransactionLog } from '../entities/TransactionLog';
+import { AppError } from '../errors/AppError';
 import logger from '../config/logger';
 
 export class TakedownService {
@@ -44,6 +52,7 @@ export class TakedownService {
       evidenceUrl: evidenceUrl || null,
       status: TakedownStatus.PENDING,
       previousFlagged: song.flagged,
+      reviewDueAt: new Date(Date.now() + TAKEDOWN_REVIEW_SLA_MS),
     });
 
     const saved = await this.takedownRepo.save(takedown);
@@ -58,13 +67,22 @@ export class TakedownService {
     return saved;
   }
 
+  /**
+   * Requests matching the filter, newest first. `overdue` narrows the list to
+   * pending requests whose review deadline has passed (#981).
+   */
   async listRequests(filter?: {
     status?: TakedownStatus;
     songId?: string;
+    overdue?: boolean;
   }): Promise<TakedownRequest[]> {
     const where: any = {};
     if (filter?.status) where.status = filter.status;
     if (filter?.songId) where.songId = filter.songId;
+    if (filter?.overdue) {
+      where.status = TakedownStatus.PENDING;
+      where.reviewDueAt = LessThan(new Date());
+    }
     return this.takedownRepo.find({
       where,
       order: { createdAt: 'DESC' },
@@ -105,7 +123,12 @@ export class TakedownService {
       takedown.status = TakedownStatus.APPROVED;
       takedown.reviewedBy = adminId;
       takedown.reviewNotes = reviewNotes || null;
-      takedown.resolvedAt = new Date();
+      const approvedAt = new Date();
+      takedown.resolvedAt = approvedAt;
+      // The artist may counter-notice for a fixed window after approval (#981).
+      takedown.counterNoticeDueAt = new Date(
+        approvedAt.getTime() + TAKEDOWN_COUNTER_NOTICE_WINDOW_MS,
+      );
 
       // Temporarily unpublish: use flagged fields (distinct from generic flag but reuses mechanism for streaming gate)
       song.flagged = true;
@@ -173,6 +196,74 @@ export class TakedownService {
     }
 
     return this.takedownRepo.save(takedown);
+  }
+
+  /**
+   * Artist's counter-notice against an approved takedown (#981).
+   *
+   * Only the artist who owns the song may file one, once, and only before the
+   * counter-notice window closes. Filing it does not change the takedown's status:
+   * an admin still decides whether to reverse it.
+   *
+   * @throws {AppError} 403 when the caller does not own the song; 409 when the
+   *   takedown is not approved, a counter-notice already exists, or the window closed.
+   */
+  async submitCounterNotice(
+    takedownId: string,
+    artistId: string,
+    statement: string,
+  ): Promise<TakedownRequest> {
+    const takedown = await this.getRequest(takedownId);
+
+    if (takedown.song?.artistId !== artistId) {
+      throw AppError.authorization(
+        'Only the artist of this song can file a counter-notice',
+        undefined,
+        'COUNTER_NOTICE_FORBIDDEN',
+      );
+    }
+    if (takedown.status !== TakedownStatus.APPROVED) {
+      throw AppError.conflict(
+        'Counter-notices can only be filed against approved takedowns',
+        undefined,
+        'TAKEDOWN_NOT_APPROVED',
+      );
+    }
+    if (takedown.counterNotice) {
+      throw AppError.conflict(
+        'A counter-notice has already been filed for this takedown',
+        undefined,
+        'COUNTER_NOTICE_EXISTS',
+      );
+    }
+
+    const now = new Date();
+    if (takedown.counterNoticeDueAt && now > takedown.counterNoticeDueAt) {
+      throw AppError.conflict(
+        'The counter-notice window for this takedown has closed',
+        undefined,
+        'COUNTER_NOTICE_WINDOW_CLOSED',
+      );
+    }
+
+    const text = statement.trim();
+    if (!text) {
+      throw AppError.validation('statement must not be blank', undefined, 'STATEMENT_REQUIRED');
+    }
+
+    takedown.counterNotice = text.slice(0, TAKEDOWN_COUNTER_NOTICE_MAX_LENGTH);
+    takedown.counterNoticeAt = now;
+    takedown.counterNoticeBy = artistId;
+    const saved = await this.takedownRepo.save(takedown);
+
+    await this.logRepo.save({
+      userId: artistId,
+      action: 'takedown_counter_notice_submitted',
+      details: { takedownId, songId: takedown.songId },
+    } as any);
+
+    logger.info({ takedownId, songId: takedown.songId, artistId }, 'Counter-notice filed');
+    return saved;
   }
 }
 

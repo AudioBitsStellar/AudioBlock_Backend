@@ -36,6 +36,9 @@ export enum Permission {
 
   // Platform-wide AI feature usage (Issue #289)
   AI_USAGE_VIEW = 'ai-usage:view',
+
+  // Admin audit trail of privileged actions (#980)
+  AUDIT_LOG_VIEW = 'audit-log:view',
 }
 
 /**
@@ -63,6 +66,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     Permission.VERIFICATION_REVIEW,
     Permission.TRANSACTION_LOGS_VIEW,
     Permission.AI_USAGE_VIEW,
+    Permission.AUDIT_LOG_VIEW,
   ],
   [UserRole.SUPER_ADMIN]: Object.values(Permission),
 };

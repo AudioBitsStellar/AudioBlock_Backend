@@ -20,6 +20,7 @@ an artist's behalf without ever holding their private key.
 - [Documentation](#documentation)
 - [Getting Started](#getting-started)
 - [Scripts](#scripts)
+- [Troubleshooting](#troubleshooting)
 - [Known Issues / Cleanup Backlog](#known-issues--cleanup-backlog)
 
 ## Architecture
@@ -39,7 +40,7 @@ the API still serves requests, just without background song processing.
 | Web framework              | Express 5                                                                               |
 | ORM / database             | TypeORM 0.3 + PostgreSQL (`pg`)                                                         |
 | Validation                 | `class-validator` + `class-transformer` (DTO pattern)                                   |
-| Auth                       | `jsonwebtoken`, `bcrypt` (email/password), `ethers` (EVM wallet-signature verification) |
+| Auth                       | `jsonwebtoken`, `bcrypt` (email/password + TOTP 2FA), Privy (delegated auth, ES256 JWT via JWKS), `ethers` (legacy EVM wallet-signature verification) |
 | File upload                | `multer` (chunked audio upload, profile images, cover art)                              |
 | Media processing           | `fluent-ffmpeg` (HLS transcoding; requires the system `ffmpeg` binary)                  |
 | Object storage             | AWS S3 (`@aws-sdk/client-s3`)                                                           |
@@ -47,29 +48,34 @@ the API still serves requests, just without background song processing.
 | Queueing                   | RabbitMQ (`amqplib`) — async song-processing jobs                                       |
 | Caching                    | Redis (`ioredis`) — login nonces, signed-manifest cache, OAuth state                    |
 | On-chain (Stellar/Soroban) | `@stellar/stellar-sdk` — transaction building, simulation, and relay                    |
-| On-chain (EVM, legacy)     | `ethers`, Dynamic Labs MPC wallet service                                               |
+| On-chain (EVM, legacy)     | `ethers`, Dynamic Labs MPC wallet service — optional legacy path behind the `AUTH_MODE` flag; Stellar/Soroban is the primary chain |
 
 ## Project Structure
 
 ```
 src/
-├── index.ts              # entry point: bootstraps DB, server, RabbitMQ, worker
-├── app.ts                # Express app: middleware, route mounting, error handlers
-├── config/                # db, redis, rabbitmq, s3, soroban, dynamic (EVM) clients
-├── controllers/           # one per resource: Auth, ArtistProfile, ArtistOnChain,
-│                           #   Song, Upload, User, Wallet
+├── index.ts               # entry point: bootstraps DB, server, RabbitMQ, worker
+├── app.ts                 # Express app: middleware, route mounting, error handlers
+├── config/                # env validation, db, redis, rabbitmq, s3, soroban,
+│                          #   privy, dynamic (legacy EVM) clients
+├── controllers/           # request handlers, one per resource area
+│                          #   (auth, artist, song, album, marketplace, admin, AI, …)
 ├── dtos/                  # class-validator request shapes
-├── entities/               # TypeORM models: User, Song, Album, Genre, TransactionLog
-├── middlewares/             # authArtistMiddleware / authListenerMiddleware, validateDTO
-├── routes/                 # Express routers, one per resource
-├── services/                # business logic, including:
-│   ├── Artist/ArtistService.ts        # artist profile + on-chain setup
-│   ├── Soroban/SorobanService.ts       # generic prepare/submit relay
-│   ├── SongService.ts                  # upload pipeline + on-chain minting
-│   ├── AuthService.ts                  # wallet-signature + email/password auth
-│   └── UserService.ts
-├── workers/                # SongProcessorWorker (active), precomputeManifest
-├── seeders/                 # genre seeder, run on every boot
+├── entities/              # TypeORM models (~30: User, Song, Album, Genre,
+│                          #   TransactionLog, indexer/webhook/AI entities, …)
+├── middlewares/           # privy + legacy auth, rbac, rate limiting, idempotency
+├── routes/                # 42 Express routers, one per resource
+├── services/              # business logic grouped by domain:
+│   ├── Artist/, Song/, Soroban/   # profile, upload pipeline, on-chain relay/indexer
+│   ├── privy/                     # Privy token verification, sessions, webhooks
+│   ├── projections/, AI/          # on-chain projections, AI provider/usage
+│   └── top-level services         # AuthService, SongService, UserService, …
+├── workers/               # SongProcessorWorker, IndexerWorker, scheduler, AI jobs
+├── jobs/                  # scheduled jobs: account deletion, on-chain
+│                          #   reconciliation, scheduled release publish, …
+├── migrations/            # TypeORM migrations
+├── seeders/               # genre seeder, run on every boot
+├── cli/, scripts/         # operator CLIs (reindex, project) and ops scripts
 └── utils/, validators/, interfaces/
 ```
 
@@ -82,6 +88,11 @@ src/
 | **Album**          | One row per published album               | `songs: string[]` (song UUIDs)                                                                                                                                                                                                                                                                                  |
 | **Genre**          | Lookup table, seeded on boot              | —                                                                                                                                                                                                                                                                                                               |
 | **TransactionLog** | Audit trail of significant actions        | `action` (e.g. `CREATE_USER`, `SONG_PROCESSED`), `txHash`                                                                                                                                                                                                                                                       |
+
+The schema has grown well beyond these core tables — see `src/entities/` for
+the full set (users/saves/listening, playlists, comments, subscriptions,
+webhooks, indexer state, AI generation records, notification preferences,
+etc.). `docs/database-schema.md` documents the data model in detail.
 
 ## API Reference
 
@@ -96,8 +107,9 @@ appropriate role (`authArtistMiddleware` for artist-only routes).
 | POST   | `/register`          | —                                        | Wallet-signature signup (`role`, `walletAddress`, `signature`, `message`, `email`, `username`) |
 | POST   | `/register-listener` | —                                        | Same as above, listener-oriented, no `username` required                                       |
 | POST   | `/login`             | —                                        | Wallet-signature login                                                                         |
-| POST   | `/register-email`    | —                                        | Email + password signup                                                                        |
+| POST   | `/register-email`    | —                                        | Email + password signup. Requires `dateOfBirth` (`YYYY-MM-DD`), checked against the minimum age ([AGE_POLICY.md](docs/AGE_POLICY.md)) |
 | POST   | `/login-email`       | —                                        | Email + password login                                                                         |
+| POST   | `/resend-verification` | —                                      | Sends a fresh email verification link. Always returns the same generic message. Rate limited ([RATE_LIMITING.md](docs/RATE_LIMITING.md)) |
 | POST   | `/2fa/enable`        | any authenticated email/password account | Enables TOTP 2FA and returns QR/secret plus backup codes                                       |
 
 ### Artist — `/api/artist`
@@ -155,6 +167,7 @@ if (!crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(sig)))
 | Method | Path          | Auth              | Description                                                                                                            |
 | ------ | ------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | POST   | `/request`    | any authenticated | Creates a **dedicated `TakedownRequest`** (distinct from generic `ContentReport`/flag): `{ songId, reason: "copyright" | "trademark" | "other", description?, evidenceUrl? }`. Status `pending`.                                                                                                                                                                                                               |
+| GET    | `/policy`     | public            | Public takedown policy and DMCA designated-agent details. `agentRegistration` is `recorded` only when the agent env vars are set. See [docs/DMCA_TAKEDOWN_POLICY.md](docs/DMCA_TAKEDOWN_POLICY.md). |
 | GET    | `/`           | admin             | Lists takedown requests (filter `?status=pending&songId=...`)                                                          |
 | GET    | `/:id`        | admin             | Gets single takedown request                                                                                           |
 | PATCH  | `/:id/review` | admin             | Reviews takedown: `{ action: "approve"                                                                                 | "reject"    | "reverse", reviewNotes? }`. `approve` temporarily unpublishes the song (`song.flagged=true`, `flagReason=takedown:...`, streaming returns 404) — **reversible**; `reverse`republishes if the claim is resolved in the artist's favor (restores`previousFlagged` state). |
@@ -755,12 +768,23 @@ npm run dev
 | `npm run test:load:stream`                            | Runs streaming endpoint load test (Issue #370, see `docs/LOAD_TESTING.md`)                                                      |
 | `npm run test:load:upload`                            | Runs chunked upload & finalize endpoint load test (Issue #371, see `docs/LOAD_TESTING.md`)                                      |
 | `npm run compose:check`                               | Validates that all docker-compose files are mutually consistent (Issue #404)                                                    |
-| `npm run env:check`                                   | Checks that `.env.example` lists every required var from `src/config/env.ts` (reports both missing and extra keys)              |
-| `npm run env:check:strict`                            | Same as above but fails on any extra key in `.env.example` (exact parity)                                                       |
+| `npm run env:check`                                   | Checks that `.env.example` stays in sync with `src/config/env.ts` and that every documented key is read by the code (strict)   |
+| `npm run env:check:strict`                            | Same as `env:check` (kept for explicitness)                                                                                     |
+
+## Troubleshooting
+
+Operational runbooks and troubleshooting guides for common incidents and failure modes:
+
+| Guide / Runbook | Description |
+| :--- | :--- |
+| **[Database Backup & Restore](docs/runbooks/database-backup-restore.md)** | PostgreSQL backup schedule, S3 storage location, and step-by-step incident recovery/restore procedure (#372). |
+| **[Indexer Backfill Runbook](docs/indexer-backfill-runbook.md)** | Step-by-step guide for one-time historical contract event ingestion. |
+| **[Indexer Resync Runbook](docs/indexer-resync-runbook.md)** | Procedure for recovering from indexer lag, RPC outages, or blockchain reorgs. |
+| **[Database Pool Alerting](docs/db-pool-alerting.md)** | Diagnosing pool exhaustion, connection leaks, and adjusting `DB_POOL_MAX`. |
+| **[Redis Caching & Eviction](docs/adrs/008-caching-strategy.md)** | Cache TTL policies, `maxmemory-policy`, and handling memory pressure (#378). |
 
 ## Known Issues / Cleanup Backlog
 
-- `src/routes/twitterRoutesOld.ts` is an unused/superseded code path still present in the repo.
 - A handful of variables in `.env.example` (`REDIS_URL`, `JWT_EXPIRER_AT`,
   `PRIVATE_KEY`, `PRIVATE_KEY_2`, several OAuth1-style Twitter vars) are not
   currently read by any code.

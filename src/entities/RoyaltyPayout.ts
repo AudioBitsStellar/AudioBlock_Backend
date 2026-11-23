@@ -64,6 +64,14 @@ export class RoyaltyPayout {
   })
   status!: RoyaltyPayoutStatus;
 
+  /**
+   * True while the payout is held because the artist is not yet verified
+   * (#979). Released by {@link PayoutEligibilityService.releaseHeldPayouts}
+   * once the artist's verification is approved.
+   */
+  @Column({ default: false })
+  heldUntilVerified!: boolean;
+
   @Column({ nullable: true })
   discrepancyReason?: string;
 

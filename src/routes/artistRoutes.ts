@@ -3,6 +3,7 @@ import { ArtistProfileController } from '../controllers/ArtistProfileController'
 import { ArtistOnChainController } from '../controllers/ArtistOnChainController';
 import { ArtistMetadataController } from '../controllers/ArtistMetadataController';
 import { SongController } from '../controllers/SongController';
+import { ArtistAnalyticsController } from '../controllers/ArtistAnalyticsController';
 import { validateDTO } from '../middlewares/validate';
 import {
   authArtistMiddleware,
@@ -12,11 +13,22 @@ import {
 import { ConnectStellarWalletDTO } from '../dtos/ConnectStellarWalletDTO';
 import { PrepareArtistSetupDTO } from '../dtos/PrepareArtistSetupDTO';
 import { SubmitSignedXdrDTO } from '../dtos/SubmitSignedXdrDTO';
+import { ApplyVerificationDTO } from '../dtos/ApplyVerificationDTO';
 import { upload } from '../middlewares/upload';
 
 const artistProfileController = new ArtistProfileController();
 const artistOnChainController = new ArtistOnChainController();
 const router = Router();
+
+// Artist verification badge workflow (Issue #92, #426)
+router.post(
+  '/verify/apply',
+  authArtistMiddleware,
+  validateDTO(ApplyVerificationDTO),
+  artistProfileController.applyForVerification,
+);
+router.get('/verify/me', authArtistMiddleware, artistProfileController.getMyVerification);
+router.get('/:id/verification', artistProfileController.getVerificationBadge);
 
 // Public metadata endpoint for OG tags / JSON-LD (no auth, no private data)
 router.get('/:id/metadata', ArtistMetadataController.getMetadata);
@@ -26,6 +38,10 @@ router.get('/:id/metadata', ArtistMetadataController.getMetadata);
 // owner/admin sees plays/saves/uniqueListeners/revenueStroops + all-time followers,
 // public sees plays/saves/followers. 404 ARTIST_HAS_NO_SONGS when no songs.
 router.get('/:id/stats', optionalAuth, SongController.getArtistStats);
+
+// Per-song analytics as CSV (#982). Covers only the caller's own catalogue; the
+// artist id comes from the token. Refused with 413 above the export size limit.
+router.get('/analytics/export', authArtistMiddleware, ArtistAnalyticsController.exportCsv);
 
 router.patch(
   '/update-profile',

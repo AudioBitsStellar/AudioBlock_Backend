@@ -311,6 +311,27 @@ export class AuthController {
     }
   };
 
+  /**
+   * Issues a fresh verification link (issue PROD-04). Always answers with the same
+   * generic message, so the response does not reveal whether an account exists or is
+   * already verified.
+   */
+  resendVerificationEmail = async (req: Request, res: Response) => {
+    try {
+      const { email } = req.body;
+      if (typeof email !== 'string' || email.trim() === '') {
+        throw AppError.validation('Email is required');
+      }
+      await this.authService.resendVerificationEmail(email);
+      res.status(200).json({
+        success: true,
+        message: 'If the account exists and is unverified, a verification email has been sent',
+      });
+    } catch (error) {
+      handleError(req, res, error);
+    }
+  };
+
   forgotPassword = async (req: Request, res: Response) => {
     try {
       const { email } = req.body;

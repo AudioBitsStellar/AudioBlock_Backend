@@ -1,3 +1,11 @@
+## NOTE: This file is kept minimal for reference but is NOT recommended for
+## direct production deployment. Production deployments should use orchestrator
+## manifests (e.g. Kubernetes, ECS, Docker Swarm) that provide proper scaling,
+## health checks, service discovery, and resource management.
+##
+## For development/staging, this file can be used with the `--profile production`
+## flag or by sourcing appropriate environment variables.
+
 version: '3.9'
 services:
   backend:
@@ -23,6 +31,7 @@ services:
           cpus: '0.50'
           memory: 512M
   redis:
+    command: redis-server --maxmemory 200mb --maxmemory-policy volatile-lru
     deploy:
       resources:
         limits:

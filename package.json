@@ -1,7 +1,7 @@
 {
   "name": "audioblocksbackend",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "dist/index.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --trace-warnings --transpile-only src/index.ts",
     "dev:bootstrap": "ts-node --transpile-only scripts/dev-bootstrap.ts",
@@ -23,7 +23,9 @@
     "reconcile:royalties": "ts-node src/jobs/RoyaltyReconciliationJob.ts",
     "gdpr:purge-accounts": "ts-node src/jobs/AccountDeletionJob.ts",
     "reconcile:onchain": "ts-node src/jobs/OnChainReconciliationJob.ts",
+    "aggregate:playback": "ts-node src/jobs/DailyPlaybackAggregationJob.ts",
     "scheduler": "ts-node src/jobs/scheduler.ts",
+    "backfill:loudness": "ts-node scripts/backfill-loudness.ts",
     "cli:reindex": "ts-node src/cli/reindex.ts",
     "cli:project": "ts-node src/cli/project.ts",
     "migration:generate": "typeorm migration:generate",
@@ -37,7 +39,7 @@
     "deadcode": "knip",
     "deadcode:production": "knip --production",
     "compose:check": "node scripts/check-compose-consistency.js",
-    "env:check": "node scripts/check-env-example.js",
+    "env:check": "node scripts/check-env-example.js --strict",
     "env:check:strict": "node scripts/check-env-example.js --strict",
     "ai:test-isolation": "node scripts/check-ai-test-isolation.js",
     "benchmark:ai": "ts-node --transpile-only scripts/load-test-ai-concurrency.ts",
@@ -129,5 +131,8 @@
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.65.0"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

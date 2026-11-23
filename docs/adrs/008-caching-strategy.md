@@ -67,6 +67,29 @@ Standardize Redis usage into three categories, each with an explicit TTL policy 
 
 **Invalidation:** TTL-only. All rate limiter code fails open on Redis errors (see `rateLimiter.ts`) so a Redis outage degrades to "no rate limiting" rather than blocking traffic.
 
+### 4. Memory Pressure & Eviction Policy (`maxmemory-policy`) (#378)
+
+Redis holds a heterogeneous mix of data:
+1. **Durable structures without TTL:** Inverted search index (`song:idx:*`) and background job queue state (`JobQueueService`).
+2. **Critical short-TTL security tokens:** Wallet login nonces (`nonce:<email>`, 300s TTL) and OAuth state (`twitter:state:<state>`, 300s TTL).
+3. **Disposable derived caches:** Manifests (`manifest:<songId>`, 300s), song streaming metadata (`song:<songId>`, 300s), artist profiles (600s), genres (3600s).
+4. **Sliding-window counters:** Rate-limit and throttle keys (30s to 3600s).
+
+#### Eviction Policy Evaluation
+
+| Policy | Behavior under memory pressure | Evaluation for AudioBlock |
+| :--- | :--- | :--- |
+| `noeviction` (Redis default) | Returns an OOM error on all writes when `maxmemory` is reached. | **Unacceptable:** Halts logins, song playback, and rate limits completely. In container environments without `maxmemory`, causes Linux OOM killer to terminate Redis. |
+| `allkeys-lru` / `allkeys-lfu` | Evicts the least recently used keys across **all** keys, including keys without a TTL. | **Unacceptable:** Evicts durable secondary search indexes (`song:idx:*`) and active job queues. Would also evict active login nonces that were just generated, failing authentication. |
+| `volatile-ttl` | Evicts keys with an explicit TTL, ordered by shortest remaining TTL first. | **Unacceptable:** Evicts keys with the shortest TTL first. In our mix, critical security tokens (`nonce:<email>`, 300s) and play throttle keys (30s) have much shorter TTLs than static genre caches (`genres:all`, 3600s). Under pressure, `volatile-ttl` drops active login nonces before dropping cached genres! |
+| **`volatile-lru` (Accepted)** | Evicts the least recently used keys among those that have an **explicit expiration (TTL)** set. | **Optimal:** Keys without a TTL (`song:idx:*`, job queues) are **strictly immune** from eviction. Among volatile keys, cold cached metadata (old manifests, inactive artist profiles) is evicted before active login nonces that are currently in-flight. |
+
+#### Decision & Configuration
+
+1. **Eviction Policy:** Enforce **`maxmemory-policy volatile-lru`** on all Redis deployments.
+2. **Explicit Memory Cap:** Set `maxmemory 200mb` in Docker and container manifests (within the 256MB container limit) to guarantee a 56MB headroom buffer for Redis internal buffers and child process replication, preventing container OOM kills.
+3. **Queue & Index Protection:** Durable keys without TTL (`song:idx:*`, job queues) are guaranteed retention under `volatile-lru`. If memory pressure persists after volatile keys are evicted, Redis will reject new writes rather than silently corrupting search or queue state.
+
 ## Consequences
 
 ### Positive

@@ -14,6 +14,19 @@ This project uses [TypeORM](https://typeorm.io/) for schema management with a Po
 
 All commands target the DataSource defined in `src/config/db.ts` (compiled to `dist/config/db.js`).
 
+## Schema Synchronization Policy
+
+TypeORM's `synchronize` flag auto-alters the database schema to match entity definitions at startup. It is **disabled in all environments except `test`** (`NODE_ENV === 'test'`).
+
+| `NODE_ENV` | `synchronize` | `migrationsRun` | What happens at startup |
+| ---------- | ------------- | --------------- | ----------------------- |
+| `test`     | `true`        | `false`         | Schema is auto-synced to match entities — no migrations needed for isolated unit tests |
+| `development` | `false`    | `true`          | Pending migrations are applied automatically |
+| `staging`  | `false`       | `true`          | Pending migrations are applied automatically |
+| `production` | `false`     | `true`          | Pending migrations are applied automatically |
+
+**Never enable `synchronize: true` outside of `test`.** In development and beyond, all schema changes must go through a migration file so they are reviewed, versioned, and reversible. Auto-sync silently drops columns and recreates tables without a `down()` path, which risks data loss and diverges staging/production from the migration history.
+
 ## File Conventions
 
 ### Naming

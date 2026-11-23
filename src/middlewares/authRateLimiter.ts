@@ -77,6 +77,42 @@ export const passwordResetRateLimiter = createSlidingWindowLimiter(
   authLimiterOptions,
 );
 
+// Email verification (issue PROD-04). Verification tokens are 256-bit and cannot be
+// guessed, so this limit only blunts scripted abuse of the public verify link.
+const emailVerificationWindowMs = parseInt(
+  process.env.EMAIL_VERIFICATION_RATE_LIMIT_WINDOW_MS || String(15 * 60 * 1000),
+  10,
+);
+const emailVerificationMax = parseInt(process.env.EMAIL_VERIFICATION_RATE_LIMIT_MAX || '20', 10);
+
+export const emailVerificationRateLimiter = createSlidingWindowLimiter(
+  emailVerificationWindowMs,
+  emailVerificationMax,
+  'emailverify:rl',
+  (req) => `emailverify:rl:${req.ip}`,
+  authLimiterOptions,
+);
+
+// Resending a verification email (issue PROD-04) is the mail-flooding vector. The key is
+// the target address alone, not IP plus address, so one inbox cannot be flooded from many
+// IPs. This matches the password reset limit.
+const resendVerificationWindowMs = parseInt(
+  process.env.RESEND_VERIFICATION_RATE_LIMIT_WINDOW_MS || String(60 * 60 * 1000),
+  10,
+);
+const resendVerificationMax = parseInt(process.env.RESEND_VERIFICATION_RATE_LIMIT_MAX || '3', 10);
+
+export const resendVerificationRateLimiter = createSlidingWindowLimiter(
+  resendVerificationWindowMs,
+  resendVerificationMax,
+  'resendverify:rl',
+  (req) => {
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    return `resendverify:rl:${email || 'unknown'}`;
+  },
+  authLimiterOptions,
+);
+
 // 2FA enable/verify/disable (issue #328): previously had no dedicated
 // limiter at all beyond requireAuth, unlike every other auth-adjacent
 // route in this file — an authenticated attacker could brute-force a TOTP

@@ -6,7 +6,7 @@ import express, {
   ErrorRequestHandler,
 } from "express";
 import logger from "./config/logger";
-import { requestLoggerMiddleware } from "./middlewares/requestLogger";
+import { requestLoggerMiddleware, redactWebhookSecretPath } from "./middlewares/requestLogger";
 import { sanitizeInput } from "./middlewares/sanitizeInput";
 import cors from "cors";
 import authRoutes from "./routes/authRoutes";
@@ -34,8 +34,11 @@ import activityStreamRoutes from "./routes/activityStreamRoutes";
 import accountRoutes from "./routes/accountRoutes";
 import metricsRoutes from "./routes/metricsRoutes";
 import privyWebhookRoutes from "./routes/privyWebhookRoutes";
+import emailEventRoutes from "./routes/emailEventRoutes";
 import accountTypeRoutes from "./routes/accountTypeRoutes";
 import healthRoutes from "./routes/healthRoutes";
+import notificationRoutes from "./routes/notificationRoutes";
+import ReleaseRoutes from "./routes/ReleaseRoutes";
 import releaseRoutes from "./routes/ReleaseRoutes";
 import { createBatchRoutes } from "./routes/BatchRoutes";
 
@@ -101,6 +104,12 @@ app.use((req, res, next) => {
 // Log application startup
 
 
+// Swagger UI — gated by ENABLE_API_DOCS in production (#796)
+if (process.env.ENABLE_API_DOCS === "true" || process.env.NODE_ENV !== "production") {
+  const swaggerDocument = jsYaml.load(fs.readFileSync(path.join(__dirname, "../docs/openapi.yaml"), "utf8"));
+  app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+}
+
 // Define routes
 app.use("/health", healthRoutes);
 
@@ -131,6 +140,8 @@ app.use("/api/admin", adminRoutes);
 
 // Webhook subscriptions (third-party event delivery)
 app.use("/api/webhooks", webhookRoutes);
+// Email provider bounce/complaint webhook. Secret-in-path, fails closed (issue PROD-03).
+app.use("/api/email-events", emailEventRoutes);
 
 // Copyright takedown workflow (distinct from general moderation)
 app.use("/api/takedown", takedownRoutes);
@@ -152,6 +163,12 @@ app.use("/api/releases", releaseRoutes);
 
 // User routes
 app.use("/api/users", userRoutes);
+
+// Notifications & preferences (Issue #79, #427)
+app.use("/api/notifications", notificationRoutes);
+
+// Releases (Issue #423)
+app.use("/api/releases", ReleaseRoutes);
 
 
 //TWITTER CALLBACK ROUTE
@@ -190,7 +207,12 @@ app.use("/metrics", metricsRoutes);
 // Error handling middleware
 const customErrorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   logger.error(
-    { reqId: (req as any).id, err, route: req.originalUrl, method: req.method },
+    {
+      reqId: (req as any).id,
+      err,
+      route: redactWebhookSecretPath(req.originalUrl),
+      method: req.method,
+    },
     "Unhandled error"
   );
 

@@ -119,7 +119,8 @@ interface Period {
   prevEnd: Date | null;
 }
 
-function resolvePeriod(window: StatsWindow, now: Date): Period {
+/** Resolve a window into the period it covers, shared with the CSV export (#982). */
+export function resolvePeriod(window: StatsWindow, now: Date): Period {
   if (window === 'all-time') {
     return { start: null, end: now, prevStart: null, prevEnd: null };
   }
