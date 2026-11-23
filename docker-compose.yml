@@ -137,6 +137,21 @@ services:
       - monitoring
       - observability
 
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.25.0
+    container_name: blackbox-exporter
+    restart: always
+    ports:
+      - '9115:9115'
+    volumes:
+      - ./monitoring/blackbox.yml:/etc/blackbox_exporter/config.yml
+    command:
+      - '--config.file=/etc/blackbox_exporter/config.yml'
+    profiles:
+      - full
+      - monitoring
+      - observability
+
   grafana:
     image: grafana/grafana:latest
     container_name: grafana
