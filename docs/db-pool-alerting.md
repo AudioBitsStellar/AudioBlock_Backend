@@ -27,12 +27,12 @@ groups:
 
 ```yaml
       - alert: DBPoolHighUtilization
-        expr: db_pool_active / db_pool_total > 0.9
+        expr: db_pool_active / db_pool_total > 0.8
         for: 10m
         labels:
           severity: warning
         annotations:
-          summary: "Database connection pool utilization above 90%"
+          summary: "Database connection pool utilization above 80%"
           description: "Pool is {{ $value | humanizePercentage }} utilized for 10 minutes. Consider scaling or tuning query concurrency."
           runbook: "https://github.com/AudioBitsStellar/AudioBlock_Backend/blob/main/docs/db-pool-alerting.md#runbook"
 ```
