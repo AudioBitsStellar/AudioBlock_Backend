@@ -16,15 +16,17 @@ RUN apk add --no-cache ffmpeg
 # Create non-root user
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
-# Copy only production deps
+# Copy only production deps.
+# HUSKY=0 is required here: package.json's `prepare` hook runs `husky`, which is a
+# devDependency, and npm fires `prepare` even under --omit=dev — without the guard
+# this layer aborts with `sh: husky: not found` (exit 127).
 COPY package*.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+RUN HUSKY=0 npm ci --omit=dev && npm cache clean --force
 
 # Copy built artifacts from builder
+# Runtime needs nothing else from the builder: TypeORM resolves migrations from
+# dist/config/../migrations (see src/config/db.ts), so dist/ is complete.
 COPY --from=builder /app/dist ./dist
-
-# Copy any runtime assets (migrations, seeds, etc.) if needed
-COPY --from=builder /app/src ./src 2>/dev/null || true
 
 USER appuser
 
