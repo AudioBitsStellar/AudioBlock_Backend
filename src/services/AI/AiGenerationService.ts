@@ -7,6 +7,12 @@ import { isAiFeatureEnabled } from '../../config/aiFeatureFlags';
 import { JobQueueService } from '../JobQueueService';
 import { getAiProvider } from './index';
 import logger from '../../config/logger';
+import { CircuitBreaker, CircuitBreakerOpenError } from '../../utils/circuitBreaker';
+
+export const aiCircuitBreaker = new CircuitBreaker(
+  async () => true, // AI provider has no health endpoint; assume healthy after reset timeout
+  { failureThreshold: 3, resetTimeoutMs: 60_000, healthCheckIntervalMs: 60_000 },
+);
 
 export type AiGenerationFeature = 'coverArt' | 'descriptions' | 'lyricsTranscription' | 'playlistCoverArt';
 
@@ -122,21 +128,31 @@ export class AiGenerationService {
 
     const provider = getAiProvider();
 
-    if (feature === 'coverArt') {
-      const result = await provider.generateCoverArt({ songId: song.id, title: song.title });
-      await this.markCompleted(record, provider.name, { resultUrl: result.imageUrl });
-    } else if (feature === 'playlistCoverArt') {
-      // Issue #294: reuse the same AI cover-art code path for playlists (#294).
-      const result = await provider.generateCoverArt({ songId: song.id, title: song.title });
-      await this.markCompleted(record, provider.name, { resultUrl: result.imageUrl });
-    } else if (feature === 'lyricsTranscription') {
-      await this.transcribeLyrics(record, song);
-    } else {
-      const result = await provider.generateDescription({
-        songId: song.id,
-        title: song.title,
+    try {
+      await aiCircuitBreaker.execute(async () => {
+        if (feature === 'coverArt') {
+          const result = await provider.generateCoverArt({ songId: song.id, title: song.title });
+          await this.markCompleted(record, provider.name, { resultUrl: result.imageUrl });
+        } else if (feature === 'playlistCoverArt') {
+          // Issue #294: reuse the same AI cover-art code path for playlists (#294).
+          const result = await provider.generateCoverArt({ songId: song.id, title: song.title });
+          await this.markCompleted(record, provider.name, { resultUrl: result.imageUrl });
+        } else if (feature === 'lyricsTranscription') {
+          await this.transcribeLyrics(record, song);
+        } else {
+          const result = await provider.generateDescription({
+            songId: song.id,
+            title: song.title,
+          });
+          await this.markCompleted(record, provider.name, { resultText: result.description });
+        }
       });
-      await this.markCompleted(record, provider.name, { resultText: result.description });
+    } catch (err) {
+      if (err instanceof CircuitBreakerOpenError) {
+        logger.error({ recordId, feature }, 'AI circuit breaker is OPEN — job will be retried');
+        throw new Error('AI provider is temporarily unavailable (circuit open)');
+      }
+      throw err;
     }
   }
 

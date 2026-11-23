@@ -1,6 +1,8 @@
 import crypto from 'crypto';
 import { AppError, ErrorType } from '../errors/AppError';
 import { getPrivyConfig } from '../config/privy';
+import { CircuitBreaker, CircuitBreakerOpenError } from '../utils/circuitBreaker';
+import logger from '../config/logger';
 
 export interface PrivyAccessClaims {
   /** Privy user DID, e.g. did:privy:... */
@@ -39,6 +41,17 @@ const PRIVY_ISSUERS = new Set(['privy.io', 'https://privy.io']);
 /** Tolerated clock drift when checking exp (seconds). */
 const CLOCK_SKEW_SECONDS = 30;
 const REQUEST_TIMEOUT_MS = 5000;
+
+export const privyCircuitBreaker = new CircuitBreaker(
+  async () => {
+    const { apiUrl } = getPrivyConfig();
+    const res = await fetch(`${apiUrl}/v1/apps`, {
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    }).catch(() => null);
+    return res !== null && res.status < 500;
+  },
+  { failureThreshold: 5, resetTimeoutMs: 30_000, healthCheckIntervalMs: 30_000 },
+);
 
 function notConfigured(message: string): AppError {
   return AppError.externalService(message, undefined, 'PRIVY_NOT_CONFIGURED');
@@ -305,18 +318,28 @@ export class PrivyService {
     }
     const basicAuth = Buffer.from(`${appId}:${appSecret}`).toString('base64');
     try {
-      return await this.fetchFn(url, {
-        ...init,
-        headers: {
-          Authorization: `Basic ${basicAuth}`,
-          'privy-app-id': appId,
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          ...(init?.headers || {}),
-        },
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      return await privyCircuitBreaker.execute(async () => {
+        return await this.fetchFn(url, {
+          ...init,
+          headers: {
+            Authorization: `Basic ${basicAuth}`,
+            'privy-app-id': appId,
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            ...(init?.headers || {}),
+          },
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        });
       });
     } catch (error) {
+      if (error instanceof CircuitBreakerOpenError) {
+        logger.error('Privy circuit breaker is OPEN. Failing fast.');
+        throw AppError.externalService(
+          'Privy API is temporarily unavailable',
+          undefined,
+          'PRIVY_CIRCUIT_OPEN',
+        );
+      }
       if (error instanceof AppError) throw error;
       throw AppError.externalService(
         'Privy API is unreachable',
