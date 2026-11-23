@@ -21,6 +21,7 @@ import {
   buildIndexerContracts,
   IndexerContract,
 } from '../../services/Soroban/IndexerContractRegistry';
+import { undecodedEventDTO } from '../../services/Soroban/eventDecoders';
 import { getSorobanNetwork } from '../../config/soroban';
 import logger from '../../config/logger';
 import { BoundedEventQueue } from './BoundedEventQueue';
@@ -86,15 +87,31 @@ export class IndexerWorker {
     this.reader = options.reader ?? new SorobanEventReader();
     this.network = getSorobanNetwork();
     this.contracts = options.contracts ?? buildIndexerContracts();
-    this.pollIntervalMs = options.pollConfig?.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
-    this.pageSize = options.pollConfig?.pageSize ?? EVENTS_PER_PAGE;
-    this.lagMonitorIntervalMs = options.pollConfig?.lagMonitorIntervalMs ?? LAG_MONITOR_INTERVAL_MS;
-    this.maxQueueSize = options.pollConfig?.maxQueueSize ?? MAX_QUEUE_SIZE;
-    this.writeBatchSize = options.pollConfig?.writeBatchSize ?? WRITE_BATCH_SIZE;
+    const pollConfig = IndexerWorker.resolvePollConfig(options.pollConfig);
+    this.pollIntervalMs = pollConfig.pollIntervalMs;
+    this.pageSize = pollConfig.pageSize;
+    this.lagMonitorIntervalMs = pollConfig.lagMonitorIntervalMs;
+    this.maxQueueSize = pollConfig.maxQueueSize;
+    this.writeBatchSize = pollConfig.writeBatchSize;
 
     for (const contract of this.contracts) {
       this.guards.set(contract.contractType, new IndexerReorgGuard());
     }
+  }
+
+  /** Apply each polling override, falling back to the process defaults. */
+  private static resolvePollConfig(pollConfig?: PollConfig): Required<PollConfig> {
+    const pick = <K extends keyof PollConfig>(key: K, fallback: number): number => {
+      const override = pollConfig?.[key];
+      return typeof override === 'number' ? override : fallback;
+    };
+    return {
+      pollIntervalMs: pick('pollIntervalMs', DEFAULT_POLL_INTERVAL_MS),
+      pageSize: pick('pageSize', EVENTS_PER_PAGE),
+      lagMonitorIntervalMs: pick('lagMonitorIntervalMs', LAG_MONITOR_INTERVAL_MS),
+      maxQueueSize: pick('maxQueueSize', MAX_QUEUE_SIZE),
+      writeBatchSize: pick('writeBatchSize', WRITE_BATCH_SIZE),
+    };
   }
 
   private guardFor(type: string): IndexerReorgGuard {
@@ -179,7 +196,13 @@ export class IndexerWorker {
     start: number | null,
     latestLedger: number,
     prevLedger: number,
-  ): Promise<{ fetched: number; processed: number; skipped: number; errors: number; cursor: string | null }> {
+  ): Promise<{
+    fetched: number;
+    processed: number;
+    skipped: number;
+    errors: number;
+    cursor: string | null;
+  }> {
     if (start === null) {
       return { fetched: 0, processed: 0, skipped: 0, errors: 0, cursor: null };
     }
@@ -209,7 +232,13 @@ export class IndexerWorker {
     contract: IndexerContract,
     startCursor: string | undefined,
     prevLedger: number,
-  ): Promise<{ fetched: number; processed: number; skipped: number; errors: number; cursor: string | null }> {
+  ): Promise<{
+    fetched: number;
+    processed: number;
+    skipped: number;
+    errors: number;
+    cursor: string | null;
+  }> {
     let fetched = 0;
     let processed = 0;
     let skipped = 0;
@@ -304,11 +333,13 @@ export class IndexerWorker {
     let skipped = 0;
     let errors = 0;
     const queue = sharedQueue ?? new BoundedEventQueue<InsertIndexedEventDTO>(this.maxQueueSize);
+    const retained: InsertIndexedEventDTO[] = [];
 
     for (const event of page.events) {
       const dto = contract.decoder.decode(event);
       if (!dto) {
         skipped += 1;
+        retained.push(undecodedEventDTO(event, contract.contractType));
         logger.warn(
           {
             contract: contract.contractType,
@@ -316,7 +347,7 @@ export class IndexerWorker {
             ledger: event.ledger,
             txHash: event.txHash,
           },
-          'Indexer skipped event: decoder returned null (unknown or malformed event type)',
+          'Indexer skipped event: decoder returned null (unknown or versioned event type); retaining raw event',
         );
         continue;
       }
@@ -341,6 +372,9 @@ export class IndexerWorker {
     processed += flushed.processed;
     errors += flushed.errors;
 
+    const retainedResult = await this.persistRetained(contract, retained);
+    errors += retainedResult.errors;
+
     const highestLedger = page.events.reduce((max, ev) => Math.max(max, ev.ledger), prevLedger);
     if (processed > 0 || highestLedger > prevLedger) {
       await this.indexerService.recordProgress(
@@ -354,12 +388,44 @@ export class IndexerWorker {
 
     if (skipped > 0) {
       logger.warn(
-        { contract: contract.contractType, skipped, ledgerRange: `${prevLedger}-${highestLedger}` },
+        {
+          contract: contract.contractType,
+          skipped,
+          retained: retainedResult.written,
+          ledgerRange: `${prevLedger}-${highestLedger}`,
+        },
         'Indexer batch contained skipped events',
       );
     }
 
     return { processed, skipped, errors };
+  }
+
+  /**
+   * Write the events this build's decoders could not handle (ADR-013).
+   *
+   * They are stored as `undecoded` rows carrying the raw topic/value so the
+   * data survives Soroban RPC history pruning and a later decoder version can
+   * re-project them without a ledger-range re-fetch. They are kept out of
+   * `processed` because that counter feeds the projection cursor and means
+   * "events mapped onto domain tables".
+   */
+  private async persistRetained(
+    contract: IndexerContract,
+    retained: InsertIndexedEventDTO[],
+  ): Promise<{ written: number; errors: number }> {
+    let written = 0;
+    let errors = 0;
+    for (const dto of retained) {
+      try {
+        await this.eventService.upsertEvent(dto);
+        written += 1;
+      } catch (err) {
+        errors += 1;
+        logger.error({ contract: contract.contractType, err }, 'Failed to persist undecoded event');
+      }
+    }
+    return { written, errors };
   }
 
   /**

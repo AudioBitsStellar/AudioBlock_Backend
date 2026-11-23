@@ -1,4 +1,10 @@
-import { EVENT_DECODERS, ALL_CONTRACT_TYPES } from '../services/Soroban/eventDecoders';
+import {
+  EVENT_DECODERS,
+  ALL_CONTRACT_TYPES,
+  EVENT_SCHEMA_VERSION,
+  UNDECODED_EVENT_TYPE,
+  undecodedEventDTO,
+} from '../services/Soroban/eventDecoders';
 import { NormalizedContractEvent } from '../services/Soroban/SorobanEventReader';
 
 function makeEvent(
@@ -126,6 +132,97 @@ describe('Soroban event decoders', () => {
         }),
       );
       expect(dto).toMatchObject({ eventType: 'listing_created', address: 'GSELLER' });
+    });
+  });
+
+  describe('event schema versioning (ADR-013)', () => {
+    it('stamps every decoded row with the schema version it was written under', () => {
+      const dto = EVENT_DECODERS.nft.decode(
+        makeEvent({ topic: [{ symbol: 'mint' }, 'GOWNER123'], value: 'token-42' }),
+      );
+      expect(dto?.payload).toMatchObject({ schemaVersion: EVENT_SCHEMA_VERSION });
+    });
+
+    it('keeps the decoded fields alongside the version', () => {
+      const dto = EVENT_DECODERS.catalog.decode(
+        makeEvent({
+          topic: [{ symbol: 'song_played' }, 'song-1', 'GLISTENER'],
+          value: null,
+        }),
+      );
+      expect(dto?.payload).toMatchObject({
+        schemaVersion: EVENT_SCHEMA_VERSION,
+        songId: 'song-1',
+        listener: 'GLISTENER',
+      });
+    });
+  });
+
+  describe('undecodedEventDTO (ADR-013)', () => {
+    it('retains the raw topic and value for an unknown event symbol', () => {
+      const dto = undecodedEventDTO(
+        makeEvent({
+          id: 'evt-99',
+          ledger: 1234,
+          txHash: 'tx-99',
+          contractId: 'CA_NFT',
+          topic: [{ symbol: 'royalty_split_updated' }, 'GADMIN'],
+          value: { bps: 500 },
+        }),
+        'nft',
+      );
+
+      expect(dto).toEqual({
+        contractId: 'CA_NFT',
+        contractType: 'nft',
+        eventType: UNDECODED_EVENT_TYPE,
+        eventId: 'evt-99',
+        txHash: 'tx-99',
+        ledger: 1234,
+        payload: {
+          schemaVersion: EVENT_SCHEMA_VERSION,
+          reason: 'unknown_event_symbol',
+          symbol: 'royalty_split_updated',
+          raw: { topic: [{ symbol: 'royalty_split_updated' }, 'GADMIN'], value: { bps: 500 } },
+        },
+      });
+    });
+
+    it('records why the event could not be decoded when the symbol is missing', () => {
+      const dto = undecodedEventDTO(makeEvent({ topic: [], value: null }), 'royalty');
+
+      expect(dto.payload).toMatchObject({
+        reason: 'missing_event_symbol',
+        symbol: null,
+        raw: { topic: [], value: null },
+      });
+      expect(dto.contractType).toBe('royalty');
+      expect(dto.eventType).toBe(UNDECODED_EVENT_TYPE);
+    });
+
+    it('carries the RPC dedup key so re-indexing the same event is a no-op', () => {
+      const event = makeEvent({
+        id: 'evt-7',
+        ledger: 900,
+        contractId: 'CA_CATALOG',
+        topic: [{ symbol: 'mystery' }],
+        value: 'x',
+      });
+      const a = undecodedEventDTO(event, 'catalog');
+      const b = undecodedEventDTO(event, 'catalog');
+
+      expect(a.eventId).toBe('evt-7');
+      expect(b.eventId).toBe(a.eventId);
+      expect(b.ledger).toBe(a.ledger);
+      expect(b.contractId).toBe(a.contractId);
+    });
+
+    it('leaves the tx hash unset for an event that has none', () => {
+      const dto = undecodedEventDTO(
+        makeEvent({ txHash: '', topic: [{ symbol: 'mystery' }], value: null }),
+        'artist',
+      );
+      expect(dto.txHash).toBeUndefined();
     });
   });
 });
