@@ -1,0 +1,115 @@
+{
+  "__inputs": [],
+  "__requires": [
+    { "type": "grafana", "id": "grafana", "name": "Grafana", "version": "10.0.0" },
+    { "type": "datasource", "id": "prometheus", "name": "Prometheus", "version": "1.0.0" }
+  ],
+  "annotations": { "list": [] },
+  "description": "AudioBlock business KPIs: signups, uploads, mints, plays, payouts (Issue #957, OBS-07)",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "id": 1,
+      "title": "Signups / min",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(business_signups_total[5m]) * 60",
+          "legendFormat": "signups/min",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "id": 2,
+      "title": "Uploads / min",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(business_uploads_total[5m]) * 60",
+          "legendFormat": "uploads/min",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "id": 3,
+      "title": "Mints / min",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(business_mints_total[5m]) * 60",
+          "legendFormat": "mints/min",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "id": 4,
+      "title": "Plays / min",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "rate(business_plays_total[5m]) * 60",
+          "legendFormat": "plays/min",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "id": 5,
+      "title": "Payouts / min & Payout Stroops / min",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "rate(business_payouts_total[5m]) * 60",
+          "legendFormat": "payouts/min",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(business_payout_amount_stroops_total[5m]) * 60",
+          "legendFormat": "stroops/min",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "id": 6,
+      "title": "Cumulative Totals (all time)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 16 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "horizontal" },
+      "targets": [
+        { "expr": "business_signups_total", "legendFormat": "Signups", "refId": "A" },
+        { "expr": "business_uploads_total", "legendFormat": "Uploads", "refId": "B" },
+        { "expr": "business_mints_total",   "legendFormat": "Mints",   "refId": "C" },
+        { "expr": "business_plays_total",   "legendFormat": "Plays",   "refId": "D" },
+        { "expr": "business_payouts_total", "legendFormat": "Payouts", "refId": "E" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "tags": ["audioblock", "business", "obs-07"],
+  "time": { "from": "now-24h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "AudioBlock — Business Metrics",
+  "uid": "audioblock-business",
+  "version": 1
+}
