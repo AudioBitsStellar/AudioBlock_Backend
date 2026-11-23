@@ -21,7 +21,8 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 # --omit=dev, so this layer aborts with `sh: husky: not found` (exit 127). Dropping the
 # hook here is the narrowest fix: HUSKY=0 cannot work because that flag is read by husky
 # itself, which is the very binary --omit=dev refuses to install, and --ignore-scripts
-# would also skip bcrypt's native build, which this image needs at runtime.
+# would also drop sqlite3's compiled binding: sqlite3 is in the production graph as
+# typeorm's non-optional peer, so its install script is what builds node_sqlite3.node.
 COPY package*.json ./
 RUN npm pkg delete scripts.prepare && npm ci --omit=dev && npm cache clean --force
 
