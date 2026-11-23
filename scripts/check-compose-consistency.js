@@ -44,6 +44,7 @@ const OVERLAY_FILES = [
   "docker-compose.override.yml",
   "docker-compose.dev.yml",
   "docker-compose.prod.yml",
+  "docker-compose.staging.yml",
   "docker-compose.test.yml",
 ];
 

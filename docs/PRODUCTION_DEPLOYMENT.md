@@ -4,6 +4,9 @@ Step-by-step guide for deploying the AudioBlocks backend to production for
 the first time. Assumes a fresh engineer with repo access and a target
 environment (VM, container platform, or PaaS such as Render/Railway).
 
+For hosting architecture decision see [ADR-012: Production and Staging Hosting Architecture](adrs/012-production-and-staging-hosting-architecture.md).
+For pre-launch verification see [production-environment-checklist.md](production-environment-checklist.md).
+For staging testnet parity see [staging-production-parity.md](staging-production-parity.md).
 For sizing and scaling details see [deployment-and-scaling.md](deployment-and-scaling.md).
 For disaster recovery see [runbooks/disaster-recovery.md](runbooks/disaster-recovery.md).
 
@@ -90,8 +93,16 @@ Then smoke-test:
 - [ ] Monitoring/alerting dashboards connected (`monitoring/`)
 - [ ] `AUTH_MODE` reviewed — flip to `privy` only after staged rollout
 
-## Rollback
+## Rollback and Zero-Downtime Verification
 
-Redeploy the previous image/tag. For schema rollback use
+Deployments are executed with zero downtime using rolling updates (MinimumHealthyPercent = 100%, MaximumPercent = 200%) and gated by automated health probes (`/health/live`, `/health/ready`, `/health/worker`).
+
+Automated health verification and rollback is managed via:
+```bash
+./scripts/deploy-verify-rollback.sh --url https://api.audioblocks.io --timeout 120 --interval 5 --environment production
+```
+If readiness fails within the timeout window, the deployment is automatically aborted and rolled back to the previous stable revision. For recorded drills and failure scenarios, see [runbooks/rollback-drill-record.md](runbooks/rollback-drill-record.md).
+
+For manual rollback, redeploy the previous image/tag. For schema rollback use
 `npm run migration:revert` only if the release shipped a reversible
 migration; otherwise roll forward with a fix.
