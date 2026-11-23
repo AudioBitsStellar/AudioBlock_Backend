@@ -16,12 +16,14 @@ RUN apk add --no-cache ffmpeg
 # Create non-root user
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
-# Copy only production deps.
-# HUSKY=0 is required here: package.json's `prepare` hook runs `husky`, which is a
-# devDependency, and npm fires `prepare` even under --omit=dev — without the guard
-# this layer aborts with `sh: husky: not found` (exit 127).
+# Install production deps only. package.json's root `prepare` hook runs `husky`, a
+# devDependency, and npm fires lifecycle scripts of the root package even under
+# --omit=dev, so this layer aborts with `sh: husky: not found` (exit 127). Dropping the
+# hook here is the narrowest fix: HUSKY=0 cannot work because that flag is read by husky
+# itself, which is the very binary --omit=dev refuses to install, and --ignore-scripts
+# would also skip bcrypt's native build, which this image needs at runtime.
 COPY package*.json ./
-RUN HUSKY=0 npm ci --omit=dev && npm cache clean --force
+RUN npm pkg delete scripts.prepare && npm ci --omit=dev && npm cache clean --force
 
 # Copy built artifacts from builder
 # Runtime needs nothing else from the builder: TypeORM resolves migrations from
