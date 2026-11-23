@@ -5,41 +5,147 @@
 ##
 ## For development/staging, this file can be used with the `--profile production`
 ## flag or by sourcing appropriate environment variables.
+##
+## It is an OVERLAY: layer it on the base file, which carries the build context,
+## images, ports and named volumes.
+##   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+## Running this file alone fails because its services declare no image at all.
+##
+## Runtime hardening (Issue #966) lives here: read-only root filesystems, all
+## Linux capabilities dropped, no privilege escalation, and a process ceiling.
+## Each setting was verified against the exact images pinned below, including a
+## write round-trip, so the app and its backing services still start and persist.
 
 version: '3.9'
 services:
   backend:
-    command: sh -c "npm start"
+    # The image's own CMD already runs `node dist/index.js`. Going through
+    # `sh -c "npm start"` wrapped the server in a shell that Docker signals
+    # instead of Node, so shutdown waited out the full grace period rather than
+    # draining, and `npm` resolved the devDependency-backed start script.
+    command: ['node', 'dist/index.js']
     environment:
       NODE_ENV: production
       # ALLOWED_ORIGINS must be set explicitly in production (no wildcards).
       # Example:
       #   ALLOWED_ORIGINS=https://listener.audioblockz.com,https://artist.audioblockz.com
+    # Everything below is the #966 hardening set. `volumes` here replaces only
+    # the `/app/uploads` target inherited from the base file (Compose merges
+    # volumes by target path); the dev source mounts are not in the base file, so
+    # production really does run the image's own read-only /app/dist.
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      # The only persistent write path: chunked uploads, merged files, HLS
+      # segments and profile/page images (src/index.ts creates these on boot).
+      # A named volume rather than a tmpfs because uploads must survive a
+      # restart; the Dockerfile pre-creates and chowns the subdirectories so
+      # the volume inherits ownership and `appuser` can write into it.
+      - uploads:/app/uploads
+      # Node's `os.tmpdir()` is where the waveform/PCM scratch files land
+      # (src/utils/ffmpeg.ts) and where the cover-art service mkdtemp()s
+      # (src/services/CoverArtService.ts). Sized for decoded PCM rather than
+      # source audio: five minutes at 44.1kHz stereo 16-bit is about 50 MB, and
+      # the default 64 MB tmpfs would be consumed by a single render.
+      - type: tmpfs
+        target: /tmp
+        tmpfs:
+          size: 536870912
     deploy:
       resources:
         limits:
           cpus: '0.50'
           memory: 512M
+          # Process ceiling: ffmpeg and the health probe each fork, so this is
+          # headroom over the Node process, not a cap on concurrency.
+          pids: 256
     depends_on:
-      - db
-      - redis
-      - rabbitmq
+      # The base file puts rabbitmq behind `profiles: [full, queue]`, so a
+      # short-form dependency on it makes this manifest fail to load outright
+      # ("service \"backend\" depends on undefined service \"rabbitmq\"") unless
+      # COMPOSE_PROFILES happens to be set — the state the baseline file shipped
+      # in. `required: false` keeps the start order when the queue profile is
+      # enabled and still validates for the minimal API + DB + Redis stack the
+      # base file documents.
+      db:
+        condition: service_started
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+        required: false
+
   db:
+    # The official entrypoint must start as root to initialise PGDATA and then
+    # su-exec down to postgres, so it needs exactly these capabilities back —
+    # verified against postgres:15-alpine with a table write and restart.
+    read_only: true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - FOWNER
+      - DAC_OVERRIDE
+      - SYS_NICE
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      # The Unix socket directory (/var/run is a symlink to /run on alpine) and
+      # scratch space; data stays on the pgdata volume declared in the base file.
+      - /var/run/postgresql
+      - /tmp
     deploy:
       resources:
         limits:
           cpus: '0.50'
           memory: 512M
+          pids: 256
+
   redis:
     command: redis-server --maxmemory 200mb --maxmemory-policy volatile-lru
+    # Run as the image's own `redis` user instead of root-and-gosu, which is what
+    # lets every capability stay dropped. dump.rdb lands on the redisdata volume
+    # (verified: SET, BGSAVE, file owned by redis).
+    user: redis:redis
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
     deploy:
       resources:
         limits:
           cpus: '0.25'
           memory: 256M
+          pids: 128
+
   rabbitmq:
+    # Same reasoning as redis: `user: rabbitmq` removes the need for any
+    # capability. Mnesia keeps its state on the rabbitmq_data volume; the log
+    # directory is the only thing written outside it. Verified with a published
+    # and consumed message.
+    user: rabbitmq:rabbitmq
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+      - /var/log/rabbitmq
     deploy:
       resources:
         limits:
           cpus: '0.25'
           memory: 256M
+          pids: 512
+
+volumes:
+  uploads:

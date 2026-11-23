@@ -5,6 +5,9 @@ COPY package*.json ./
 RUN npm ci
 COPY . .
 RUN npm run build
+# Drop dev dependencies once the build has produced dist/, so the production
+# stage can copy the tree instead of re-installing it.
+RUN npm prune --omit=dev
 
 # Production stage
 FROM node:20-alpine
@@ -16,15 +19,32 @@ RUN apk add --no-cache ffmpeg
 # Create non-root user
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
-# Copy only production deps
+# Copy only production deps.
+#
+# `npm ci --omit=dev` used to run here, and it could not work: `npm ci` executes
+# the root `prepare` script (`husky`), and husky is a devDependency that
+# `--omit=dev` just removed — the step failed with `sh: husky: not found`
+# (npm error code 127) and no image was ever produced (Issue #966). Pruning the
+# builder's already-resolved tree keeps the lockfile authoritative, runs no
+# lifecycle scripts, and needs no registry access.
 COPY package*.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+COPY --from=builder /app/node_modules ./node_modules
 
 # Copy built artifacts from builder
 COPY --from=builder /app/dist ./dist
 
-# Copy any runtime assets (migrations, seeds, etc.) if needed
-COPY --from=builder /app/src ./src 2>/dev/null || true
+# Everything the container writes at runtime lives under /app/uploads (chunked
+# uploads, merged files, HLS segments) or os.tmpdir(). Creating and owning these
+# up front is what lets the prod manifests mount a named volume over /app/uploads
+# and run the rest of the filesystem read-only (Issue #966).
+RUN mkdir -p \
+    uploads/temp \
+    uploads/merged \
+    uploads/profile-images \
+    uploads/page-covers \
+    uploads/covers \
+    uploads/hls \
+  && chown -R appuser:appgroup /app/uploads
 
 USER appuser
 

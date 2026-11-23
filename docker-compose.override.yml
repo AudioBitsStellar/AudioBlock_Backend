@@ -1,3 +1,9 @@
+# Default local-development overlay, loaded automatically by a plain
+# `docker compose up`. The source-tree mounts live here rather than in
+# docker-compose.yml so that they cannot leak into an explicitly-composed
+# manifest (`-f docker-compose.yml -f docker-compose.prod.yml`), where a
+# writable bind mount over /app would defeat the read-only root filesystem
+# #966 requires. Use docker-compose.dev.yml for an explicit dev stack.
 services:
   backend:
     command: npm run dev

@@ -10,6 +10,7 @@
  * Usage (Kubernetes CronJob or any cron host):
  *   ts-node src/jobs/scheduler.ts --job=daily-playback
  *   ts-node src/jobs/scheduler.ts --job=royalty-reconciliation
+ *   ts-node src/jobs/scheduler.ts --job=royalty-payout-dry-run
  *   ts-node src/jobs/scheduler.ts --job=account-deletion
  *   ts-node src/jobs/scheduler.ts --job=webhook-retention
  *   ts-node src/jobs/scheduler.ts --job=onchain-reconciliation
@@ -23,6 +24,7 @@ import redis from '../config/redis';
 import logger from '../config/logger';
 import { runPlaybackAggregationJob } from './DailyPlaybackAggregationJob';
 import { runRoyaltyReconciliationJob } from './RoyaltyReconciliationJob';
+import { runRoyaltyPayoutDryRunJob } from './RoyaltyPayoutDryRunJob';
 import { runAccountDeletionJob } from './AccountDeletionJob';
 import { runWebhookRetentionJob } from './WebhookRetentionJob';
 import { runOnChainReconciliationJob } from './OnChainReconciliationJob';
@@ -51,9 +53,18 @@ type JobRunner = () => Promise<void>;
 
 const JOBS: Record<string, JobRunner> = {
   'daily-playback': runPlaybackAggregationJob,
-  'royalty-reconciliation': runRoyaltyReconciliationJob,
-  'account-deletion': async () => { await runAccountDeletionJob(); },
-  'webhook-retention': async () => { await runWebhookRetentionJob(); },
+  'royalty-reconciliation': async () => {
+    await runRoyaltyReconciliationJob();
+  },
+  'royalty-payout-dry-run': async () => {
+    await runRoyaltyPayoutDryRunJob();
+  },
+  'account-deletion': async () => {
+    await runAccountDeletionJob();
+  },
+  'webhook-retention': async () => {
+    await runWebhookRetentionJob();
+  },
   'onchain-reconciliation': runOnChainReconciliationJob,
 };
 
@@ -83,8 +94,10 @@ if (require.main === module) {
   const jobName = jobArg?.split('=')[1];
 
   if (!jobName) {
-    console.error('Usage: ts-node src/jobs/scheduler.ts --job=<name>');
-    console.error(`Known jobs: ${Object.keys(JOBS).join(', ')}, all`);
+    logger.error(
+      { knownJobs: [...Object.keys(JOBS), 'all'] },
+      'Usage: ts-node src/jobs/scheduler.ts --job=<name>',
+    );
     process.exit(1);
   }
 

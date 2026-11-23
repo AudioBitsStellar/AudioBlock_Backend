@@ -16,9 +16,15 @@ services:
       # backend starts without it and connects lazily; `docker compose up`
       # (no profile) therefore omits rabbitmq. Use `--profile full` or
       # `--profile queue` to include it.
+    # Only the write path belongs here. The hot-reload source mounts (`.:/app`
+    # and the anonymous `/app/node_modules`) live in docker-compose.override.yml,
+    # which Compose loads automatically for a plain `docker compose up` but never
+    # for `docker compose -f docker-compose.yml -f docker-compose.prod.yml`.
+    # Compose merges `volumes` by target path, so a source mount declared here
+    # would survive into the prod/staging overlays and hand the container a
+    # writable bind mount over /app, defeating their read_only root filesystem
+    # (#966).
     volumes:
-      - .:/app
-      - /app/node_modules
       - ./uploads:/app/uploads
     healthcheck:
       test:

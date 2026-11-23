@@ -5,40 +5,115 @@
 ## staging backing services (PostgreSQL, Redis, RabbitMQ, S3 bucket).
 ## NODE_ENV is strictly 'production' to enforce identical TypeORM migration behavior
 ## (schema synchronization disabled).
+##
+## It is an OVERLAY: layer it on the base file, which carries the build context,
+## images, ports and named volumes.
+##   docker compose -f docker-compose.yml -f docker-compose.staging.yml up -d --build
+##
+## Runtime hardening (Issue #966) is the same set as docker-compose.prod.yml —
+## read-only root filesystems, all Linux capabilities dropped, no privilege
+## escalation, process ceilings — because "complete parity" above is only
+## credible if staging is hardened the way production is. Divergence here shows
+## up as defects that cannot be reproduced before a production rollout.
 
 version: '3.9'
 services:
   backend:
-    command: sh -c "npm start"
+    # Same reasoning as production: the image's CMD already runs
+    # `node dist/index.js`, and `sh -c "npm start"` puts a shell in front of
+    # Node (so Docker signals the shell, not the server, during the drain
+    # window) and needs npm's own writable cache on a read-only root.
+    command: ['node', 'dist/index.js']
     environment:
       NODE_ENV: production
       # Staging CORS allowlist for testnet frontend and internal QA
       # ALLOWED_ORIGINS=https://staging.audioblocks.io,https://staging-artist.audioblocks.io
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      # Uploads stay on a named volume (writable, survives a restart); the HLS
+      # and waveform scratch files land in a sized tmpfs instead of /app/tmp.
+      - uploads:/app/uploads
+      - type: tmpfs
+        target: /tmp
+        tmpfs:
+          size: 536870912
     deploy:
       resources:
         limits:
           cpus: '0.50'
           memory: 512M
+          pids: 256
     depends_on:
-      - db
-      - redis
-      - rabbitmq
+      # rabbitmq is behind `profiles: [full, queue]` in the base file, so the
+      # dependency must be optional or this manifest fails to load outright.
+      db:
+        condition: service_started
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+        required: false
   db:
+    read_only: true
+    cap_drop:
+      - ALL
+    cap_add:
+      # postgres:15-alpine's entrypoint starts as root to initialise PGDATA and
+      # su-execs down to postgres; these are the capabilities that requires, and
+      # nothing more.
+      - CHOWN
+      - SETUID
+      - SETGID
+      - FOWNER
+      - DAC_OVERRIDE
+      - SYS_NICE
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /var/run/postgresql
+      - /tmp
     deploy:
       resources:
         limits:
           cpus: '0.50'
           memory: 512M
+          pids: 256
   redis:
     command: redis-server --maxmemory 200mb --maxmemory-policy volatile-lru
+    user: redis:redis
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
     deploy:
       resources:
         limits:
           cpus: '0.25'
           memory: 256M
+          pids: 128
   rabbitmq:
+    user: rabbitmq:rabbitmq
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+      - /var/log/rabbitmq
     deploy:
       resources:
         limits:
           cpus: '0.25'
           memory: 256M
+          pids: 512
+
+volumes:
+  uploads:
