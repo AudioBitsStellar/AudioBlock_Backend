@@ -1,0 +1,45 @@
+name: Post-deploy smoke tests
+
+# Triggered by the deploy workflow after a successful staging deployment.
+# Can also be run manually via the Actions UI with an optional BASE_URL override.
+#
+# Blocks promotion to production when any smoke check fails (#936).
+
+on:
+  workflow_run:
+    workflows: ["Deploy to Staging"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Staging base URL to test against"
+        required: false
+        default: ""
+
+jobs:
+  smoke:
+    name: Smoke tests (staging)
+    runs-on: ubuntu-latest
+    # Only block on success; skip gracefully when deploy itself failed.
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Make smoke script executable
+        run: chmod +x scripts/smoke-test.sh
+
+      - name: Run smoke tests
+        env:
+          BASE_URL: ${{ inputs.base_url || vars.STAGING_URL || 'http://localhost:4000' }}
+          SMOKE_AUTH_TOKEN: ${{ secrets.STAGING_SMOKE_AUTH_TOKEN }}
+        run: ./scripts/smoke-test.sh
+
+      - name: Block promotion on failure
+        if: failure()
+        run: |
+          echo "Smoke tests failed — promotion to production is blocked."
+          echo "Fix the staging environment before merging or re-deploying."
+          exit 1
