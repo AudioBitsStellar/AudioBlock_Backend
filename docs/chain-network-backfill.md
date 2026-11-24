@@ -17,6 +17,11 @@ accepted for a testnet deployment, with the equivalent labels for mainnet.
    network can be verified. A missing label or a historical default is
    insufficient evidence to reassign a record.
 
-The guard checks existing network-tagged read models. Legacy transaction
-and application tables still need provenance review and a schema migration
-before every on-chain record can be considered covered.
+The provenance migration adds nullable `chainNetwork` columns to songs, users,
+royalty payouts, and transaction logs. Non-chain rows can remain null. For
+existing chain-linked rows, apply the migration before restarting services.
+Populate `chainNetwork` by verified primary key while writers are stopped.
+Record the RPC, transaction hash or event ID, and ledger used as evidence.
+The startup guard rejects unverified or foreign-network chain rows. Do not
+point the service at a legacy database until all chain-linked rows have
+been verified or moved out of the active database.

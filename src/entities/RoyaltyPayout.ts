@@ -36,6 +36,9 @@ export class RoyaltyPayout {
   @Column({ nullable: true })
   onChainEventId?: string;
 
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  chainNetwork?: 'testnet' | 'mainnet' | null;
+
   @Column({ nullable: true })
   songId?: string;
 

@@ -2,7 +2,7 @@ import { Repository } from 'typeorm';
 import { User } from '../../entities/User';
 import { AppError } from '../../errors/AppError';
 import AppDataSource from '../../config/db';
-import { SorobanContracts } from '../../config/soroban';
+import { getSorobanNetwork, SorobanContracts } from '../../config/soroban';
 import { SorobanService, addressArg, stringArg } from '../Soroban/SorobanService';
 
 export interface PreparedTransaction {
@@ -93,9 +93,11 @@ export class ArtistService {
 
     // A retry of the same signed transaction yields the same ids; persist only once.
     if (
+      user.chainNetwork !== getSorobanNetwork() ||
       user.stellarArtistId !== artistId.toString() ||
       user.stellarArtistTokenId !== tokenId.toString()
     ) {
+      user.chainNetwork = getSorobanNetwork();
       user.stellarArtistId = artistId.toString();
       user.stellarArtistTokenId = tokenId.toString();
       await this.userRepo.save(user);

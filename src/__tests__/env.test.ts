@@ -6,7 +6,7 @@ const baseEnv = {
   POSTGRES_USER: 'test_user',
   POSTGRES_PASSWORD: 'test_password',
   POSTGRES_DATABASE: 'test_db',
-  JWT_SECRET: 'test_jwt_secret',
+  JWT_SECRET: 'test-jwt-secret-with-at-least-32-characters',
   AWS_ACCESS_KEY_ID: 'test_aws_key',
   AWS_SECRET_ACCESS_KEY: 'test_aws_secret',
   AWS_REGION: 'us-east-1',

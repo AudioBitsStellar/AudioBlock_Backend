@@ -9,7 +9,7 @@ import path from 'path';
 import fs from 'fs';
 import { s3 } from '../config/s3';
 import { getChannel } from '../config/rabbitmq';
-import { SorobanContracts } from '../config/soroban';
+import { getSorobanNetwork, SorobanContracts } from '../config/soroban';
 import { SorobanService, addressArg, stringArg, u64Arg } from './Soroban/SorobanService';
 import { PreparedTransaction } from './Artist/ArtistService';
 import { ScanService } from './ScanService';
@@ -678,6 +678,7 @@ export class SongService {
       // upload_and_mint_song returns (song_id: u64, token_id: u64)
       const [onChainSongId, tokenId] = returnValue as [bigint, bigint];
 
+      song.chainNetwork = getSorobanNetwork();
       song.onChainSongId = onChainSongId.toString();
       song.onChainTokenId = tokenId.toString();
       song.mintStatus = 'minted';

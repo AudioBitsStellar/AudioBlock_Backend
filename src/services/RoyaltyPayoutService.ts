@@ -3,7 +3,7 @@ import AppDataSource from '../config/db';
 import { RoyaltyPayout, RoyaltyPayoutStatus, RoyaltySplit } from '../entities/RoyaltyPayout';
 import { SongCollaborator, CollaboratorStatus } from '../entities/SongCollaborator';
 import { User } from '../entities/User';
-import { SorobanContracts } from '../config/soroban';
+import { getSorobanNetwork, SorobanContracts } from '../config/soroban';
 import { SorobanService } from './Soroban/SorobanService';
 import { royaltiesPaidTotal } from './MetricsService';
 import { RoyaltyPayoutEvent } from '../types';
@@ -100,6 +100,7 @@ export class RoyaltyPayoutService {
 
     const payout = this.royaltyPayoutRepo.create({
       saleEventId: input.saleEventId,
+      chainNetwork: getSorobanNetwork(),
       saleTxHash: input.saleTxHash,
       songId: input.songId,
       tokenId: input.tokenId,
@@ -200,6 +201,7 @@ export class RoyaltyPayoutService {
       );
 
       payout.expectedSplits = splitResults;
+      payout.chainNetwork = getSorobanNetwork();
       payout.onChainEventId = eventId;
       payout.reconciledAt = new Date();
 

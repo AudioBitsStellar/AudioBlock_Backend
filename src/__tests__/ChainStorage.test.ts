@@ -12,3 +12,8 @@ it('fails startup when a record belongs to another network', async () => {
     'expected mainnet, found testnet',
   );
 });
+
+it('rejects an unverified legacy chain row', async () => {
+  const db = { query: jest.fn().mockResolvedValue([{ network: null }]) };
+  await expect(validateChainStorage(db, 'testnet')).rejects.toThrow('unverified legacy record');
+});

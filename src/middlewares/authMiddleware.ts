@@ -24,6 +24,7 @@ import {
 } from '../services/privy/PrivyErrors';
 import { PrivyUserResolver } from '../services/privy/PrivyUserResolver';
 import { AccountSuspensionService } from '../services/AccountSuspensionService';
+import { verifyJwtWithRotation } from '../config/jwtSecrets';
 
 export interface JwtPayload {
   id: string;
@@ -70,7 +71,7 @@ function authenticateLegacyToken(token: string): JwtPayload {
   }
 
   try {
-    const decoded = jwt.verify(token, secret) as JwtPayload;
+    const decoded = verifyJwtWithRotation(token) as JwtPayload;
     if (!decoded || !decoded.id) {
       authFailuresTotal.inc({ auth_method: 'legacy', failure_type: 'invalid_token' });
       throw AppError.authentication('Unauthorized: Invalid token');

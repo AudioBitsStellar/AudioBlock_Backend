@@ -27,6 +27,9 @@ export class TransactionLog {
   @Column({ nullable: true })
   txHash!: string;
 
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  chainNetwork?: 'testnet' | 'mainnet' | null;
+
   @Column()
   action!: string;
 
