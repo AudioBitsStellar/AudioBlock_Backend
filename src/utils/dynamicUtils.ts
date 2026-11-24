@@ -3,9 +3,6 @@ import { ThresholdSignatureScheme } from '@dynamic-labs-wallet/core';
 
 import { liskSepolia } from 'viem/chains';
 import { createWalletClient, http } from 'viem';
-import dotenv from 'dotenv';
-
-dotenv.config();
 
 export const authenticatedEvmClient = async () => {
   const client = new DynamicEvmWalletClient({

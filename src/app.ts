@@ -1,4 +1,3 @@
-import cookieParser from "cookie-parser";
 import express, {
   Request,
   Response,
@@ -49,7 +48,6 @@ const app = express();
 
 // Apply middleware
 // Apply global middlewares
-app.use(cookieParser());
 // Structured request logging with correlation id (Issue #33)
 app.use(requestLoggerMiddleware);
 
@@ -64,7 +62,10 @@ const allowedOrigins: string[] = process.env.ALLOWED_ORIGINS
 app.use(
   cors({
     origin: allowedOrigins,
-    credentials: true,
+    // Authentication is carried in the Authorization header, not cookies.
+    // Disabling credentialed CORS prevents cross-site requests from attaching
+    // ambient browser credentials and removes the CSRF exposure of this API.
+    credentials: false,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allowedHeaders: [
       "Content-Type",

@@ -41,7 +41,8 @@ export const corsOptions: CorsOptions = {
       callback(new Error('Origin not allowed by CORS'));
     }
   },
-  credentials: true,
+  // The API uses Authorization headers; do not allow ambient cookies.
+  credentials: false,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Authorization', 'Content-Type', 'X-Request-ID', 'X-Privy-ID-Token'],
   exposedHeaders: ['X-Request-ID'],
@@ -56,7 +57,7 @@ export const privyAuthCorsOptions: CorsOptions = {
       callback(new Error('Origin not allowed by CORS'));
     }
   },
-  credentials: true,
+  credentials: false,
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: [
     'Authorization',

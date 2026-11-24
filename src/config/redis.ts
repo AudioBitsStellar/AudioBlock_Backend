@@ -8,7 +8,7 @@ const redis = new Redis({
   host: process.env.REDIS_HOST,
   port: parseInt(process.env.REDIS_PORT || '6379'),
   password: process.env.REDIS_PASSWORD,
-  // tls: {}, // Required for Redis Cloud TLS
+  ...(process.env.REDIS_TLS === 'true' ? { tls: {} } : {}),
   maxRetriesPerRequest: null, //  prevents retry errors
   lazyConnect: isTest,
   retryStrategy: isTest ? () => null : undefined,

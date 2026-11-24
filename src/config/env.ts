@@ -1,6 +1,9 @@
 import dotenv from 'dotenv';
 
-dotenv.config();
+// Production and staging receive secrets from the platform's secret manager.
+// Loading a local .env file in those environments could silently override the
+// managed values and makes accidental secret-file deployment possible.
+if (process.env.NODE_ENV !== 'production') dotenv.config();
 
 export interface ValidatedEnv {
   NODE_ENV: string;
@@ -36,6 +39,8 @@ export interface ValidatedEnv {
   // PROD-02 — closed beta mode: signup gated by flag; admin allowlist tooling
   CLOSED_BETA?: string;
   CLOSED_BETA_ALLOWLIST?: string;
+  POSTGRES_SSL?: string;
+  REDIS_TLS?: string;
 }
 
 const requiredVars: (keyof ValidatedEnv)[] = [
@@ -72,6 +77,9 @@ export function validateEnvironment(): ValidatedEnv {
     if (!process.env.LISTENER_KEY_SALT) {
       missing.push('LISTENER_KEY_SALT');
     }
+    if (process.env.POSTGRES_SSL !== 'true') missing.push('POSTGRES_SSL=true');
+    if (process.env.REDIS_TLS !== 'true') missing.push('REDIS_TLS=true');
+    if (!process.env.ALLOWED_ORIGINS) missing.push('ALLOWED_ORIGINS');
   } else if (!process.env.LISTENER_KEY_SALT && process.env.NODE_ENV !== 'test') {
     console.warn(
       '⚠️  LISTENER_KEY_SALT is not set. Anonymous listener IP hashing is vulnerable in production. Set LISTENER_KEY_SALT in your .env file.',

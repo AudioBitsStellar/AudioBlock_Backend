@@ -5,7 +5,6 @@ import { User, UserRole } from '../entities/User';
 import { TransactionLog } from '../entities/TransactionLog';
 import { RoyaltyTemplate } from '../entities/RoyaltyTemplate';
 import AppDataSource from '../config/db';
-import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
 import { s3 } from '../config/s3';
@@ -295,7 +294,6 @@ export class SongService {
     this.userRepo = AppDataSource.getRepository(User);
     this.logRepo = AppDataSource.getRepository(TransactionLog);
     this.soroban = new SorobanService();
-    dotenv.config();
   }
 
   /**
