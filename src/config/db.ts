@@ -31,6 +31,9 @@ import { ReleaseTrack } from '../entities/ReleaseTrack';
 import { ReleasePreSave } from '../entities/ReleasePreSave';
 import { UserSave } from '../entities/UserSave';
 import { EmailSuppression } from '../entities/EmailSuppression';
+import { GiftSubscription } from '../entities/GiftSubscription';
+import { Subscription } from '../entities/Subscription';
+import { RoyaltyTemplate } from '../entities/RoyaltyTemplate';
 
 if (process.env.NODE_ENV !== 'production') dotenv.config();
 
@@ -79,6 +82,9 @@ const AppDataSource = new DataSource({
     ReleasePreSave,
     UserSave,
     EmailSuppression,
+    GiftSubscription,
+    Subscription,
+    RoyaltyTemplate,
   ],
   migrations: [__dirname + '/../migrations/*.{js,ts}'],
   migrationsTableName: 'migrations',
