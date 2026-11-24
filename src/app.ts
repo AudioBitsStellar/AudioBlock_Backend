@@ -21,6 +21,9 @@ import embedRoutes from "./routes/embedRoutes";
 import oembedRoutes from "./routes/oembedRoutes";
 import royaltyPayoutRoutes from "./routes/royaltyPayoutRoutes";
 import playlistRoutes from "./routes/playlistRoutes";
+import AlbumRoutes from "./routes/AlbumRoutes";
+import royaltyTemplateRoutes from "./routes/royaltyTemplateRoutes";
+import giftSubscriptionRoutes from "./routes/giftSubscriptionRoutes";
 import playlistFollowRoutes from "./routes/playlistFollowRoutes";
 import userRoutes from "./routes/userRoutes";
 import commentRoutes from "./routes/commentRoutes";
@@ -183,6 +186,12 @@ app.use("/api/oembed", oembedRoutes);
 app.use("/api/playlists", playlistRoutes);
 app.use("/api/playlists", playlistFollowRoutes);
 
+// Albums (Issue #740)
+app.use("/api/albums", AlbumRoutes);
+
+// Artist royalty split templates (Issue #756)
+app.use("/api/royalty-templates", royaltyTemplateRoutes);
+
 // Releases + pre-save campaigns for upcoming releases (Issue #424)
 app.use("/api/releases", releaseRoutes);
 
@@ -207,6 +216,7 @@ app.use("/api/comments", commentReactionRoutes);
 
 // Subscriptions: tiered plans, gifting, trial periods (Issues #413, #414, #415, #416)
 app.use("/api/subscriptions", subscriptionRoutes);
+app.use("/api/subscriptions", giftSubscriptionRoutes);
 
 // AI-assisted generation (cover art, descriptions) — async, queued via JobQueueService
 app.use("/api/ai", aiRoutes);
