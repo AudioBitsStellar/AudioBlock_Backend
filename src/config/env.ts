@@ -11,6 +11,7 @@ export interface ValidatedEnv {
   POSTGRES_PASSWORD: string;
   POSTGRES_DATABASE: string;
   JWT_SECRET: string;
+  JWT_SECRET_PREVIOUS?: string;
   AWS_ACCESS_KEY_ID: string;
   AWS_SECRET_ACCESS_KEY: string;
   AWS_REGION: string;
@@ -88,6 +89,7 @@ export function validateEnvironment(): ValidatedEnv {
   }
 
   validatePrivyKeys();
+  validateJwtSecret();
 
   return {
     NODE_ENV: process.env.NODE_ENV || 'development',
@@ -98,6 +100,7 @@ export function validateEnvironment(): ValidatedEnv {
     POSTGRES_PASSWORD: process.env.POSTGRES_PASSWORD!,
     POSTGRES_DATABASE: process.env.POSTGRES_DATABASE!,
     JWT_SECRET: process.env.JWT_SECRET!,
+    JWT_SECRET_PREVIOUS: process.env.JWT_SECRET_PREVIOUS,
     AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID!,
     AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY!,
     AWS_REGION: process.env.AWS_REGION!,
@@ -120,6 +123,22 @@ export function validateEnvironment(): ValidatedEnv {
     // #793 — anonymous listener IP HMAC salt
     LISTENER_KEY_SALT: process.env.LISTENER_KEY_SALT,
   };
+}
+
+const JWT_PLACEHOLDERS = new Set(['secret', 'changeme', 'change-me', 'your-secret', 'jwt-secret']);
+export function isStrongJwtSecret(secret: string | undefined): boolean {
+  const normalized = secret?.trim().toLowerCase();
+  return Boolean(
+    secret && secret.trim().length >= 32 && normalized && !JWT_PLACEHOLDERS.has(normalized),
+  );
+}
+
+function validateJwtSecret(): void {
+  if (!isStrongJwtSecret(process.env.JWT_SECRET)) {
+    // eslint-disable-next-line no-console
+    console.error('❌ JWT_SECRET must be at least 32 characters and must not be a placeholder.');
+    process.exit(1);
+  }
 }
 
 function validatePrivyKeys(): void {
