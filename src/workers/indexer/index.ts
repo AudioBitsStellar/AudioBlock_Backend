@@ -11,6 +11,7 @@
 import 'reflect-metadata';
 import { createServer, Server } from 'http';
 import AppDataSource from '../../config/db';
+import { validateChainStorage } from '../../config/chainStorage';
 import { IndexerWorker } from './IndexerWorker';
 import { EventProjector } from '../../services/EventProjector';
 import logger from '../../config/logger';
@@ -75,6 +76,7 @@ export async function main(): Promise<void> {
   }
 
   await AppDataSource.initialize();
+  await validateChainStorage(AppDataSource);
   logger.info('Indexer worker connected to database');
 
   startMetricsServer();

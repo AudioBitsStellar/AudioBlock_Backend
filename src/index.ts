@@ -5,6 +5,7 @@ import { initRabbitMQ } from './config/rabbitmq';
 import { startSongWorker } from './workers/SongProcessorWorker';
 import fs from 'fs';
 import { runSeeders } from './seeders';
+import { validateChainStorage } from './config/chainStorage';
 import { validateSorobanConfig } from './config/soroban';
 import { validateEnvironment } from './config/env';
 import { checkAuthFlagConfig, listAuthFlags } from './config/authFlags';
@@ -55,6 +56,7 @@ async function main() {
     logger.info({ auth: listAuthFlags() }, 'Authentication mode resolved');
 
     await AppDataSource.initialize();
+    await validateChainStorage(AppDataSource);
     logger.info('Database connected successfully');
 
     startDbPoolMonitor(AppDataSource);
