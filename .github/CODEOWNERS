@@ -92,7 +92,7 @@
 # Launch-critical security / supply-chain surfaces (SEC-02, Issue #887)
 # ---------------------------------------------------------------------------
 /.github/**                         @Darkvader-ship-it
-/*.config.*                        @Darkvader-ship-it
+*.config.*                         @Darkvader-ship-it
 /package.json                      @Darkvader-ship-it
 /Dockerfile                        @Darkvader-ship-it
 /scripts/**                        @Darkvader-ship-it
