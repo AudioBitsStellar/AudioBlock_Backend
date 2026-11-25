@@ -103,8 +103,12 @@ app.use(
 app.use((req, res, next) => {
   // These routes install their own parser so they can accept a larger batch
   // document or verify a signed raw webhook body before JSON decoding.
-  if (req.path === "/api/batch" || req.path.startsWith("/api/batch/") ||
-      req.path.startsWith("/api/webhooks/privy/")) {
+  if (
+    req.path === "/api/batch" ||
+    req.path.startsWith("/api/batch/") ||
+    req.path === "/api/webhooks/privy" ||
+    req.path.startsWith("/api/webhooks/privy/")
+  ) {
     return next();
   }
   return express.json({ limit: JSON_BODY_LIMIT })(req, res, next);

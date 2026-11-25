@@ -1,8 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
-import crypto from 'crypto';
 import { AppError } from '../errors/AppError';
 import { handleError } from '../utils/helpers';
 import logger from '../config/logger';
+import { PrivyWebhookService } from '../services/privy/PrivyWebhookService';
+import redis from '../config/redis';
 
 /**
  * Middleware to verify Privy webhook signatures (Issue #606).
@@ -19,11 +20,12 @@ import logger from '../config/logger';
  * - Signature verification ensures payload integrity
  */
 export function verifyPrivyWebhookSignature(req: Request, res: Response, next: NextFunction): void {
-  const signature = req.headers['privy-signature'] as string;
-  const appSecret = process.env.PRIVY_APP_SECRET;
+  const signatureHeader = req.headers['privy-signature'];
+  const signature = typeof signatureHeader === 'string' ? signatureHeader : undefined;
+  const webhookSecret = process.env.PRIVY_WEBHOOK_SECRET || process.env.PRIVY_APP_SECRET;
 
-  if (!appSecret) {
-    logger.error('PRIVY_APP_SECRET not configured');
+  if (!webhookSecret) {
+    logger.error('PRIVY_WEBHOOK_SECRET not configured');
     return handleError(req, res, AppError.businessLogic('Privy webhooks not configured'));
   }
 
@@ -32,48 +34,56 @@ export function verifyPrivyWebhookSignature(req: Request, res: Response, next: N
     return handleError(req, res, AppError.authentication('Missing webhook signature'));
   }
 
-  try {
-    // Parse signature header: t=<timestamp>,v1=<signature>
-    const parts = signature.split(',');
-    const timestampPart = parts.find((p) => p.startsWith('t='));
-    const signaturePart = parts.find((p) => p.startsWith('v1='));
-
-    if (!timestampPart || !signaturePart) {
-      throw new Error('Invalid signature format');
-    }
-
-    const timestamp = parseInt(timestampPart.split('=')[1], 10);
-    const expectedSignature = signaturePart.split('=')[1];
-
-    // Check timestamp (prevent replay attacks - 5 minute tolerance)
-    const currentTime = Math.floor(Date.now() / 1000);
-    const tolerance = 5 * 60; // 5 minutes
-
-    if (Math.abs(currentTime - timestamp) > tolerance) {
-      logger.warn({ timestamp, currentTime }, 'Webhook timestamp outside tolerance window');
-      return handleError(req, res, AppError.authentication('Webhook timestamp expired'));
-    }
-
-    // Compute expected signature
-    const payload = JSON.stringify(req.body);
-    const signedPayload = `${timestamp}.${payload}`;
-    const computedSignature = crypto
-      .createHmac('sha256', appSecret)
-      .update(signedPayload)
-      .digest('hex');
-
-    // Constant-time comparison to prevent timing attacks
-    if (!crypto.timingSafeEqual(Buffer.from(expectedSignature), Buffer.from(computedSignature))) {
-      logger.warn('Invalid Privy webhook signature');
-      return handleError(req, res, AppError.authentication('Invalid webhook signature'));
-    }
-
-    // Signature is valid, proceed to webhook handler
-    next();
-  } catch (error) {
-    logger.error({ err: error }, 'Error verifying Privy webhook signature');
-    return handleError(req, res, AppError.authentication('Failed to verify webhook signature'));
+  const rawBody = (req as Request & { rawBody?: Buffer }).rawBody;
+  if (!rawBody) {
+    logger.warn('Raw body unavailable for Privy webhook signature verification');
+    return handleError(req, res, AppError.authentication('Unable to verify webhook signature'));
   }
+
+  const verifier = new PrivyWebhookService(webhookSecret);
+  if (!verifier.verifySignature(signature, rawBody)) {
+    return handleError(req, res, AppError.authentication('Invalid webhook signature'));
+  }
+
+  next();
 }
 
 export const verifyPrivyWebhook = verifyPrivyWebhookSignature;
+
+/** Atomically reserve a webhook ID so concurrent deliveries cannot process twice. */
+export async function deduplicatePrivyWebhook(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const headerId = req.headers['svix-id'];
+  const webhookId = typeof headerId === 'string' ? headerId : undefined;
+  if (!webhookId) {
+    return next();
+  }
+
+  const key = `privy:webhook:processed:${webhookId}`;
+  try {
+    const reservation = await redis.set(key, 'processing', 'EX', 24 * 60 * 60, 'NX');
+    if (reservation !== 'OK') {
+      logger.info({ webhookId }, 'Duplicate Privy webhook delivery ignored');
+      res.status(200).json({ success: true, received: true });
+      return;
+    }
+  } catch (error) {
+    logger.error({ err: error, webhookId }, 'Unable to reserve Privy webhook ID');
+    handleError(req, res, AppError.externalService('Webhook deduplication is unavailable'));
+    return;
+  }
+
+  const originalJson = res.json.bind(res);
+  res.json = (body: unknown) => {
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      void redis.del(key).catch((error: unknown) => {
+        logger.error({ err: error, webhookId }, 'Unable to release failed Privy webhook ID');
+      });
+    }
+    return originalJson(body);
+  };
+  next();
+}

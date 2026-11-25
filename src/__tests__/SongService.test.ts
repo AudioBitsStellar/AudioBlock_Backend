@@ -15,9 +15,12 @@ jest.mock('../config/s3', () => ({
   },
 }));
 jest.mock('../services/Soroban/SorobanService', () => ({
+  SorobanTransactionFailedError: class SorobanTransactionFailedError extends Error {},
   SorobanService: jest.fn().mockImplementation(() => ({
     prepareInvocation: jest.fn(),
     submitSignedTransaction: jest.fn(),
+    getSignedTransactionHash: jest.fn().mockReturnValue('precomputed-hash'),
+    getTransaction: jest.fn(),
   })),
   addressArg: jest.fn((v) => v),
   stringArg: jest.fn((v) => v),
@@ -39,6 +42,7 @@ import { User } from '../entities/User';
 const mockSongRepo = {
   findOne: jest.fn(),
   findOneBy: jest.fn(),
+  find: jest.fn(),
   save: jest.fn(),
   create: jest.fn(),
 };
@@ -46,7 +50,12 @@ const mockUserRepo = {
   findOneBy: jest.fn(),
 };
 
-let mockSorobanInstance: { prepareInvocation: jest.Mock; submitSignedTransaction: jest.Mock };
+let mockSorobanInstance: {
+  prepareInvocation: jest.Mock;
+  submitSignedTransaction: jest.Mock;
+  getSignedTransactionHash: jest.Mock;
+  getTransaction: jest.Mock;
+};
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -73,7 +82,10 @@ describe('SongService.prepareSongMintTx', () => {
   it('throws when song is not found', async () => {
     mockSongRepo.findOne.mockResolvedValue(null);
     const svc = makeSvc();
-    await expect(svc.prepareSongMintTx('missing-id')).rejects.toThrow('Song not found');
+    await expect(svc.prepareSongMintTx('missing-id')).rejects.toMatchObject({
+      statusCode: 404,
+      code: 'SONG_NOT_FOUND',
+    });
   });
 
   it('throws when song has no metadata CID', async () => {
@@ -85,7 +97,10 @@ describe('SongService.prepareSongMintTx', () => {
     });
     mockUserRepo.findOneBy.mockResolvedValue({ id: 'u1', stellarPublicKey: 'GXYZ' });
     const svc = makeSvc();
-    await expect(svc.prepareSongMintTx('s1')).rejects.toThrow('Song has no metadata CID yet');
+    await expect(svc.prepareSongMintTx('s1')).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'SONG_METADATA_NOT_READY',
+    });
   });
 
   it('throws when the artist has no connected Stellar wallet', async () => {
@@ -96,9 +111,10 @@ describe('SongService.prepareSongMintTx', () => {
       artistId: 'u1',
     });
     const svc = makeSvc();
-    await expect(svc.prepareSongMintTx('s1')).rejects.toThrow(
-      'Connect a Stellar wallet before minting this song',
-    );
+    await expect(svc.prepareSongMintTx('s1')).rejects.toMatchObject({
+      statusCode: 400,
+      code: 'STELLAR_WALLET_REQUIRED',
+    });
   });
 
   it('returns PreparedTransaction on success', async () => {
@@ -108,7 +124,10 @@ describe('SongService.prepareSongMintTx', () => {
     process.env.SOROBAN_NETWORK_PASSPHRASE = 'Test SDF Network ; September 2015';
 
     const svc = makeSvc();
-    mockSorobanInstance.prepareInvocation.mockResolvedValue('unsigned-xdr');
+    mockSorobanInstance.prepareInvocation.mockResolvedValue({
+      xdr: 'unsigned-xdr',
+      inclusionFee: '100',
+    });
 
     const result = await svc.prepareSongMintTx('s1', 0);
 
@@ -120,6 +139,7 @@ describe('SongService.prepareSongMintTx', () => {
     );
     expect(result).toEqual({
       xdr: 'unsigned-xdr',
+      inclusionFee: '100',
       networkPassphrase: 'Test SDF Network ; September 2015',
     });
   });
@@ -129,20 +149,42 @@ describe('SongService.submitSongMintTx', () => {
   it('throws when song is not found', async () => {
     mockSongRepo.findOneBy.mockResolvedValue(null);
     const svc = makeSvc();
-    await expect(svc.submitSongMintTx('missing-id', 'signedXdr')).rejects.toThrow('Song not found');
+    await expect(svc.submitSongMintTx('missing-id', 'signedXdr')).rejects.toMatchObject({
+      statusCode: 404,
+      code: 'SONG_NOT_FOUND',
+    });
   });
 
-  it('marks song as failed and rethrows when the Soroban tx fails', async () => {
+  it('leaves a timed-out submission pending with its transaction hash', async () => {
     const song = { id: 's1', mintStatus: 'pending', onChainSongId: null, onChainTokenId: null };
     mockSongRepo.findOneBy.mockResolvedValue(song);
     mockSongRepo.save.mockResolvedValue(song);
 
     const svc = makeSvc();
-    mockSorobanInstance.submitSignedTransaction.mockRejectedValue(new Error('tx rejected'));
+    mockSorobanInstance.submitSignedTransaction.mockRejectedValue(new Error('timed out'));
 
-    await expect(svc.submitSongMintTx('s1', 'signedXdr')).rejects.toThrow('tx rejected');
+    await expect(svc.submitSongMintTx('s1', 'signedXdr')).rejects.toThrow('timed out');
+    expect(song.mintStatus).toBe('pending');
+    expect(song.mintTxHash).toBe('precomputed-hash');
+    expect(song.mintSubmittedAt).toBeInstanceOf(Date);
+    expect(mockSongRepo.save).toHaveBeenCalledWith(song);
+  });
+
+  it('marks a definitively failed Soroban transaction as failed', async () => {
+    const song = { id: 's1', mintStatus: 'not_minted', onChainSongId: null, onChainTokenId: null };
+    mockSongRepo.findOneBy.mockResolvedValue(song);
+    mockSongRepo.save.mockResolvedValue(song);
+
+    const svc = makeSvc();
+    const { SorobanTransactionFailedError } = jest.requireMock(
+      '../services/Soroban/SorobanService',
+    );
+    mockSorobanInstance.submitSignedTransaction.mockRejectedValue(
+      new SorobanTransactionFailedError('transaction failed'),
+    );
+
+    await expect(svc.submitSongMintTx('s1', 'signedXdr')).rejects.toThrow('transaction failed');
     expect(song.mintStatus).toBe('failed');
-    expect(mockSongRepo.save).toHaveBeenCalled();
   });
 
   it('updates song with on-chain IDs and returns txHash on success', async () => {
@@ -156,6 +198,7 @@ describe('SongService.submitSongMintTx', () => {
     mockSongRepo.save.mockImplementation(async (s: any) => s);
 
     const svc = makeSvc();
+    mockSorobanInstance.getSignedTransactionHash.mockReturnValue('txhash123');
     mockSorobanInstance.submitSignedTransaction.mockResolvedValue({
       hash: 'txhash123',
       returnValue: [BigInt(42), BigInt(7)],
@@ -164,23 +207,68 @@ describe('SongService.submitSongMintTx', () => {
     const result = await svc.submitSongMintTx('s1', 'signedXdr');
 
     expect(song.mintStatus).toBe('minted');
+    expect(song.mintTxHash).toBe('txhash123');
     expect(song.onChainSongId).toBe('42');
     expect(song.onChainTokenId).toBe('7');
     expect(result).toEqual({ txHash: 'txhash123', songId: '42', tokenId: '7' });
   });
+
+  it('reconciles an older pending mint to minted from the RPC result', async () => {
+    const song: any = {
+      id: 's1',
+      mintStatus: 'pending',
+      mintTxHash: 'txhash123',
+      mintSubmittedAt: new Date(Date.now() - 10 * 60 * 1000),
+    };
+    mockSongRepo.find.mockResolvedValue([song]);
+    mockSongRepo.save.mockImplementation(async (value: any) => value);
+
+    const svc = makeSvc();
+    mockSorobanInstance.getTransaction.mockResolvedValue({
+      status: 'SUCCESS',
+      returnValue: [BigInt(42), BigInt(7)],
+    });
+
+    await expect(svc.reconcilePendingMints()).resolves.toBe(1);
+    expect(mockSorobanInstance.getTransaction).toHaveBeenCalledWith('txhash123');
+    expect(song.mintStatus).toBe('minted');
+    expect(song.onChainSongId).toBe('42');
+    expect(song.onChainTokenId).toBe('7');
+  });
+
+  it.each(['pending', 'minted', 'minting'])(
+    'rejects preparing a song already in mint status %s',
+    async (mintStatus) => {
+      mockSongRepo.findOne.mockResolvedValue({
+        id: 's1',
+        mintStatus,
+        metadataCid: 'QmABC',
+        user: { stellarPublicKey: 'GXYZ' },
+      });
+
+      const svc = makeSvc();
+      await expect(svc.prepareSongMintTx('s1')).rejects.toMatchObject({ statusCode: 409 });
+    },
+  );
 });
 
 describe('SongService.retryFailedSong', () => {
   it('throws when song is not found', async () => {
     mockSongRepo.findOneBy.mockResolvedValue(null);
     const svc = makeSvc();
-    await expect(svc.retryFailedSong('missing-id')).rejects.toThrow('Song not found');
+    await expect(svc.retryFailedSong('missing-id')).rejects.toMatchObject({
+      statusCode: 404,
+      code: 'SONG_NOT_FOUND',
+    });
   });
 
   it('throws when song status is not failed', async () => {
     mockSongRepo.findOneBy.mockResolvedValue({ id: 's1', status: 'ready' });
     const svc = makeSvc();
-    await expect(svc.retryFailedSong('s1')).rejects.toThrow('Only failed songs can be retried');
+    await expect(svc.retryFailedSong('s1')).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'SONG_NOT_RETRYABLE',
+    });
   });
 
   it('resets status to processing, clears errorReason, and saves on success', async () => {

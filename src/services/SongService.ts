@@ -9,13 +9,19 @@ import path from 'path';
 import fs from 'fs';
 import { s3 } from '../config/s3';
 import { getChannel } from '../config/rabbitmq';
-import { SorobanContracts, getNetworkPassphrase } from '../config/soroban';
-import { SorobanService, addressArg, stringArg, u64Arg } from './Soroban/SorobanService';
+import { SorobanContracts } from '../config/soroban';
+import {
+  SorobanService,
+  SorobanTransactionFailedError,
+  addressArg,
+  stringArg,
+  u64Arg,
+} from './Soroban/SorobanService';
 import { PreparedTransaction } from './Artist/ArtistService';
 import { ScanService } from './ScanService';
 import { CacheService } from './CacheService';
 import { SongVersionService } from './Song/SongVersionService';
-import { AppError } from '../errors/AppError';
+import { AppError, ErrorType } from '../errors/AppError';
 import { ActivityService } from './ActivityService';
 import logger from '../config/logger';
 import { songsUploadedTotal } from './MetricsService';
@@ -389,11 +395,15 @@ export class SongService {
   async applyTemplate(songId: string, templateId: string, userId: string): Promise<Song> {
     const song = await this.songRepo.findOneBy({ id: songId });
     if (!song) {
-      throw Object.assign(new Error('Song not found'), { statusCode: 404 });
+      throw AppError.notFound('Song not found', undefined, 'SONG_NOT_FOUND');
     }
 
     if (song.artistId !== userId) {
-      throw Object.assign(new Error('Not authorized to modify this song'), { statusCode: 403 });
+      throw AppError.authorization(
+        'Not authorized to modify this song',
+        undefined,
+        'NOT_SONG_OWNER',
+      );
     }
 
     if (song.mintStatus === 'pending' || song.mintStatus === 'minted') {
@@ -403,11 +413,15 @@ export class SongService {
     const templateRepo = AppDataSource.getRepository(RoyaltyTemplate);
     const template = await templateRepo.findOneBy({ id: templateId });
     if (!template) {
-      throw Object.assign(new Error('Template not found'), { statusCode: 404 });
+      throw AppError.notFound('Template not found', undefined, 'ROYALTY_TEMPLATE_NOT_FOUND');
     }
 
     if (template.userId !== userId) {
-      throw Object.assign(new Error('Not authorized to use this template'), { statusCode: 403 });
+      throw AppError.authorization(
+        'Not authorized to use this template',
+        undefined,
+        'ROYALTY_TEMPLATE_NOT_OWNED',
+      );
     }
 
     song.royaltySplits = template.splits;
@@ -567,12 +581,20 @@ export class SongService {
 
     // Verify all chunks are present
     if (!fs.existsSync(tempDir)) {
-      throw new Error(`Temp directory not found for fileId: ${fileId}`);
+      throw AppError.notFound(
+        `Temp directory not found for fileId: ${fileId}`,
+        undefined,
+        'UPLOAD_TEMP_DIR_NOT_FOUND',
+      );
     }
 
     const chunkFiles = fs.readdirSync(tempDir);
     if (chunkFiles.length !== totalChunks) {
-      throw new Error(`Expected ${totalChunks} chunks but found ${chunkFiles.length}`);
+      throw AppError.validation(
+        `Expected ${totalChunks} chunks but found ${chunkFiles.length}`,
+        undefined,
+        'UPLOAD_CHUNKS_INCOMPLETE',
+      );
     }
 
     // if (!fs.existsSync(mergedDir)) fs.mkdirSync(mergedDir, { recursive: true });
@@ -621,9 +643,13 @@ export class SongService {
       } catch {
         /* best-effort */
       }
-      throw Object.assign(
-        new Error(`Upload rejected: malware detected (${scanResult.threat ?? 'unknown threat'})`),
-        { statusCode: 422, code: 'MALWARE_DETECTED', threat: scanResult.threat },
+      throw new AppError(
+        `Upload rejected: malware detected (${scanResult.threat ?? 'unknown threat'})`,
+        ErrorType.VALIDATION_FAILED,
+        422,
+        true,
+        { threat: scanResult.threat },
+        'MALWARE_DETECTED',
       );
     }
     logger.info({ fileId }, 'Malware scan passed');
@@ -652,22 +678,43 @@ export class SongService {
    */
   async prepareSongMintTx(songId: string, albumId: number = 0): Promise<PreparedTransaction> {
     const song = await this.songRepo.findOne({ where: { id: songId }, relations: ['user'] });
-    if (!song) throw new Error('Song not found');
-    if (!song.metadataCid) throw new Error('Song has no metadata CID yet');
+    if (!song) throw AppError.notFound('Song not found', undefined, 'SONG_NOT_FOUND');
+    if (
+      song.mintStatus === 'pending' ||
+      song.mintStatus === 'minting' ||
+      song.mintStatus === 'minted'
+    ) {
+      throw AppError.conflict(
+        'Song mint is already pending or complete',
+        undefined,
+        'SONG_MINT_ALREADY_STARTED',
+      );
+    }
+    if (!song.metadataCid) {
+      throw AppError.conflict('Song has no metadata CID yet', undefined, 'SONG_METADATA_NOT_READY');
+    }
 
     const user = song.user ?? (await this.userRepo.findOneBy({ id: song.artistId }));
     if (!user?.stellarPublicKey) {
-      throw new Error('Connect a Stellar wallet before minting this song');
+      throw AppError.businessLogic(
+        'Connect a Stellar wallet before minting this song',
+        undefined,
+        'STELLAR_WALLET_REQUIRED',
+      );
     }
 
-    const xdrTx = await this.soroban.prepareInvocation(
+    const prepared = await this.soroban.prepareInvocation(
       user.stellarPublicKey,
       SorobanContracts.catalog,
       'upload_and_mint_song',
       [addressArg(user.stellarPublicKey), stringArg(song.metadataCid), u64Arg(albumId)],
     );
 
-    return { xdr: xdrTx, networkPassphrase: getNetworkPassphrase() };
+    return {
+      xdr: prepared.xdr,
+      inclusionFee: prepared.inclusionFee,
+      networkPassphrase: process.env.SOROBAN_NETWORK_PASSPHRASE || '',
+    };
   }
 
   /**
@@ -684,7 +731,13 @@ export class SongService {
     signedXdr: string,
   ): Promise<{ txHash: string; songId: string; tokenId: string }> {
     const song = await this.songRepo.findOneBy({ id: songId });
-    if (!song) throw new Error('Song not found');
+    if (!song) throw AppError.notFound('Song not found', undefined, 'SONG_NOT_FOUND');
+
+    const txHash = this.soroban.getSignedTransactionHash(signedXdr);
+    song.mintTxHash = txHash;
+    song.mintSubmittedAt = new Date();
+    song.mintStatus = 'pending';
+    await this.songRepo.save(song);
 
     try {
       const { hash, returnValue } = await this.soroban.submitSignedTransaction(signedXdr);
@@ -692,6 +745,7 @@ export class SongService {
       // upload_and_mint_song returns (song_id: u64, token_id: u64)
       const [onChainSongId, tokenId] = returnValue as [bigint, bigint];
 
+      song.mintTxHash = hash;
       song.onChainSongId = onChainSongId.toString();
       song.onChainTokenId = tokenId.toString();
       song.mintStatus = 'minted';
@@ -715,7 +769,7 @@ export class SongService {
           onChainSongId: song.onChainSongId,
           tokenId: song.onChainTokenId,
           txHash: hash,
-          previousStatus: 'minting',
+          previousStatus: 'pending',
           newStatus: 'minted',
         });
       } catch (webhookErr) {
@@ -727,10 +781,61 @@ export class SongService {
 
       return { txHash: hash, songId: song.onChainSongId, tokenId: song.onChainTokenId };
     } catch (error) {
-      song.mintStatus = 'failed';
-      await this.songRepo.save(song);
+      if (error instanceof SorobanTransactionFailedError) {
+        song.mintStatus = 'failed';
+        await this.songRepo.save(song);
+      }
       throw error;
     }
+  }
+
+  /**
+   * Resolve older pending mint submissions using their stored Soroban hash.
+   * NOT_FOUND is considered definitive only after the transaction's time bounds
+   * have elapsed plus a five-minute RPC indexing grace period.
+   */
+  async reconcilePendingMints(olderThanMinutes = 5): Promise<number> {
+    const pendingSongs = await this.songRepo.find({ where: { mintStatus: 'pending' } });
+    const cutoff = Date.now() - olderThanMinutes * 60 * 1000;
+    let resolved = 0;
+
+    for (const song of pendingSongs) {
+      if (!song.mintTxHash || !song.mintSubmittedAt || song.mintSubmittedAt.getTime() >= cutoff) {
+        continue;
+      }
+
+      try {
+        const transaction = await this.soroban.getTransaction(song.mintTxHash);
+        if (transaction.status === 'SUCCESS') {
+          if (!Array.isArray(transaction.returnValue) || transaction.returnValue.length < 2) {
+            logger.warn(
+              { songId: song.id, txHash: song.mintTxHash },
+              'Mint transaction returned no IDs',
+            );
+            continue;
+          }
+          const [onChainSongId, onChainTokenId] = transaction.returnValue;
+          song.onChainSongId = String(onChainSongId);
+          song.onChainTokenId = String(onChainTokenId);
+          song.mintStatus = 'minted';
+        } else if (transaction.status === 'FAILED' || transaction.status === 'NOT_FOUND') {
+          song.mintStatus = 'failed';
+        } else {
+          continue;
+        }
+
+        await this.songRepo.save(song);
+        if (song.mintStatus === 'minted') await CacheService.clearSong(song.id);
+        resolved++;
+      } catch (error) {
+        logger.warn(
+          { songId: song.id, txHash: song.mintTxHash, err: error },
+          'Unable to reconcile pending song mint; leaving it pending',
+        );
+      }
+    }
+
+    return resolved;
   }
 
   /**
@@ -942,8 +1047,10 @@ export class SongService {
    */
   async flagSong(songId: string, adminId: string, reason?: string): Promise<Song> {
     const song = await this.songRepo.findOneBy({ id: songId });
-    if (!song) throw new Error('Song not found');
-    if (song.flagged) throw new Error('Song is already flagged');
+    if (!song) throw AppError.notFound('Song not found', undefined, 'SONG_NOT_FOUND');
+    if (song.flagged) {
+      throw AppError.conflict('Song is already flagged', undefined, 'SONG_ALREADY_FLAGGED');
+    }
 
     song.flagged = true;
     song.flaggedAt = new Date();
@@ -971,8 +1078,10 @@ export class SongService {
    */
   async unflagSong(songId: string, adminId: string): Promise<Song> {
     const song = await this.songRepo.findOneBy({ id: songId });
-    if (!song) throw new Error('Song not found');
-    if (!song.flagged) throw new Error('Song is not flagged');
+    if (!song) throw AppError.notFound('Song not found', undefined, 'SONG_NOT_FOUND');
+    if (!song.flagged) {
+      throw AppError.conflict('Song is not flagged', undefined, 'SONG_NOT_FLAGGED');
+    }
 
     song.flagged = false;
     song.flaggedAt = null;
@@ -995,9 +1104,9 @@ export class SongService {
    */
   async retryFailedSong(songId: string): Promise<Song> {
     const song = await this.songRepo.findOneBy({ id: songId });
-    if (!song) throw new Error('Song not found');
+    if (!song) throw AppError.notFound('Song not found', undefined, 'SONG_NOT_FOUND');
     if (song.status !== 'failed') {
-      throw new Error('Only failed songs can be retried');
+      throw AppError.conflict('Only failed songs can be retried', undefined, 'SONG_NOT_RETRYABLE');
     }
 
     song.status = 'processing';
@@ -1149,7 +1258,7 @@ function buildUploadKey(ctx: UploadContext, checksum: string): string {
   // #351 — sanitize each component to prevent path traversal and collisions
   const sanitize = (v: string, name: string): string => {
     if (!v || /[/\\]|\.\.|[^a-zA-Z0-9_-]/.test(v) || v.length > 128) {
-      throw new Error(`Invalid ${name} for S3 key`);
+      throw AppError.validation(`Invalid ${name} for S3 key`, undefined, 'INVALID_S3_KEY');
     }
     return v;
   };

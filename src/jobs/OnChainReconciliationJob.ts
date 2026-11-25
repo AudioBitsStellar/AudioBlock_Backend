@@ -6,6 +6,7 @@ import {
 import { JobQueueService } from '../services/JobQueueService';
 import { registerJobHandler } from '../workers/JobQueueWorker';
 import logger from '../config/logger';
+import { SongService } from '../services/SongService';
 
 export const ON_CHAIN_RECONCILIATION_JOB_TYPE = 'reconcile_onchain_events';
 
@@ -15,6 +16,10 @@ export const ON_CHAIN_RECONCILIATION_JOB_TYPE = 'reconcile_onchain_events';
 export async function runOnChainReconciliationJob(
   lookbackHours = 24,
 ): Promise<ReconciliationReport> {
+  const resolvedMints = await new SongService().reconcilePendingMints();
+  if (resolvedMints > 0) {
+    logger.info({ resolvedMints }, 'Reconciled pending song mints');
+  }
   const service = new OnChainReconciliationService();
   return service.reconcile(lookbackHours);
 }
