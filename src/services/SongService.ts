@@ -9,6 +9,7 @@ import path from 'path';
 import fs from 'fs';
 import { s3 } from '../config/s3';
 import { getChannel } from '../config/rabbitmq';
+import { Upload } from '@aws-sdk/lib-storage';
 import { SorobanContracts } from '../config/soroban';
 import {
   SorobanService,
@@ -363,20 +364,22 @@ export class SongService {
   async saveCover(fileId: string, coverPath: string) {
     const coverBuffer = fs.readFileSync(coverPath);
     const coverFileName = `${fileId}_cover.png`;
+    const key = `covers/${coverFileName}`;
 
-    const s3Res = await s3
-      .upload({
+    const upload = new Upload({
+      client: s3,
+      params: {
         Bucket: process.env.AWS_BUCKET_NAME!,
-        Key: `covers/${coverFileName}`,
+        Key: key,
         Body: coverBuffer,
         ContentType: 'image/png',
-        // ACL: "public-read",
-      })
-      .promise();
+      },
+    });
 
+    await upload.done();
     fs.unlinkSync(coverPath); // cleanup local temp
 
-    return s3Res.Location; // the S3 URL for the cover
+    return `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;
   }
 
   /**
@@ -639,17 +642,19 @@ export class SongService {
       );
     }
     logger.info({ fileId }, 'Malware scan passed');
-    const s3Res = await s3
-      .upload({
+    const key = `uploads/${fileId}.mp3`;
+    const upload = new Upload({
+      client: s3,
+      params: {
         Bucket: process.env.AWS_BUCKET_NAME!,
-        Key: `uploads/${fileId}.mp3`,
+        Key: key,
         Body: fs.createReadStream(finalPath),
         ContentType: 'audio/mpeg',
-        // ACL: "public-read",
-      })
-      .promise();
+      },
+    });
 
-    return s3Res.Location;
+    await upload.done();
+    return `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;
   }
 
   /**
