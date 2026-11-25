@@ -1,9 +1,13 @@
 import { IndexerWorker } from '../workers/indexer/IndexerWorker';
 import { SorobanEventReader, EventsPage } from '../services/Soroban/SorobanEventReader';
 import { IndexerService } from '../services/IndexerService';
-import { IndexedEventService } from '../services/IndexedEventService';
+import { IndexedEventService, InsertIndexedEventDTO } from '../services/IndexedEventService';
 import { IndexerContract } from '../services/Soroban/IndexerContractRegistry';
-import { EVENT_DECODERS } from '../services/Soroban/eventDecoders';
+import {
+  EVENT_DECODERS,
+  EVENT_SCHEMA_VERSION,
+  UNDECODED_EVENT_TYPE,
+} from '../services/Soroban/eventDecoders';
 
 jest.mock('@stellar/stellar-sdk', () => ({
   scValToNative: jest.fn((value: unknown) => value),
@@ -156,7 +160,7 @@ describe('IndexerWorker', () => {
     expect(indexerService.recordProgress).not.toHaveBeenCalled();
   });
 
-  it('counts skipped events when decoder returns null', async () => {
+  it('tolerates unknown events: skips them from processing but retains the raw payload', async () => {
     const nullDecoderContract: IndexerContract = {
       ...nftContract,
       decoder: { decode: () => null } as unknown as typeof nftContract.decoder,
@@ -202,7 +206,160 @@ describe('IndexerWorker', () => {
     const outcome = await worker.pollOnce(nullDecoderContract);
     expect(outcome.eventsSkipped).toBe(2);
     expect(outcome.eventsProcessed).toBe(0);
-    expect(eventService.upsertEvent).not.toHaveBeenCalled();
+
+    // Issue #918: an event this build cannot decode is still written, so its
+    // raw topic/value outlives the RPC pruning window.
+    expect(eventService.upsertEvent).toHaveBeenCalledTimes(2);
+    expect(eventService.upsertEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contractType: 'nft',
+        eventType: UNDECODED_EVENT_TYPE,
+        eventId: 'evt-skip-1',
+        ledger: 480,
+      }),
+    );
+    const retainedPayload = (
+      (eventService.upsertEvent as jest.Mock).mock.calls[0][0] as InsertIndexedEventDTO
+    ).payload;
+    expect(retainedPayload).toEqual(
+      expect.objectContaining({
+        schemaVersion: EVENT_SCHEMA_VERSION,
+        raw: { topic: [{ symbol: 'unknown_event' }], value: 'raw' },
+      }),
+    );
+
+    // Retained rows must not be counted as processed domain events.
+    expect(indexerService.recordProgress).toHaveBeenCalledWith('CA_NFT', 'testnet', 481, 0);
+  });
+
+  it('keeps indexing known events when the same batch holds an unknown one', async () => {
+    const reader = makeReader({
+      latest: 500,
+      pages: [
+        {
+          events: [
+            {
+              id: 'evt-known',
+              ledger: 480,
+              txHash: 'tx-1',
+              contractId: 'CA_NFT',
+              topic: [{ symbol: 'mint' }, 'GOWNER'],
+              value: 'token-1',
+            },
+            {
+              id: 'evt-unknown',
+              ledger: 481,
+              txHash: 'tx-2',
+              contractId: 'CA_NFT',
+              // a symbol the nft decoder has no branch for
+              topic: [{ symbol: 'sponsored_transfer' }, 'GOWNER'],
+              value: 'token-2',
+            },
+          ],
+          cursor: '',
+          latestLedger: 500,
+        },
+      ],
+    });
+
+    const indexerService = makeIndexerService();
+    const eventService = makeEventService();
+    const worker = new IndexerWorker({
+      contracts: [nftContract],
+      indexerService,
+      eventService,
+      reader,
+    });
+
+    const outcome = await worker.pollOnce(nftContract);
+    expect(outcome.eventsFetched).toBe(2);
+    expect(outcome.eventsProcessed).toBe(1);
+    expect(outcome.eventsSkipped).toBe(1);
+    expect(outcome.errors).toBe(0);
+    expect(eventService.upsertEvent).toHaveBeenCalledTimes(2);
+    expect(indexerService.recordProgress).toHaveBeenCalledWith('CA_NFT', 'testnet', 481, 1);
+  });
+
+  it('reuses the RPC event id for retained events so re-indexing stays idempotent', async () => {
+    const nullDecoderContract: IndexerContract = {
+      ...nftContract,
+      decoder: { decode: () => null } as unknown as typeof nftContract.decoder,
+    };
+
+    const page: EventsPage = {
+      events: [
+        {
+          id: 'evt-skip-1',
+          ledger: 480,
+          txHash: 'tx-skip-1',
+          contractId: 'CA_NFT',
+          topic: [{ symbol: 'unknown_event' }],
+          value: 'raw',
+        },
+      ],
+      cursor: '',
+      latestLedger: 500,
+    };
+
+    const reader = makeReader({ latest: 500, pages: [page, page] });
+    const eventService = makeEventService();
+    const worker = new IndexerWorker({
+      contracts: [nullDecoderContract],
+      indexerService: makeIndexerService(),
+      eventService,
+      reader,
+    });
+
+    await worker.pollOnce(nullDecoderContract);
+    await worker.pollOnce(nullDecoderContract);
+
+    const calls = (eventService.upsertEvent as jest.Mock).mock.calls;
+    const first = calls[0][0] as InsertIndexedEventDTO;
+    const second = calls[1][0] as InsertIndexedEventDTO;
+    expect(second.eventId).toBe(first.eventId);
+    expect(second.ledger).toBe(first.ledger);
+    expect(second.contractId).toBe(first.contractId);
+  });
+
+  it('counts a failed retained write as an error without dropping the batch', async () => {
+    const nullDecoderContract: IndexerContract = {
+      ...nftContract,
+      decoder: { decode: () => null } as unknown as typeof nftContract.decoder,
+    };
+
+    const reader = makeReader({
+      latest: 500,
+      pages: [
+        {
+          events: [
+            {
+              id: 'evt-skip-1',
+              ledger: 480,
+              txHash: 'tx-skip-1',
+              contractId: 'CA_NFT',
+              topic: [{ symbol: 'unknown_event' }],
+              value: 'raw',
+            },
+          ],
+          cursor: '',
+          latestLedger: 500,
+        },
+      ],
+    });
+
+    const eventService = makeEventService();
+    eventService.upsertEvent = jest.fn().mockRejectedValue(new Error('DB write failed'));
+
+    const worker = new IndexerWorker({
+      contracts: [nullDecoderContract],
+      indexerService: makeIndexerService(),
+      eventService,
+      reader,
+    });
+
+    const outcome = await worker.pollOnce(nullDecoderContract);
+    expect(outcome.eventsSkipped).toBe(1);
+    expect(outcome.errors).toBe(1);
   });
 
   it('reports errors separately from skipped events when upsert fails', async () => {

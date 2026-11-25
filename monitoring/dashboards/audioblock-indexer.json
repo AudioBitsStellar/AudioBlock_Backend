@@ -45,8 +45,12 @@
       "targets": [
         {
           "expr": "rate(indexer_events_processed_total[5m])",
-: [
-        { "format": "short", "label": "Total Events" },
+          "legendFormat": "{{network}}/{{contract}}",
+          "refId": "A"
+        }
+      ],
+      "yaxes": [
+        { "format": "ops", "label": "Events/s" },
         { "format": "short" }
       ]
     },
@@ -154,7 +158,7 @@
     {
       "title": "Lag Distribution (all contracts)",
       "type": "graph",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
       "targets": [
         {
           "expr": "histogram_quantile(0.50, sum(rate(indexer_lag_ledgers[5m])) by (le))",
@@ -175,6 +179,37 @@
       "yaxes": [
         { "format": "short", "label": "Lag (ledgers)" },
         { "format": "short" }
+      ]
+    },
+    {
+      "title": "Lag vs SLO thresholds (Issue #917)",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 28 },
+      "description": "indexer_lag_ledgers against the two alert thresholds. A line above 1000 is a warning (15m dwell), above 10000 critical (30m dwell).",
+      "targets": [
+        {
+          "expr": "indexer_lag_ledgers",
+          "legendFormat": "{{network}}/{{contract}}",
+          "refId": "A"
+        },
+        {
+          "expr": "vector(1000)",
+          "legendFormat": "warning threshold",
+          "refId": "B"
+        },
+        {
+          "expr": "vector(10000)",
+          "legendFormat": "critical threshold",
+          "refId": "C"
+        }
+      ],
+      "yaxes": [
+        { "format": "short", "label": "Lag (ledgers)", "min": 0 },
+        { "format": "short" }
+      ],
+      "thresholds": [
+        { "colorMode": "critical", "op": "gt", "value": 10000, "fill": true },
+        { "colorMode": "warning", "op": "gt", "value": 1000, "fill": true }
       ]
     }
   ],
