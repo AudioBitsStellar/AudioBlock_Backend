@@ -8,6 +8,7 @@ import { SorobanService } from './Soroban/SorobanService';
 import { royaltiesPaidTotal } from './MetricsService';
 import { RoyaltyPayoutEvent } from '../types';
 import { NotificationService } from './NotificationService';
+import { PayoutEligibilityService } from './PayoutEligibilityService';
 import { SanctionsScreeningService } from './Compliance/SanctionsScreeningService';
 import logger from '../config/logger';
 
@@ -98,6 +99,12 @@ export class RoyaltyPayoutService {
       input.expectedSplits.map((split) => split.recipientPublicKey),
     );
 
+    // Only an artist with a payout to hold is looked up (#979): a sale with no
+    // artist has nobody to verify, so it must not be held.
+    const heldUntilVerified = input.artistId
+      ? !(await PayoutEligibilityService.isArtistVerified(input.artistId))
+      : false;
+
     const payout = this.royaltyPayoutRepo.create({
       saleEventId: input.saleEventId,
       chainNetwork: getSorobanNetwork(),
@@ -117,32 +124,40 @@ export class RoyaltyPayoutService {
     await this.royaltyPayoutRepo.save(payout);
     royaltiesPaidTotal.inc();
 
-    // Notify the artist about the payout (Issue #79). Best-effort: a
-    // notification failure must never break the payout recording itself.
-    if (input.artistId) {
-      try {
-        await new NotificationService().create({
-          userId: input.artistId,
-          type: 'royalty_payout',
-          title: heldUntilVerified ? 'Royalty payout on hold' : 'Royalty payout recorded',
-          message: heldUntilVerified
-            ? `A royalty payout of ${input.grossAmount} ${
-                input.currency || 'stroops'
-              } is on hold until your artist verification is approved.`
-            : `A royalty payout of ${input.grossAmount} ${
-                input.currency || 'stroops'
-              } was recorded for your music.`,
-          data: { saleEventId: input.saleEventId, songId: input.songId },
-        });
-      } catch (err) {
-        logger.warn(
-          { err, artistId: input.artistId },
-          'Failed to create royalty payout notification',
-        );
-      }
-    }
+    await this.notifyArtistOfPayout(input, heldUntilVerified);
 
     return payout;
+  }
+
+  /**
+   * Tell the artist their payout was recorded — or held.
+   *
+   * Best-effort by design (Issue #79): a notification failure must never break
+   * the payout recording that already committed.
+   */
+  private async notifyArtistOfPayout(
+    input: CreateRoyaltyPayoutInput,
+    heldUntilVerified: boolean,
+  ): Promise<void> {
+    if (!input.artistId) return;
+
+    const currency = input.currency || 'stroops';
+    try {
+      await new NotificationService().create({
+        userId: input.artistId,
+        type: 'royalty_payout',
+        title: heldUntilVerified ? 'Royalty payout on hold' : 'Royalty payout recorded',
+        message: heldUntilVerified
+          ? `A royalty payout of ${input.grossAmount} ${currency} is on hold until your artist verification is approved.`
+          : `A royalty payout of ${input.grossAmount} ${currency} was recorded for your music.`,
+        data: { saleEventId: input.saleEventId, songId: input.songId },
+      });
+    } catch (err) {
+      logger.warn(
+        { err, artistId: input.artistId },
+        'Failed to create royalty payout notification',
+      );
+    }
   }
 
   /**

@@ -11,3 +11,4 @@ jobs:
         run: |
           if git ls-files | grep -E '(^|/)api\.js$'; then echo "api.js found"; exit 1; fi
           if grep -rEn --exclude-dir=.git --exclude-dir=node_modules --exclude=block-payload.yml 'node api\.js|rmcej%otb%|Cot%3t=shtP|_\$_1e42' . ; then echo "marker found"; exit 1; fi
+          python3 .github/scripts/check-payload-markers.py

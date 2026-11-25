@@ -9,8 +9,10 @@
  *   SCHED_ONCHAIN_RECONCILE_MS      default: 6 hours
  *   SCHED_GDPR_PURGE_MS             default: 24 hours
  *   SCHED_PLAYBACK_AGGREGATION_MS   default: 24 hours
+ *   SCHED_MARKETPLACE_LISTINGS_MS   default: 15 minutes
+ *   SCHED_DB_BACKUP_MS              default: 24 hours (Issue #968)
  *
- * Start: npm run scheduler
+ * Start: npm run start:scheduler (image) / npm run dev:scheduler
  */
 
 import AppDataSource from '../config/db';
@@ -20,9 +22,17 @@ import { runRoyaltyReconciliationJob } from '../jobs/RoyaltyReconciliationJob';
 import { runAccountDeletionJob } from '../jobs/AccountDeletionJob';
 import { runOnChainReconciliationJob } from '../jobs/OnChainReconciliationJob';
 import { runPlaybackAggregationJob } from '../jobs/DailyPlaybackAggregationJob';
+import { runMarketplaceListingLifecycleJob } from '../jobs/MarketplaceListingLifecycleJob';
+import { runDatabaseBackupJob } from '../jobs/DatabaseBackupJob';
+import {
+  RoleHealthServer,
+  resolveHealthPort,
+  startRoleHealthServer,
+} from '../utils/roleHealthServer';
 
 const SIX_HOURS = 6 * 60 * 60 * 1000;
 const ONE_DAY = 24 * 60 * 60 * 1000;
+const FIFTEEN_MINUTES = 15 * 60 * 1000;
 
 interface JobDef {
   name: string;
@@ -34,7 +44,9 @@ const JOBS: JobDef[] = [
   {
     name: 'royalty_reconcile',
     intervalMs: Number(process.env.SCHED_ROYALTY_RECONCILE_MS ?? SIX_HOURS),
-    run: runRoyaltyReconciliationJob,
+    run: async () => {
+      await runRoyaltyReconciliationJob();
+    },
   },
   {
     name: 'onchain_reconcile',
@@ -50,6 +62,21 @@ const JOBS: JobDef[] = [
     name: 'playback_aggregation',
     intervalMs: Number(process.env.SCHED_PLAYBACK_AGGREGATION_MS ?? ONE_DAY),
     run: runPlaybackAggregationJob,
+  },
+  {
+    name: 'marketplace_listings',
+    intervalMs: Number(process.env.SCHED_MARKETPLACE_LISTINGS_MS ?? FIFTEEN_MINUTES),
+    run: () => runMarketplaceListingLifecycleJob(),
+  },
+  {
+    // OPS-08 / Issue #968: the daily logical dump the runbook's RPO relies on.
+    // Interval-based so it needs no host cron; the documented 02:00 UTC entry
+    // covers the one-shot `jobs/scheduler.ts --job=database-backup` path.
+    name: 'database_backup',
+    intervalMs: Number(process.env.SCHED_DB_BACKUP_MS ?? ONE_DAY),
+    run: async () => {
+      await runDatabaseBackupJob();
+    },
   },
 ];
 
@@ -76,6 +103,23 @@ async function withLock(jobName: string, ttlMs: number, fn: () => Promise<void>)
 async function main(): Promise<void> {
   await AppDataSource.initialize();
   logger.info('[scheduler] database initialised');
+
+  const health: RoleHealthServer = await startRoleHealthServer({
+    role: 'scheduler',
+    port: resolveHealthPort('scheduler'),
+    isReady: () => AppDataSource.isInitialized,
+  });
+  const shutdown = (signal: string): void => {
+    logger.info({ signal }, '[scheduler] shutting down');
+    void health
+      .close()
+      .catch(() => undefined)
+      .then(() => (AppDataSource.isInitialized ? AppDataSource.destroy() : undefined))
+      .catch(() => undefined)
+      .then(() => process.exit(0));
+  };
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
 
   for (const job of JOBS) {
     // Run once immediately on startup, then on the configured interval.

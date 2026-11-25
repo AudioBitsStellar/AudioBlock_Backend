@@ -27,7 +27,22 @@ export class RoyaltyTemplateController {
       res.status(201).json({ success: true, data: template });
     } catch (error) {
       logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'createTemplate error');
-      handleError(res, error);
+      handleError(req, res, error);
+    }
+  };
+
+  get = async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ success: false, message: 'Unauthorized' });
+      }
+
+      const template = await templateService.findOwnedById(req.params.id as string, userId);
+      res.status(200).json({ success: true, data: template });
+    } catch (error) {
+      logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'getTemplate error');
+      handleError(req, res, error);
     }
   };
 
@@ -42,7 +57,7 @@ export class RoyaltyTemplateController {
       res.status(200).json({ success: true, data: templates });
     } catch (error) {
       logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'listTemplates error');
-      handleError(res, error);
+      handleError(req, res, error);
     }
   };
 
@@ -60,7 +75,7 @@ export class RoyaltyTemplateController {
       res.status(200).json({ success: true, data: template });
     } catch (error) {
       logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'updateTemplate error');
-      handleError(res, error);
+      handleError(req, res, error);
     }
   };
 
@@ -76,7 +91,7 @@ export class RoyaltyTemplateController {
       res.status(200).json({ success: true, message: 'Template deleted' });
     } catch (error) {
       logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'deleteTemplate error');
-      handleError(res, error);
+      handleError(req, res, error);
     }
   };
 }

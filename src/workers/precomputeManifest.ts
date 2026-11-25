@@ -1,10 +1,11 @@
-import AWS from 'aws-sdk';
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl as awsGetSignedUrl } from '@aws-sdk/s3-request-presigner';
 import AppDataSource from '../config/db';
 import { Song } from '../entities/Song';
 import redis from '../config/redis';
 import { AppError, ErrorType } from '../errors/AppError';
 
-const s3 = new AWS.S3({ region: process.env.AWS_REGION });
+const s3 = new S3Client({ region: process.env.AWS_REGION });
 
 export const DEFAULT_MANIFEST_CACHE_TTL = 300; // seconds (5 minutes)
 export const DEFAULT_SIGNED_URL_EXPIRES = 600; // seconds (10 minutes) — strictly exceeds cache TTL (#828)
@@ -44,12 +45,12 @@ export function getSignedUrlExpiry(): number {
 export const CACHE_TTL = DEFAULT_MANIFEST_CACHE_TTL;
 export const SIGNED_EXPIRES = DEFAULT_SIGNED_URL_EXPIRES;
 
-export function getSignedUrl(key: string, expiry: number = getSignedUrlExpiry()): string {
-  return s3.getSignedUrl('getObject', {
+export async function getSignedUrl(key: string, expiry: number = getSignedUrlExpiry()): Promise<string> {
+  const command = new GetObjectCommand({
     Bucket: process.env.AWS_BUCKET_NAME!,
     Key: key,
-    Expires: expiry,
   });
+  return await awsGetSignedUrl(s3, command, { expiresIn: expiry });
 }
 
 export function s3KeyFromUrl(url: string): string {
@@ -95,7 +96,7 @@ export async function rewriteManifest(manifest: string, songId: string): Promise
         }
       }
 
-      return getSignedUrl(key);
+      return await getSignedUrl(key);
     }),
   );
   return rewrittenLines.join('\n');
@@ -111,14 +112,13 @@ export async function precomputeSignedManifest(songId: string): Promise<string> 
 
   const masterKey = s3KeyFromUrl(song.hlsMasterUrl);
 
-  let masterObj: AWS.S3.GetObjectOutput;
+  let masterObj;
   try {
-    masterObj = await s3
-      .getObject({
-        Bucket: process.env.AWS_BUCKET_NAME!,
-        Key: masterKey,
-      })
-      .promise();
+    const command = new GetObjectCommand({
+      Bucket: process.env.AWS_BUCKET_NAME!,
+      Key: masterKey,
+    });
+    masterObj = await s3.send(command);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'unknown error';
     throw new ManifestNotFoundError(`Source manifest not found in storage: ${message}`);
@@ -128,7 +128,7 @@ export async function precomputeSignedManifest(songId: string): Promise<string> 
     throw new ManifestNotFoundError(`Empty manifest retrieved for song ${songId}`);
   }
 
-  const manifest = masterObj.Body.toString('utf-8');
+  const manifest = await masterObj.Body.transformToString('utf-8');
   const signedManifest = await rewriteManifest(manifest, songId);
 
   const cacheTtl = getManifestCacheTtl();

@@ -59,9 +59,16 @@ jest.mock('fs', () => ({
   createReadStream: jest.fn(),
 }));
 
-jest.mock('aws-sdk', () => ({
-  S3: jest.fn().mockImplementation(() => ({
-    upload: jest.fn().mockReturnValue({ promise: jest.fn().mockResolvedValue({}) }),
+jest.mock('@aws-sdk/client-s3', () => ({
+  S3Client: jest.fn().mockImplementation(() => ({
+    send: jest.fn().mockResolvedValue({}),
+  })),
+  PutObjectCommand: jest.fn((input: unknown) => ({ input })),
+}));
+
+jest.mock('@aws-sdk/lib-storage', () => ({
+  Upload: jest.fn().mockImplementation(() => ({
+    done: jest.fn().mockResolvedValue({}),
   })),
 }));
 

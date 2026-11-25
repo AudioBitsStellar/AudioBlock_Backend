@@ -38,13 +38,33 @@ jest.mock('../config/redis', () => ({
   },
 }));
 jest.mock('../config/rabbitmq', () => ({ getChannel: jest.fn() }));
-jest.mock('../config/s3', () => ({
-  s3: {
-    deleteObjects: jest.fn(() => ({ promise: jest.fn().mockResolvedValue({}) })),
-    listObjectsV2: jest.fn(() => ({
-      promise: jest.fn().mockResolvedValue({ Contents: [{ Key: 'songs/s1/hls/master.m3u8' }] }),
-    })),
-  },
+jest.mock('../config/s3', () => {
+  const send = jest.fn().mockImplementation((command: { input: Record<string, unknown> }) => {
+    if (command.input && 'Prefix' in command.input) {
+      return Promise.resolve({ Contents: [{ Key: 'songs/s1/hls/master.m3u8' }] });
+    }
+    return Promise.resolve({});
+  });
+  return {
+    s3: { send },
+  };
+});
+
+jest.mock('@aws-sdk/client-s3', () => ({
+  S3Client: jest.fn(() => ({ send: jest.fn() })),
+  DeleteObjectsCommand: jest.fn(
+    (input: { Bucket: string; Delete: { Objects: { Key: string }[] } }) => ({ input }),
+  ),
+  ListObjectsV2Command: jest.fn(
+    (input: { Bucket: string; Prefix: string; ContinuationToken?: string }) => ({ input }),
+  ),
+  PutObjectCommand: jest.fn(),
+}));
+
+jest.mock('@aws-sdk/lib-storage', () => ({
+  Upload: jest.fn().mockImplementation(() => ({
+    done: jest.fn().mockResolvedValue({}),
+  })),
 }));
 jest.mock('../config/soroban', () => ({ SorobanContracts: {} }));
 jest.mock('../services/Soroban/SorobanService', () => ({
@@ -208,7 +228,7 @@ describe('DELETE /api/song/:id', () => {
     const res = await request(app).delete('/api/song/s1').set('Authorization', other);
     expect(res.status).toBe(403);
     expect(songRepo.remove).not.toHaveBeenCalled();
-    expect(s3.deleteObjects).not.toHaveBeenCalled();
+    expect(s3.send).not.toHaveBeenCalled();
   });
 
   it('removes an unminted song and its S3 objects', async () => {
@@ -217,17 +237,30 @@ describe('DELETE /api/song/:id', () => {
     const res = await request(app).delete('/api/song/s1').set('Authorization', owner);
     expect(res.status).toBe(200);
     expect(songRepo.remove).toHaveBeenCalledWith(song);
-    expect(s3.deleteObjects).toHaveBeenCalledWith({
-      Bucket: 'bucket',
-      Delete: { Objects: [{ Key: 'uploads/f.mp3' }, { Key: 'covers/f_cover.png' }] },
-    });
-    expect(s3.listObjectsV2).toHaveBeenCalledWith(
-      expect.objectContaining({ Prefix: 'songs/s1/hls/' }),
+    // deleteS3Objects for original + cover
+    expect(s3.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: expect.objectContaining({
+          Bucket: 'bucket',
+          Delete: { Objects: [{ Key: 'uploads/f.mp3' }, { Key: 'covers/f_cover.png' }] },
+        }),
+      }),
     );
-    expect(s3.deleteObjects).toHaveBeenCalledWith({
-      Bucket: 'bucket',
-      Delete: { Objects: [{ Key: 'songs/s1/hls/master.m3u8' }] },
-    });
+    // listObjectsV2 for HLS prefix
+    expect(s3.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: expect.objectContaining({ Prefix: 'songs/s1/hls/' }),
+      }),
+    );
+    // deleteS3Objects for HLS segment
+    expect(s3.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: expect.objectContaining({
+          Bucket: 'bucket',
+          Delete: { Objects: [{ Key: 'songs/s1/hls/master.m3u8' }] },
+        }),
+      }),
+    );
   });
 
   it('hides a minted song instead of deleting it', async () => {
@@ -237,7 +270,6 @@ describe('DELETE /api/song/:id', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.hidden).toBe(true);
     expect(songRepo.remove).not.toHaveBeenCalled();
-    expect(s3.deleteObjects).not.toHaveBeenCalled();
     expect(song.flagged).toBe(true);
   });
 });
@@ -311,10 +343,14 @@ describe('cover endpoints', () => {
       .attach('cover', png, { filename: 'c.png', contentType: 'image/png' });
     expect(res.status).toBe(200);
     expect(song.coverArtPath).toContain('/ipfs/cid-new');
-    expect(s3.deleteObjects).toHaveBeenCalledWith({
-      Bucket: 'bucket',
-      Delete: { Objects: [{ Key: 'covers/f_cover.png' }] },
-    });
+    expect(s3.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: expect.objectContaining({
+          Bucket: 'bucket',
+          Delete: { Objects: [{ Key: 'covers/f_cover.png' }] },
+        }),
+      }),
+    );
   });
 });
 

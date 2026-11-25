@@ -1,5 +1,6 @@
 /* eslint-disable max-lines, max-lines-per-function */
-import AWS from 'aws-sdk';
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl as awsGetSignedUrl } from '@aws-sdk/s3-request-presigner';
 import AppDataSource from '../../config/db';
 import redis from '../../config/redis';
 import {
@@ -16,6 +17,11 @@ import {
   SIGNED_EXPIRES,
 } from '../precomputeManifest';
 
+// Access the shared send mock from the @aws-sdk/client-s3 mock
+const s3Module = jest.requireMock('@aws-sdk/client-s3') as {
+  __mockSend: jest.Mock;
+};
+
 jest.mock('../../config/db', () => ({
   __esModule: true,
   default: {
@@ -31,21 +37,25 @@ jest.mock('../../config/redis', () => ({
   },
 }));
 
-jest.mock('aws-sdk', () => {
-  const mS3 = {
-    getSignedUrl: jest.fn(),
-    getObject: jest.fn(),
-  };
+jest.mock('@aws-sdk/s3-request-presigner', () => ({
+  getSignedUrl: jest.fn(),
+}));
+
+jest.mock('@aws-sdk/client-s3', () => {
+  const send = jest.fn();
   return {
-    S3: jest.fn(() => mS3),
+    S3Client: jest.fn(() => ({ send })),
+    GetObjectCommand: jest.fn(
+      (input: { Bucket: string; Key: string }) => ({ input }),
+    ),
+    PutObjectCommand: jest.fn(),
+    __esModule: true,
+    __mockSend: send,
   };
 });
 
 describe('precomputeManifest (#828)', () => {
-  let mockS3Instance: {
-    getSignedUrl: jest.Mock;
-    getObject: jest.Mock;
-  };
+  let mockSend: jest.Mock;
   let mockSongRepo: {
     findOneBy: jest.Mock;
   };
@@ -59,13 +69,16 @@ describe('precomputeManifest (#828)', () => {
       AWS_BUCKET_NAME: 'test-audio-bucket',
     };
 
-    mockS3Instance = new AWS.S3() as unknown as {
-      getSignedUrl: jest.Mock;
-      getObject: jest.Mock;
-    };
-    mockS3Instance.getSignedUrl.mockImplementation(
-      (_operation: string, params: { Bucket: string; Key: string; Expires: number }) => {
-        return `https://${params.Bucket}.s3.amazonaws.com/${params.Key}?signed=true&expires=${params.Expires}`;
+    mockSend = s3Module.__mockSend;
+
+    (awsGetSignedUrl as jest.Mock).mockImplementation(
+      async (
+        _client: unknown,
+        command: { input: { Bucket: string; Key: string } },
+        options?: { expiresIn: number },
+      ) => {
+        const expires = options?.expiresIn ?? 600;
+        return `https://${command.input.Bucket}.s3.amazonaws.com/${command.input.Key}?signed=true&expires=${expires}`;
       },
     );
 
@@ -154,7 +167,7 @@ describe('precomputeManifest (#828)', () => {
       );
       expect(lines[11]).toBe('#EXT-X-ENDLIST');
 
-      expect(mockS3Instance.getSignedUrl).toHaveBeenCalledTimes(3);
+      expect(awsGetSignedUrl).toHaveBeenCalledTimes(3);
     });
 
     it('matches snapshot for a representative single media manifest', async () => {
@@ -198,11 +211,14 @@ describe('precomputeManifest (#828)', () => {
         'https://test-audio-bucket.s3.amazonaws.com/songs/song-abr-456/hls/variant_high.m3u8?signed=true&expires=600',
       );
 
-      expect(mockS3Instance.getSignedUrl).toHaveBeenCalledWith(
-        'getObject',
+      expect(awsGetSignedUrl).toHaveBeenCalledWith(
+        expect.anything(),
         expect.objectContaining({
-          Key: 'songs/song-abr-456/hls/128k/prog_index.m3u8',
+          input: expect.objectContaining({
+            Key: 'songs/song-abr-456/hls/128k/prog_index.m3u8',
+          }),
         }),
+        expect.any(Object),
       );
     });
 
@@ -223,16 +239,16 @@ describe('precomputeManifest (#828)', () => {
       });
 
       const s3ManifestContent = '#EXTM3U\n#EXTINF:10.0,\nsegment0.ts\n#EXT-X-ENDLIST';
-      mockS3Instance.getObject.mockReturnValue({
-        promise: jest.fn().mockResolvedValue({
-          Body: Buffer.from(s3ManifestContent, 'utf-8'),
-        }),
+      mockSend.mockResolvedValue({
+        Body: {
+          transformToString: jest.fn().mockResolvedValue(s3ManifestContent),
+        },
       });
 
       const result = await precomputeSignedManifest(songId);
 
       expect(mockSongRepo.findOneBy).toHaveBeenCalledWith({ id: songId });
-      expect(mockS3Instance.getObject).toHaveBeenCalledWith({
+      expect(GetObjectCommand).toHaveBeenCalledWith({
         Bucket: 'test-audio-bucket',
         Key: 'songs/song-full-flow/hls/master.m3u8',
       });
@@ -289,11 +305,9 @@ describe('precomputeManifest (#828)', () => {
       });
 
       const s3Error = Object.assign(new Error('The specified key does not exist.'), {
-        code: 'NoSuchKey',
+        name: 'NoSuchKey',
       });
-      mockS3Instance.getObject.mockReturnValue({
-        promise: jest.fn().mockRejectedValue(s3Error),
-      });
+      mockSend.mockRejectedValue(s3Error);
 
       await expect(precomputeSignedManifest('s3-missing-id')).rejects.toThrow(
         ManifestNotFoundError,
@@ -310,10 +324,8 @@ describe('precomputeManifest (#828)', () => {
           'https://test-audio-bucket.s3.amazonaws.com/songs/empty-body-id/hls/master.m3u8',
       });
 
-      mockS3Instance.getObject.mockReturnValue({
-        promise: jest.fn().mockResolvedValue({
-          Body: null,
-        }),
+      mockSend.mockResolvedValue({
+        Body: null,
       });
 
       await expect(precomputeSignedManifest('empty-body-id')).rejects.toThrow(
@@ -343,15 +355,20 @@ describe('precomputeManifest (#828)', () => {
   });
 
   describe('getSignedUrl helper', () => {
-    it('calls S3.getSignedUrl with configured parameters', () => {
-      const url = getSignedUrl('songs/1/hls/file.ts', 450);
+    it('calls presigned URL helper with configured parameters', async () => {
+      const url = await getSignedUrl('songs/1/hls/file.ts', 450);
       expect(url).toContain('songs/1/hls/file.ts');
       expect(url).toContain('expires=450');
-      expect(mockS3Instance.getSignedUrl).toHaveBeenCalledWith('getObject', {
-        Bucket: 'test-audio-bucket',
-        Key: 'songs/1/hls/file.ts',
-        Expires: 450,
-      });
+      expect(awsGetSignedUrl).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          input: expect.objectContaining({
+            Bucket: 'test-audio-bucket',
+            Key: 'songs/1/hls/file.ts',
+          }),
+        }),
+        expect.objectContaining({ expiresIn: 450 }),
+      );
     });
   });
 });

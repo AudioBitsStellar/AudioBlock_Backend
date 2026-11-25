@@ -106,6 +106,12 @@ export class Song {
   })
   mintStatus!: 'not_minted' | 'pending' | 'minting' | 'minted' | 'failed';
 
+  @Column({ type: 'varchar', nullable: true })
+  mintTxHash!: string | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  mintSubmittedAt!: Date | null;
+
   /** song_id returned by the catalog Soroban contract once minting succeeds. */
   @Column({ nullable: true })
   onChainSongId?: string;

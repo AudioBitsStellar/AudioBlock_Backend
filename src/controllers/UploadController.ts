@@ -71,7 +71,7 @@ export class UploadController {
    */
   finalizeUpload = async (req: Request, res: Response) => {
     try {
-      const { fileId, totalChunks, title, description, genre, coverArtPath, composers } = req.body;
+      const { fileId, totalChunks, title, description, genre, genreId, coverArtPath, composers } = req.body;
 
       const user = (req as any).user;
 
@@ -86,6 +86,7 @@ export class UploadController {
         artistAddress,
         description,
         genre,
+        genreId,
         coverArtPath,
         composers,
       });

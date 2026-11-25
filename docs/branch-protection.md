@@ -64,6 +64,20 @@ naming scheme (documented here for reference and potential future ruleset enforc
 
 ---
 
+## SEC-02 coverage
+
+CODEOWNERS now explicitly covers the launch-critical surfaces required by Issue #887:
+
+- `.github/**`
+- root `*.config.*` files
+- `package.json`
+- `Dockerfile`
+- `scripts/**`
+
+The `main` branch protection rule must keep **Require review from Code Owners** enabled.
+Because repository rules are configured outside Git, the verification log below is the audit
+record for confirming the live setting matches this document.
+
 ## Reconciliation Checklist
 
 A maintainer with **admin access** must verify these settings match the table above

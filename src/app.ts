@@ -5,6 +5,7 @@ import express, {
   RequestHandler,
   ErrorRequestHandler,
 } from "express";
+import helmet from "helmet";
 import logger from "./config/logger";
 import { requestLoggerMiddleware, redactWebhookSecretPath } from "./middlewares/requestLogger";
 import { sanitizeInput } from "./middlewares/sanitizeInput";
@@ -22,6 +23,9 @@ import embedRoutes from "./routes/embedRoutes";
 import oembedRoutes from "./routes/oembedRoutes";
 import royaltyPayoutRoutes from "./routes/royaltyPayoutRoutes";
 import playlistRoutes from "./routes/playlistRoutes";
+import AlbumRoutes from "./routes/AlbumRoutes";
+import royaltyTemplateRoutes from "./routes/royaltyTemplateRoutes";
+import giftSubscriptionRoutes from "./routes/giftSubscriptionRoutes";
 import playlistFollowRoutes from "./routes/playlistFollowRoutes";
 import userRoutes from "./routes/userRoutes";
 import commentRoutes from "./routes/commentRoutes";
@@ -49,6 +53,13 @@ import { resolveTrustProxy } from "./config/proxy";
 
 // Initialize express app
 const app = express();
+app.disable("x-powered-by");
+app.use(
+  helmet({
+    hsts: process.env.NODE_ENV === "production",
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  }),
+);
 
 // Express must trust only the proxy hops that are actually controlled by the
 // deployment. This keeps req.ip (and every rate limiter/anonymiser using it)
@@ -94,8 +105,12 @@ app.use(
 app.use((req, res, next) => {
   // These routes install their own parser so they can accept a larger batch
   // document or verify a signed raw webhook body before JSON decoding.
-  if (req.path === "/api/batch" || req.path.startsWith("/api/batch/") ||
-      req.path.startsWith("/api/webhooks/privy/")) {
+  if (
+    req.path === "/api/batch" ||
+    req.path.startsWith("/api/batch/") ||
+    req.path === "/api/webhooks/privy" ||
+    req.path.startsWith("/api/webhooks/privy/")
+  ) {
     return next();
   }
   return express.json({ limit: JSON_BODY_LIMIT })(req, res, next);
@@ -171,7 +186,10 @@ app.use("/api/email-events", emailEventRoutes);
 app.use("/api/takedown", takedownRoutes);
 
 // Embeddable player (public, no auth)
-app.use("/api/embed", embedRoutes);
+app.use("/api/embed", (req, res, next) => {
+  res.removeHeader("X-Frame-Options");
+  next();
+}, embedRoutes);
 
 // oEmbed provider endpoint for rich link previews (public, no auth)
 app.use("/api/oembed", oembedRoutes);
@@ -181,6 +199,12 @@ app.use("/api/oembed", oembedRoutes);
 // + playlist follow/unfollow (#408, #759)
 app.use("/api/playlists", playlistRoutes);
 app.use("/api/playlists", playlistFollowRoutes);
+
+// Albums (Issue #740)
+app.use("/api/albums", AlbumRoutes);
+
+// Artist royalty split templates (Issue #756)
+app.use("/api/royalty-templates", royaltyTemplateRoutes);
 
 // Releases + pre-save campaigns for upcoming releases (Issue #424)
 app.use("/api/releases", releaseRoutes);
@@ -206,6 +230,7 @@ app.use("/api/comments", commentReactionRoutes);
 
 // Subscriptions: tiered plans, gifting, trial periods (Issues #413, #414, #415, #416)
 app.use("/api/subscriptions", subscriptionRoutes);
+app.use("/api/subscriptions", giftSubscriptionRoutes);
 
 // AI-assisted generation (cover art, descriptions) — async, queued via JobQueueService
 app.use("/api/ai", aiRoutes);

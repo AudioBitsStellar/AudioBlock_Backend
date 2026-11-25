@@ -43,6 +43,7 @@ async function main() {
   try {
     validateEnvironment();
     validateSorobanConfig();
+    await validateSorobanNetwork();
 
     // Auth mode is a runtime flag, not a startup-validated env var, because an
     // unset value is a valid configuration (legacy-only). So surface the current

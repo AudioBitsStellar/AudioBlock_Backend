@@ -25,15 +25,25 @@ jest.mock('../config/rabbitmq', () => ({
 }));
 
 jest.mock('../config/s3', () => ({
-  s3: {
-    upload: jest.fn().mockReturnValue({
-      promise: jest.fn().mockResolvedValue({ Location: 's3://bucket/audio.mp3' }),
-    }),
-    getSignedUrl: jest.fn().mockReturnValue('https://signed-url.example.com/segment.ts'),
-    getObject: jest.fn().mockReturnValue({
-      promise: jest.fn().mockResolvedValue({ Body: Buffer.from('fake-audio') }),
-    }),
-  },
+  s3: { send: jest.fn().mockResolvedValue({}) },
+}));
+
+jest.mock('@aws-sdk/client-s3', () => ({
+  S3Client: jest.fn(() => ({ send: jest.fn() })),
+  GetObjectCommand: jest.fn((input: unknown) => ({ input })),
+  PutObjectCommand: jest.fn((input: unknown) => ({ input })),
+  DeleteObjectsCommand: jest.fn((input: unknown) => ({ input })),
+  ListObjectsV2Command: jest.fn((input: unknown) => ({ input })),
+}));
+
+jest.mock('@aws-sdk/s3-request-presigner', () => ({
+  getSignedUrl: jest.fn().mockResolvedValue('https://signed-url.example.com/segment.ts'),
+}));
+
+jest.mock('@aws-sdk/lib-storage', () => ({
+  Upload: jest.fn().mockImplementation(() => ({
+    done: jest.fn().mockResolvedValue({ Location: 's3://bucket/audio.mp3' }),
+  })),
 }));
 
 jest.mock('../services/Soroban/SorobanService', () => ({
@@ -104,12 +114,14 @@ describe('Full upload-to-streaming pipeline (#354)', () => {
     expect(channel.sendToQueue).toHaveBeenCalled();
 
     // Step 4: Streaming — verify presigned URL generation works
+    const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+    const { GetObjectCommand } = require('@aws-sdk/client-s3');
     const { s3 } = require('../config/s3');
-    const signedUrl = s3.getSignedUrl('getObject', {
-      Bucket: 'test-bucket',
-      Key: 'audio.mp3',
-      Expires: 300,
-    });
+    const signedUrl = await getSignedUrl(
+      s3,
+      new GetObjectCommand({ Bucket: 'test-bucket', Key: 'audio.mp3' }),
+      { expiresIn: 300 },
+    );
     expect(signedUrl).toBe('https://signed-url.example.com/segment.ts');
   });
 

@@ -1012,6 +1012,107 @@ paths:
         '413':
           description: Catalogue exceeds the export size limit (EXPORT_TOO_LARGE).
 
+  /api/albums:
+    get:
+      summary: List albums
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: artistId
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Paginated albums
+        '400':
+          description: Invalid page or limit
+
+  /api/royalty-templates:
+    get:
+      summary: List the authenticated artist's royalty templates
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Royalty templates }
+        '403': { description: Artist role required }
+    post:
+      summary: Create a royalty split template
+      security: [{ bearerAuth: [] }]
+      responses:
+        '201': { description: Template created }
+        '400': { description: Invalid split total, duplicate recipient, or invalid Stellar address }
+        '403': { description: Artist role required }
+
+  /api/royalty-templates/{id}:
+    get:
+      summary: Get an owned royalty template
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Template }
+        '403': { description: Template belongs to another artist }
+        '404': { description: Template not found }
+    put:
+      summary: Update an owned royalty template
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Template updated }
+        '400': { description: Invalid split payload }
+        '403': { description: Template belongs to another artist }
+    delete:
+      summary: Delete an owned royalty template
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Template deleted }
+        '403': { description: Template belongs to another artist }
+
+  /api/subscriptions/gift:
+    post:
+      summary: Send a subscription gift
+      security: [{ bearerAuth: [] }]
+      responses:
+        '201': { description: Gift created and recipient notified }
+        '400': { description: Invalid recipient, tier, duration, or self-gift }
+
+  /api/subscriptions/gifts:
+    get:
+      summary: List sent and received subscription gifts
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Gifts, with stale pending gifts marked expired }
+
+  /api/subscriptions/gift/{id}/accept:
+    post:
+      summary: Accept a pending gift atomically
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Gift accepted and subscription created or extended }
+        '400': { description: Gift expired }
+        '403': { description: Caller is not the recipient }
+        '409': { description: Gift is no longer pending }
+
+  /api/subscriptions/gift/{id}/decline:
+    post:
+      summary: Decline a pending gift
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Gift declined }
+        '400': { description: Gift expired }
+        '403': { description: Caller is not the recipient }
+        '409': { description: Gift is no longer pending }
+
 components:
   schemas:
     Song:

@@ -129,44 +129,24 @@ privy-signature: t=<timestamp>,v1=<signature>
 ### Verification Process
 
 ```typescript
-import crypto from 'crypto';
-
+// The route-specific JSON parser stores the incoming bytes in req.rawBody
+// before decoding them. Signature verification uses those bytes directly.
 const signature = req.headers['privy-signature'];
-const parts = signature.split(',');
-const timestamp = parseInt(parts.find((p) => p.startsWith('t=')).split('=')[1]);
-const expectedSignature = parts.find((p) => p.startsWith('v1=')).split('=')[1];
-
-// Check timestamp (5 minute tolerance)
-const currentTime = Math.floor(Date.now() / 1000);
-if (Math.abs(currentTime - timestamp) > 300) {
-  throw new Error('Webhook timestamp expired');
-}
-
-// Compute signature
-const payload = JSON.stringify(req.body);
-const signedPayload = `${timestamp}.${payload}`;
-const computedSignature = crypto
-  .createHmac('sha256', PRIVY_APP_SECRET)
-  .update(signedPayload)
-  .digest('hex');
-
-// Constant-time comparison
-if (!crypto.timingSafeEqual(Buffer.from(expectedSignature), Buffer.from(computedSignature))) {
-  throw new Error('Invalid signature');
-}
+const valid = new PrivyWebhookService(PRIVY_WEBHOOK_SECRET).verifySignature(signature, req.rawBody);
 ```
 
 ### Security Measures
 
 1. **Timestamp Validation**
-   - 5-minute tolerance window
+   - Rejects timestamps more than five minutes old or more than one minute in the future.
    - Prevents replay attacks
    - Rejects stale webhooks
 
 2. **HMAC Verification**
-   - Uses `PRIVY_APP_SECRET`
+   - Uses `PRIVY_WEBHOOK_SECRET` (falls back to `PRIVY_APP_SECRET` for compatibility).
    - Ensures payload integrity
    - Detects tampering
+   - Signs the exact raw request bytes; JSON is not re-serialized before verification.
 
 3. **Constant-Time Comparison**
    - Prevents timing attacks
@@ -182,14 +162,17 @@ POST / api / webhooks / privy;
 
 **Middleware Stack:**
 
-1. `verifyPrivyWebhookSignature` - Signature validation
-2. `PrivyWebhookController.handleWebhook` - Event processing
+1. Route-specific JSON parser captures raw body bytes.
+2. `verifyPrivyWebhookSignature` - Signature validation.
+3. Idempotency middleware deduplicates successful deliveries by `svix-id`.
+4. `PrivyWebhookController.handleWebhook` - Event processing.
 
 ### Request Headers
 
 ```
 Content-Type: application/json
 privy-signature: t=1234567890,v1=abc123...
+svix-id: unique-webhook-id
 ```
 
 ### Response

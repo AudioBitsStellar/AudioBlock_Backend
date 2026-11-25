@@ -2,6 +2,7 @@ import { Repository } from 'typeorm';
 import AppDataSource from '../config/db';
 import { RoyaltyTemplate, TemplateSplit } from '../entities/RoyaltyTemplate';
 import { AppError } from '../errors/AppError';
+import { StrKey } from '@stellar/stellar-sdk';
 
 export interface CreateTemplateInput {
   name: string;
@@ -16,11 +17,33 @@ export class RoyaltyTemplateService {
     this.templateRepo = AppDataSource.getRepository(RoyaltyTemplate);
   }
 
-  async create(input: CreateTemplateInput): Promise<RoyaltyTemplate> {
-    const totalPercentage = input.splits.reduce((sum, s) => sum + s.percentage, 0);
-    if (Math.abs(totalPercentage - 100) > 0.01) {
+  private validateSplits(splits: TemplateSplit[]): void {
+    if (!Array.isArray(splits) || splits.length === 0) {
+      throw AppError.validation('At least one royalty split is required');
+    }
+
+    const totalPercentage = splits.reduce((sum, split) => sum + Number(split.percentage), 0);
+    if (!Number.isFinite(totalPercentage) || Math.abs(totalPercentage - 100) > 0.01) {
       throw AppError.validation('Template splits must total 100%');
     }
+
+    const seenRecipients = new Set<string>();
+    for (const split of splits) {
+      if (!Number.isFinite(split.percentage) || split.percentage <= 0) {
+        throw AppError.validation('Each royalty split percentage must be greater than zero');
+      }
+      if (!split.stellarAddress || !StrKey.isValidEd25519PublicKey(split.stellarAddress)) {
+        throw AppError.validation('Each royalty split must include a valid Stellar G... address');
+      }
+      if (seenRecipients.has(split.stellarAddress)) {
+        throw AppError.validation('Royalty split recipients must be unique');
+      }
+      seenRecipients.add(split.stellarAddress);
+    }
+  }
+
+  async create(input: CreateTemplateInput): Promise<RoyaltyTemplate> {
+    this.validateSplits(input.splits);
 
     const template = this.templateRepo.create({
       name: input.name,
@@ -42,6 +65,17 @@ export class RoyaltyTemplateService {
     return this.templateRepo.findOneBy({ id });
   }
 
+  async findOwnedById(id: string, userId: string): Promise<RoyaltyTemplate> {
+    const template = await this.templateRepo.findOneBy({ id });
+    if (!template) {
+      throw AppError.notFound('Template not found');
+    }
+    if (template.userId !== userId) {
+      throw AppError.authorization('Not authorized to view this template');
+    }
+    return template;
+  }
+
   async update(
     id: string,
     userId: string,
@@ -61,10 +95,7 @@ export class RoyaltyTemplateService {
     }
 
     if (data.splits) {
-      const totalPercentage = data.splits.reduce((sum, s) => sum + s.percentage, 0);
-      if (Math.abs(totalPercentage - 100) > 0.01) {
-        throw AppError.validation('Template splits must total 100%');
-      }
+      this.validateSplits(data.splits);
       template.splits = data.splits;
     }
 

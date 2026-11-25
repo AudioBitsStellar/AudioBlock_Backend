@@ -1,4 +1,5 @@
 import { s3 } from '../config/s3';
+import { DeleteObjectsCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 
 /**
  * Returns the object key for a URL that points into the configured bucket,
@@ -19,25 +20,25 @@ export function s3KeyFromUrl(url?: string | null): string | null {
 /** Deletes the given keys from the configured bucket. */
 export async function deleteS3Objects(keys: string[]): Promise<void> {
   if (keys.length === 0) return;
-  await s3
-    .deleteObjects({
+  await s3.send(
+    new DeleteObjectsCommand({
       Bucket: process.env.AWS_BUCKET_NAME!,
       Delete: { Objects: keys.map((Key) => ({ Key })) },
-    })
-    .promise();
+    }),
+  );
 }
 
 /** Deletes every object under a key prefix in the configured bucket. */
 export async function deleteS3Prefix(prefix: string): Promise<void> {
   let continuationToken: string | undefined;
   do {
-    const page = await s3
-      .listObjectsV2({
+    const page = await s3.send(
+      new ListObjectsV2Command({
         Bucket: process.env.AWS_BUCKET_NAME!,
         Prefix: prefix,
         ContinuationToken: continuationToken,
-      })
-      .promise();
+      }),
+    );
     await deleteS3Objects((page.Contents ?? []).map((o) => o.Key!));
     continuationToken = page.IsTruncated ? page.NextContinuationToken : undefined;
   } while (continuationToken);

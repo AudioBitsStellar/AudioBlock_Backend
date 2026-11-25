@@ -1,5 +1,5 @@
 // src/dtos/CreateUserDto.ts
-import { IsOptional, IsString, IsNumber, IsNotEmpty } from 'class-validator';
+import { IsOptional, IsString, IsNumber, IsNotEmpty, IsUUID } from 'class-validator';
 
 export class FinalizeUploadDTO {
   @IsString()
@@ -21,6 +21,10 @@ export class FinalizeUploadDTO {
   @IsString()
   @IsNotEmpty({ message: 'Song genre is required.' })
   genre!: string;
+
+  @IsUUID()
+  @IsOptional()
+  genreId?: string;
 
   @IsString()
   @IsNotEmpty({ message: 'Cover art path is required.' })

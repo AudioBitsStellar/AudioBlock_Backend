@@ -10,6 +10,7 @@ import {
 } from '../jobs/OnChainReconciliationJob';
 import { IndexedEvent } from '../entities/IndexedEvent';
 import { TransactionLog } from '../entities/TransactionLog';
+import { Song } from '../entities/Song';
 import { JobQueueService } from '../services/JobQueueService';
 import AppDataSource from '../config/db';
 import * as workerModule from '../workers/JobQueueWorker';
@@ -32,6 +33,7 @@ jest.mock('../workers/JobQueueWorker', () => ({
 describe('IndexedEvent Deduplication & On-Chain Reconciliation', () => {
   let mockIndexedEventRepo: any;
   let mockTransactionLogRepo: any;
+  let mockSongRepo: any;
   let indexedEventService: IndexedEventService;
   let activityService: ActivityService;
   let reconciliationService: OnChainReconciliationService;
@@ -52,8 +54,10 @@ describe('IndexedEvent Deduplication & On-Chain Reconciliation', () => {
       find: jest.fn(),
       createQueryBuilder: jest.fn(),
     };
+    mockSongRepo = { find: jest.fn().mockResolvedValue([]) };
 
     (AppDataSource.getRepository as jest.Mock).mockImplementation((entity) => {
+      if (entity === Song || entity?.name === 'Song') return mockSongRepo;
       if (entity === IndexedEvent || entity?.name === 'IndexedEvent') {
         return mockIndexedEventRepo;
       }
