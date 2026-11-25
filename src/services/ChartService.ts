@@ -1,4 +1,4 @@
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import AppDataSource from '../config/db';
 import { Song } from '../entities/Song';
 import { SongPlayEvent } from '../entities/SongPlayEvent';
@@ -73,7 +73,7 @@ export class ChartService {
       .having('COUNT(*) >= :minPlays', { minPlays: MIN_PLAYS_TO_QUALIFY });
 
     if (genre) {
-      qb.andWhere('song.genre = :genre', { genre });
+      qb.innerJoin('song.genreEntity', 'genre').andWhere('genre.name = :genre', { genre });
     }
 
     const rows = await qb
@@ -83,7 +83,10 @@ export class ChartService {
 
     if (rows.length === 0) return [];
 
-    const songs = await this.songRepo.findByIds(rows.map((r) => r.songId));
+    const songs = await this.songRepo.find({
+      where: { id: In(rows.map((r) => r.songId)) },
+      relations: ['genreEntity'],
+    });
     const songById = new Map(songs.map((s) => [s.id, s]));
 
     const entries: TrendingEntry[] = [];
@@ -95,7 +98,7 @@ export class ChartService {
         songId: song.id,
         title: song.title,
         artistId: song.artistId,
-        genre: song.genre ?? null,
+        genre: song.genreEntity?.name ?? song.genre ?? null,
         playsInWindow: Number(row.playsInWindow),
         trendingScore: Number(row.decayedScore),
       });

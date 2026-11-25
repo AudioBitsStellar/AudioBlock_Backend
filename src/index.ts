@@ -5,7 +5,7 @@ import { initRabbitMQ } from './config/rabbitmq';
 import { startSongWorker } from './workers/SongProcessorWorker';
 import fs from 'fs';
 import { runSeeders } from './seeders';
-import { validateSorobanConfig } from './config/soroban';
+import { validateSorobanConfig, validateSorobanNetwork } from './config/soroban';
 import { validateEnvironment } from './config/env';
 import { checkAuthFlagConfig, listAuthFlags } from './config/authFlags';
 import { startDbPoolMonitor, stopDbPoolMonitor } from './services/DbPoolMonitor';
@@ -42,6 +42,7 @@ async function main() {
   try {
     validateEnvironment();
     validateSorobanConfig();
+    await validateSorobanNetwork();
 
     // Auth mode is a runtime flag, not a startup-validated env var, because an
     // unset value is a valid configuration (legacy-only). So surface the current

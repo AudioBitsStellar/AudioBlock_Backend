@@ -4,6 +4,7 @@ import express, {
   RequestHandler,
   ErrorRequestHandler,
 } from "express";
+import helmet from "helmet";
 import logger from "./config/logger";
 import { requestLoggerMiddleware, redactWebhookSecretPath } from "./middlewares/requestLogger";
 import { sanitizeInput } from "./middlewares/sanitizeInput";
@@ -48,6 +49,13 @@ import { resolveTrustProxy } from "./config/proxy";
 
 // Initialize express app
 const app = express();
+app.disable("x-powered-by");
+app.use(
+  helmet({
+    hsts: process.env.NODE_ENV === "production",
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  }),
+);
 
 // Express must trust only the proxy hops that are actually controlled by the
 // deployment. This keeps req.ip (and every rate limiter/anonymiser using it)
@@ -172,7 +180,10 @@ app.use("/api/email-events", emailEventRoutes);
 app.use("/api/takedown", takedownRoutes);
 
 // Embeddable player (public, no auth)
-app.use("/api/embed", embedRoutes);
+app.use("/api/embed", (req, res, next) => {
+  res.removeHeader("X-Frame-Options");
+  next();
+}, embedRoutes);
 
 // oEmbed provider endpoint for rich link previews (public, no auth)
 app.use("/api/oembed", oembedRoutes);

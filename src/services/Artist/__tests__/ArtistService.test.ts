@@ -7,6 +7,13 @@ jest.mock('../../../config/db', () => ({
 
 jest.mock('../../../config/soroban', () => ({
   SorobanContracts: { artist: 'ARTIST_CONTRACT' },
+  getNetworkPassphrase: jest.fn(() => 'Test SDF Network ; September 2015'),
+}));
+
+jest.mock('@stellar/stellar-sdk', () => ({
+  TransactionBuilder: {
+    fromXDR: jest.fn(),
+  },
 }));
 
 const mockPrepareInvocation = jest.fn();
@@ -25,6 +32,7 @@ import { AppError } from '../../../errors/AppError';
 import { User } from '../../../entities/User';
 import { mapToOnChainError, OnChainErrorCode } from '../../../types/OnChainErrorCodes';
 import { ArtistService } from '../ArtistService';
+import { TransactionBuilder } from '@stellar/stellar-sdk';
 
 const USER_ID = '11111111-1111-4111-8111-111111111111';
 const OWN_KEY = 'GOWNKEY';
@@ -48,6 +56,9 @@ describe('ArtistService on-chain artist setup', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     (AppDataSource.getRepository as jest.Mock).mockReturnValue(mockUserRepo);
+    (TransactionBuilder.fromXDR as jest.Mock).mockImplementation((_xdr: string, _pass: string) => ({
+      source: OWN_KEY,
+    }));
     service = new ArtistService();
   });
 
@@ -125,6 +136,29 @@ describe('ArtistService on-chain artist setup', () => {
   });
 
   describe('submitArtistOnChainSetup', () => {
+    it('rejects malformed signed XDR with a 400', async () => {
+      mockUserRepo.findOneBy.mockResolvedValue(makeUser());
+      (TransactionBuilder.fromXDR as jest.Mock).mockImplementation(() => {
+        throw new Error('bad xdr');
+      });
+
+      const err = await service.submitArtistOnChainSetup(USER_ID, 'not-base64').catch((e) => e);
+
+      expect(err.statusCode).toBe(400);
+      expect(err.code).toBe('INVALID_XDR_FORMAT');
+      expect(mockSubmitSignedTransaction).not.toHaveBeenCalled();
+    });
+
+    it("rejects XDR from an account other than the caller's wallet", async () => {
+      mockUserRepo.findOneBy.mockResolvedValue(makeUser());
+      (TransactionBuilder.fromXDR as jest.Mock).mockReturnValue({ source: 'GOTHER' });
+
+      const err = await service.submitArtistOnChainSetup(USER_ID, 'signed').catch((e) => e);
+
+      expect(err.statusCode).toBe(403);
+      expect(mockSubmitSignedTransaction).not.toHaveBeenCalled();
+    });
+
     it('throws when the user does not exist', async () => {
       mockUserRepo.findOneBy.mockResolvedValue(null);
 

@@ -73,6 +73,16 @@ export function validateSorobanConfig(): void {
       `Missing Soroban contract IDs for ${getSorobanNetwork()}: ${missing.join(', ')}`,
     );
   }
+
+  export async function validateSorobanNetwork(): Promise<void> {
+    const configured = getNetworkPassphrase();
+    const network = await getSorobanServer().getNetwork();
+    if (network.passphrase !== configured) {
+      throw new Error(
+        `Soroban network passphrase mismatch: configured "${configured}" but RPC reports "${network.passphrase}"`,
+      );
+    }
+  }
 }
 
 export const SorobanContracts = {

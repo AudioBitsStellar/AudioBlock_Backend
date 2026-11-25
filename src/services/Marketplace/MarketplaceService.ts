@@ -105,7 +105,7 @@ export class MarketplaceService {
       'list_nft',
       [addressArg(sellerPublicKey), u64Arg(tokenId), u64Arg(priceInStroops)],
     );
-    return { xdr, networkPassphrase: process.env.SOROBAN_NETWORK_PASSPHRASE || '' };
+    return { xdr, networkPassphrase: getNetworkPassphrase() };
   }
 
   /** Submits the seller's signed `list_nft` transaction and returns the tx hash. */
@@ -134,7 +134,7 @@ export class MarketplaceService {
       'buy_nft',
       [addressArg(buyerPublicKey), u64Arg(tokenId)],
     );
-    return { xdr, networkPassphrase: process.env.SOROBAN_NETWORK_PASSPHRASE || '' };
+    return { xdr, networkPassphrase: getNetworkPassphrase() };
   }
 
   /** Submits the buyer's signed `buy_nft` transaction and returns the tx hash. */
@@ -180,7 +180,7 @@ export class MarketplaceService {
         u64Arg(durationSeconds),
       ],
     );
-    return { xdr, networkPassphrase: process.env.SOROBAN_NETWORK_PASSPHRASE || '' };
+    return { xdr, networkPassphrase: getNetworkPassphrase() };
   }
 
   async submitAuction(signedXdr: string): Promise<{ txHash: string }> {
@@ -207,7 +207,7 @@ export class MarketplaceService {
       'place_bid',
       [addressArg(bidderPublicKey), u64Arg(tokenId), u64Arg(bidAmountInStroops)],
     );
-    return { xdr, networkPassphrase: process.env.SOROBAN_NETWORK_PASSPHRASE || '' };
+    return { xdr, networkPassphrase: getNetworkPassphrase() };
   }
 
   async submitBid(signedXdr: string): Promise<{ txHash: string }> {
