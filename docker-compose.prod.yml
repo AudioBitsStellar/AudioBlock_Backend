@@ -26,6 +26,8 @@ services:
     command: ['node', 'dist/index.js']
     environment:
       NODE_ENV: production
+      POSTGRES_SSL: 'true'
+      REDIS_TLS: 'true'
       # ALLOWED_ORIGINS must be set explicitly in production (no wildcards).
       # Example:
       #   ALLOWED_ORIGINS=https://listener.audioblockz.com,https://artist.audioblockz.com

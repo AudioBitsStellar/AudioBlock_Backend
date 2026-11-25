@@ -26,6 +26,8 @@ services:
     command: ['node', 'dist/index.js']
     environment:
       NODE_ENV: production
+      POSTGRES_SSL: 'true'
+      REDIS_TLS: 'true'
       # Staging CORS allowlist for testnet frontend and internal QA
       # ALLOWED_ORIGINS=https://staging.audioblocks.io,https://staging-artist.audioblocks.io
     read_only: true

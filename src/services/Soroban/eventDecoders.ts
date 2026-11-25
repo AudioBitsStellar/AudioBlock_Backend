@@ -38,6 +38,18 @@ function eventSymbol(topic: unknown[]): string {
   return typeof first === 'string' ? first : '';
 }
 
+/**
+ * Event-schema version the current decoders understand (ADR-013).
+ *
+ * A contract upgrade that changes an event's payload layout must bump this
+ * number in the same release that deploys the new decoder, so rows written
+ * before the bump can be told apart from rows written after it.
+ */
+export const EVENT_SCHEMA_VERSION = 1;
+
+/** `eventType` used for events the indexer could not decode (ADR-013). */
+export const UNDECODED_EVENT_TYPE = 'undecoded';
+
 function baseDTO(
   event: NormalizedContractEvent,
   decoder: SorobanEventDecoder,
@@ -51,7 +63,37 @@ function baseDTO(
     eventId: event.id,
     txHash: event.txHash || undefined,
     ledger: event.ledger,
-    payload,
+    // Every row records which decoder produced it (ADR-013), so rows written
+    // before a schema change stay distinguishable from rows written after.
+    payload: { ...payload, schemaVersion: EVENT_SCHEMA_VERSION },
+  };
+}
+
+/**
+ * Build the row for an event no decoder recognised.
+ *
+ * The raw topic/value are kept so a later decoder version can re-project the
+ * event instead of the ledger range having to be re-fetched (RPC history is
+ * pruned). `eventId` is the RPC id, so re-writing the row stays idempotent.
+ */
+export function undecodedEventDTO(
+  event: NormalizedContractEvent,
+  contractType: ContractType,
+): InsertIndexedEventDTO {
+  const symbol = eventSymbol(event.topic);
+  return {
+    contractId: event.contractId ?? undefined,
+    contractType,
+    eventType: UNDECODED_EVENT_TYPE,
+    eventId: event.id,
+    txHash: event.txHash || undefined,
+    ledger: event.ledger,
+    payload: {
+      schemaVersion: EVENT_SCHEMA_VERSION,
+      reason: symbol ? 'unknown_event_symbol' : 'missing_event_symbol',
+      symbol: symbol || null,
+      raw: { topic: event.topic, value: event.value ?? null },
+    },
   };
 }
 

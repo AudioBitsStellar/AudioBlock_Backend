@@ -16,3 +16,37 @@ scrape_configs:
     static_configs:
       - targets: ['indexer:9464']
     metrics_path: /metrics
+
+  # Synthetic uptime checks via Blackbox Exporter (#958).
+  # Each target is probed on the interval below; probe_success == 0 fires an alert.
+  - job_name: 'synthetic-health-live'
+    scrape_interval: 30s
+    metrics_path: /probe
+    params:
+      module: [health_live]
+    static_configs:
+      - targets:
+          - http://backend:4000/health/live
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  - job_name: 'synthetic-health-ready'
+    scrape_interval: 30s
+    metrics_path: /probe
+    params:
+      module: [health_ready]
+    static_configs:
+      - targets:
+          - http://backend:4000/health/ready
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115

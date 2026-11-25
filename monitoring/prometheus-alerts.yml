@@ -200,3 +200,35 @@ groups:
           runbook: "https://github.com/AudioBitsStellar/AudioBlock_Backend/blob/main/docs/worker-scaling.md"
           dashboard: "http://localhost:3001/d/audioblock-app"
 
+
+  - name: audioblock-synthetic-uptime
+    # Rules for Blackbox Exporter synthetic probes (#958).
+    # probe_success == 0 means the endpoint returned a non-2xx or timed out.
+    rules:
+      - alert: HealthLiveDown
+        expr: probe_success{job="synthetic-health-live"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "/health/live is not returning 200"
+          description: >
+            The synthetic uptime probe for /health/live has failed for 1 minute.
+            The process may be hung or the container has crashed.
+          runbook: "https://github.com/AudioBitsStellar/AudioBlock_Backend/blob/main/docs/runbooks/monitoring-alerts.md"
+          dashboard: "http://localhost:3001/d/audioblock-app"
+
+      - alert: HealthReadyDown
+        expr: probe_success{job="synthetic-health-ready"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "/health/ready is not returning 200"
+          description: >
+            The synthetic uptime probe for /health/ready has failed for 2 minutes.
+            One or more dependencies (DB, Redis, Pinata) may be unreachable.
+          runbook: "https://github.com/AudioBitsStellar/AudioBlock_Backend/blob/main/docs/runbooks/monitoring-alerts.md"
+          dashboard: "http://localhost:3001/d/audioblock-app"

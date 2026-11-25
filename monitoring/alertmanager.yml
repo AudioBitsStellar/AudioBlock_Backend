@@ -1,0 +1,89 @@
+# Alertmanager configuration for AudioBlock (Issue #952, OBS-02).
+#
+# Routing:
+#   severity=critical  → PagerDuty (pages on-call engineer immediately)
+#                       → #alerts-critical Slack channel
+#   severity=warning   → #alerts-warning Slack channel (no page)
+#   default            → #alerts-warning Slack channel
+#
+# On-call rotation is managed in PagerDuty under the "AudioBlock Backend"
+# escalation policy. The integration key is provided via the
+# PAGERDUTY_INTEGRATION_KEY environment variable (never hard-coded here).
+#
+# Slack webhook URLs are provided via SLACK_WEBHOOK_CRITICAL and
+# SLACK_WEBHOOK_WARNING environment variables.
+
+global:
+  resolve_timeout: 5m
+  # PagerDuty API endpoint
+  pagerduty_url: 'https://events.pagerduty.com/v2/enqueue'
+
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+route:
+  group_by: ['alertname', 'slo', 'team']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: slack-warning
+
+  routes:
+    # Critical alerts → PagerDuty page + Slack critical channel
+    - match:
+        severity: critical
+      receiver: pagerduty-critical
+      continue: true   # also send to Slack
+
+    - match:
+        severity: critical
+      receiver: slack-critical
+
+    # Warning alerts → Slack warning channel only
+    - match:
+        severity: warning
+      receiver: slack-warning
+
+receivers:
+  - name: pagerduty-critical
+    pagerduty_configs:
+      - routing_key: '${PAGERDUTY_INTEGRATION_KEY}'
+        description: '{{ template "pagerduty.default.description" . }}'
+        severity: '{{ if eq .CommonLabels.severity "critical" }}critical{{ else }}warning{{ end }}'
+        details:
+          firing: '{{ template "pagerduty.default.instances" .Alerts.Firing }}'
+          runbook: '{{ .CommonAnnotations.runbook }}'
+          dashboard: 'http://localhost:3001'
+
+  - name: slack-critical
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_CRITICAL}'
+        channel: '#alerts-critical'
+        username: 'AudioBlock Alertmanager'
+        icon_emoji: ':rotating_light:'
+        title: '[CRITICAL] {{ .CommonAnnotations.summary }}'
+        text: |
+          *Description:* {{ .CommonAnnotations.description }}
+          *Runbook:* {{ .CommonAnnotations.runbook }}
+          *Alerts:* {{ range .Alerts }}{{ .Labels.alertname }} {{ end }}
+        send_resolved: true
+
+  - name: slack-warning
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_WARNING}'
+        channel: '#alerts-warning'
+        username: 'AudioBlock Alertmanager'
+        icon_emoji: ':warning:'
+        title: '[{{ .CommonLabels.severity | toUpper }}] {{ .CommonAnnotations.summary }}'
+        text: |
+          *Description:* {{ .CommonAnnotations.description }}
+          *Runbook:* {{ .CommonAnnotations.runbook }}
+        send_resolved: true
+
+inhibit_rules:
+  # Suppress warning-level alerts when a critical alert for the same SLO fires.
+  - source_match:
+      severity: critical
+    target_match:
+      severity: warning
+    equal: ['slo', 'team']

@@ -15,11 +15,50 @@ import { IndexerWorker } from './IndexerWorker';
 import { EventProjector } from '../../services/EventProjector';
 import logger from '../../config/logger';
 import { getMetrics, getMetricsContentType } from '../../services/MetricsService';
+import {
+  RoleHealthServer,
+  resolveHealthPort,
+  startRoleHealthServer,
+} from '../../utils/roleHealthServer';
 
 const PROJECTOR_INTERVAL_MS = parseInt(process.env.INDEXER_PROJECTOR_INTERVAL_MS || '15000', 10);
+const METRICS_PORT = parseInt(process.env.INDEXER_METRICS_PORT || '9464', 10);
 
 let worker: IndexerWorker | null = null;
 let projectorTimer: NodeJS.Timeout | null = null;
+let metricsServer: Server | null = null;
+let healthServer: RoleHealthServer | null = null;
+
+/**
+ * Prometheus scrape endpoint for this deployable (Issue #965). Health probes
+ * live on their own port so a scrape outage or stdout scrape config can never
+ * make the container look unhealthy.
+ */
+export function startMetricsServer(port: number = METRICS_PORT): Server {
+  const server = createServer((req, res) => {
+    if ((req.url || '/').split('?')[0] === '/metrics') {
+      void (async () => {
+        try {
+          const [body, contentType] = await Promise.all([getMetrics(), getMetricsContentType()]);
+          res.writeHead(200, { 'Content-Type': contentType });
+          res.end(body);
+        } catch (err) {
+          logger.error({ err }, 'Failed to render indexer metrics');
+          res.writeHead(500, { 'Content-Type': 'text/plain' });
+          res.end('metrics unavailable');
+        }
+      })();
+      return;
+    }
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
+    res.end('not found');
+  });
+  server.on('error', (err) => logger.error({ err, port }, 'Indexer metrics server error'));
+  server.listen(port, '0.0.0.0', () => {
+    logger.info({ port }, 'Indexer metrics server listening');
+  });
+  return server;
+}
 
 /**
  * Periodically apply new raw events to all projections. Skips a tick if the
@@ -50,6 +89,10 @@ function shutdown(signal: string): void {
   worker?.stop();
   if (projectorTimer) clearInterval(projectorTimer);
   const finish = async (): Promise<void> => {
+    if (healthServer) {
+      await healthServer.close().catch(() => undefined);
+      healthServer = null;
+    }
     if (metricsServer) {
       await new Promise<void>((resolve) => metricsServer?.close(() => resolve()));
       metricsServer = null;
@@ -81,6 +124,14 @@ export async function main(): Promise<void> {
   worker = new IndexerWorker();
   worker.start();
   projectorTimer = startProjectorLoop(new EventProjector());
+
+  // Readiness follows the poller, not merely the TCP listener: a process that
+  // is up but has not started indexing must not receive a probe's "all good".
+  healthServer = await startRoleHealthServer({
+    role: 'indexer',
+    port: resolveHealthPort('indexer'),
+    isReady: () => worker !== null && AppDataSource.isInitialized,
+  });
 
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));
