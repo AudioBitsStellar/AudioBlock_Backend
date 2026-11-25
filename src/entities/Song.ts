@@ -116,6 +116,9 @@ export class Song {
   @Column({ nullable: true })
   onChainSongId?: string;
 
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  chainNetwork?: 'testnet' | 'mainnet' | null;
+
   /** token_id of the song NFT, minted by the catalog Soroban contract. */
   @Column({ nullable: true })
   onChainTokenId?: string;

@@ -115,3 +115,13 @@ merged sequentially. Forces the last PR author to resolve conflicts explicitly.
 Once a commit is on `main` it becomes the baseline for other branches, hotfixes,
 and release tags. Rewriting that history would silently break everyone else's
 local checkouts.
+
+### Signed commits and GitHub merges
+
+To complete issue #888, a repository administrator must apply an active
+ruleset to `main` that requires signed commits and pull requests. Review
+the bypass list, including administrator and automation roles, so direct
+pushes cannot introduce locally created merges. Use a GitHub merge method
+that produces verified commits and verify it in a test PR before rollout.
+Confirm both rules in the live settings and record the date in the
+verification log above. Repository files cannot enable the ruleset.

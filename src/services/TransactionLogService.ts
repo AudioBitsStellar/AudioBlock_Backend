@@ -1,3 +1,4 @@
+import { getSorobanNetwork } from '../config/soroban';
 import { Repository } from 'typeorm';
 import { TransactionLog } from '../entities/TransactionLog';
 import AppDataSource from '../config/db';
@@ -31,6 +32,7 @@ export class TransactionLogService {
     const log = this.transactionLogRepo.create({
       user_id: userId,
       txHash,
+      chainNetwork: txHash ? getSorobanNetwork() : null,
       action,
       description,
     });

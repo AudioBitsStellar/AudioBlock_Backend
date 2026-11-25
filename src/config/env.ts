@@ -80,7 +80,9 @@ export function validateEnvironment(): ValidatedEnv {
     }
     if (process.env.POSTGRES_SSL !== 'true') missing.push('POSTGRES_SSL=true');
     if (process.env.REDIS_TLS !== 'true') missing.push('REDIS_TLS=true');
-    if (!process.env.ALLOWED_ORIGINS) missing.push('ALLOWED_ORIGINS');
+    if (!process.env.ALLOWED_ORIGINS?.split(',').some((origin) => origin.trim())) {
+      missing.push('ALLOWED_ORIGINS');
+    }
   } else if (!process.env.LISTENER_KEY_SALT && process.env.NODE_ENV !== 'test') {
     console.warn(
       '⚠️  LISTENER_KEY_SALT is not set. Anonymous listener IP hashing is vulnerable in production. Set LISTENER_KEY_SALT in your .env file.',

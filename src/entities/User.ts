@@ -103,6 +103,9 @@ export class User {
   @Column({ nullable: true })
   stellarArtistId?: string;
 
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  chainNetwork?: 'testnet' | 'mainnet' | null;
+
   /** token_id of the artist's profile NFT, minted by the artist Soroban contract. */
   @Column({ nullable: true })
   stellarArtistTokenId?: string;

@@ -80,13 +80,16 @@ class Semaphore {
 }
 
 function isRetryableError(err: unknown): boolean {
-  if (err instanceof rpc.Api.PreparedTransactionError) return false;
+  if (
+    typeof rpc.Api.PreparedTransactionError === 'function' &&
+    err instanceof rpc.Api.PreparedTransactionError
+  ) return false;
   if (err instanceof Error) {
     const msg = err.message.toLowerCase();
     // Rate-limited or server errors from Soroban RPC
     if (msg.includes('429') || msg.includes('rate limit')) return true;
     if (msg.includes('5') && (msg.includes('internal') || msg.includes('server'))) return true;
-    if (msg.includes('econnrefused') || msg.includes('etimedout')) return true;
+    if (msg.includes('econnrefused') || msg.includes('etimedout') || msg.includes('timeout')) return true;
   }
   return false;
 }
@@ -244,23 +247,29 @@ export class SorobanService {
   /** Submits a wallet-signed XDR and waits for it to land. */
   async submitSignedTransaction(signedXdr: string): Promise<SorobanSubmitResult> {
     const transaction = TransactionBuilder.fromXDR(signedXdr, getNetworkPassphrase());
-    const sendResponse = await this.withBackoff(
-      () => this.server.sendTransaction(transaction),
-      'sendTransaction',
-    );
-
-    if (sendResponse.status === 'ERROR') {
-      throw new SorobanTransactionFailedError(
-        `Soroban transaction rejected: ${JSON.stringify(sendResponse.errorResult)}`,
-      );
-    }
-
-    const hash = sendResponse.hash;
+    // The same signed envelope always has the same network-specific hash.
+    // Never rebuild or re-sign it after an ambiguous submission result.
+    const hash = transaction.hash().toString('hex');
     const deadline = Date.now() + POLL_TIMEOUT_MS;
-    let getResponse = await this.withBackoff(
-      () => this.server.getTransaction(hash),
-      `getTransaction(${hash})`,
-    );
+    let getResponse = await this.withBackoff(() => this.server.getTransaction(hash), 'getTransaction');
+    if (getResponse.status === rpc.Api.GetTransactionStatus.NOT_FOUND) {
+      const sendResponse = await this.withBackoff(async () => {
+        const response = await this.server.sendTransaction(transaction);
+        if (response.status === 'TRY_AGAIN_LATER') {
+          throw new Error('Soroban RPC rate limit: transaction submission temporarily unavailable');
+        }
+        return response;
+      }, 'sendTransaction');
+
+      if (sendResponse.status === 'ERROR') {
+        const code = sendResponse.errorResult?.result().switch().name;
+        if (code !== 'txBadSeq') {
+          throw new Error(`Soroban transaction rejected: ${code ?? 'unknown error'}`);
+        }
+        // A previous attempt may have consumed this sequence. Poll by hash
+        // to distinguish a replay from a different transaction using it.
+      }
+    }
 
     while (getResponse.status === rpc.Api.GetTransactionStatus.NOT_FOUND) {
       if (Date.now() > deadline) {

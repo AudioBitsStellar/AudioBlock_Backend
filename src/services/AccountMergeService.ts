@@ -114,6 +114,7 @@ export class AccountMergeService {
       // Merge Stellar wallet if primary doesn't have one
       if (!primaryUser.stellarPublicKey && secondaryUser.stellarPublicKey) {
         primaryUser.stellarPublicKey = secondaryUser.stellarPublicKey;
+        primaryUser.chainNetwork = secondaryUser.chainNetwork;
         primaryUser.stellarArtistId = secondaryUser.stellarArtistId;
         primaryUser.stellarArtistTokenId = secondaryUser.stellarArtistTokenId;
         mergedFields.push('stellarPublicKey');

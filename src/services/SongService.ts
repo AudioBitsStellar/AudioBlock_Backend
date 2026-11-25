@@ -9,15 +9,8 @@ import path from 'path';
 import fs from 'fs';
 import { s3 } from '../config/s3';
 import { getChannel } from '../config/rabbitmq';
-import { Upload } from '@aws-sdk/lib-storage';
-import { SorobanContracts } from '../config/soroban';
-import {
-  SorobanService,
-  SorobanTransactionFailedError,
-  addressArg,
-  stringArg,
-  u64Arg,
-} from './Soroban/SorobanService';
+import { getSorobanNetwork, SorobanContracts } from '../config/soroban';
+import { SorobanService, addressArg, stringArg, u64Arg } from './Soroban/SorobanService';
 import { PreparedTransaction } from './Artist/ArtistService';
 import { ScanService } from './ScanService';
 import { CacheService } from './CacheService';
@@ -750,7 +743,7 @@ export class SongService {
       // upload_and_mint_song returns (song_id: u64, token_id: u64)
       const [onChainSongId, tokenId] = returnValue as [bigint, bigint];
 
-      song.mintTxHash = hash;
+      song.chainNetwork = getSorobanNetwork();
       song.onChainSongId = onChainSongId.toString();
       song.onChainTokenId = tokenId.toString();
       song.mintStatus = 'minted';

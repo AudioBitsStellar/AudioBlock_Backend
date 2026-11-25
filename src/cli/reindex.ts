@@ -1,4 +1,5 @@
 #!/usr/bin/env ts-node
+import { validateChainStorage } from '../config/chainStorage';
 import { IndexedEventService, InsertIndexedEventDTO } from '../services/IndexedEventService';
 import AppDataSource from '../config/db';
 import logger from '../config/logger';
@@ -96,6 +97,7 @@ async function reindexRange(options: ReindexOptions): Promise<ReindexSummary> {
   let cursor: string | undefined;
   const cursors = new Set<string>();
   try {
+    if (!dryRun) await validateChainStorage(AppDataSource, network as 'mainnet' | 'testnet');
     while (true) {
       const page = await reader.fetchEvents({
         contractIds: [contract],

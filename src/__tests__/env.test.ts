@@ -21,7 +21,15 @@ describe('validateEnvironment - production mode (#793)', () => {
   let mockError: jest.SpyInstance;
 
   beforeEach(() => {
-    process.env = { ...originalEnv, ...baseEnv, NODE_ENV: 'production' };
+    process.env = {
+      ...originalEnv,
+      ...baseEnv,
+      NODE_ENV: 'production',
+      POSTGRES_SSL: 'true',
+      REDIS_TLS: 'true',
+      ALLOWED_ORIGINS: 'https://example.com',
+      LISTENER_KEY_SALT: 'test-production-salt',
+    };
     delete process.env.PRIVY_APP_ID;
     delete process.env.PRIVY_APP_SECRET;
     delete process.env.PRIVY_VERIFICATION_KEY;
@@ -42,6 +50,14 @@ describe('validateEnvironment - production mode (#793)', () => {
     validateEnvironment();
     expect(mockExit).toHaveBeenCalledWith(1);
     expect(mockError).toHaveBeenCalledWith(expect.stringContaining('LISTENER_KEY_SALT'));
+  });
+
+  it.each([undefined, ' , '])('fails boot without usable ALLOWED_ORIGINS (%s)', (origins) => {
+    if (origins === undefined) delete process.env.ALLOWED_ORIGINS;
+    else process.env.ALLOWED_ORIGINS = origins;
+    validateEnvironment();
+    expect(mockExit).toHaveBeenCalledWith(1);
+    expect(mockError).toHaveBeenCalledWith(expect.stringContaining('ALLOWED_ORIGINS'));
   });
 
   it('succeeds in production when LISTENER_KEY_SALT is provided', () => {

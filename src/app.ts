@@ -1,3 +1,4 @@
+import { allowedOrigins } from './config/cors';
 import express, {
   Request,
   Response,
@@ -74,9 +75,7 @@ app.use(requestLoggerMiddleware);
 // In production set ALLOWED_ORIGINS to a comma-separated list of the deployed
 // listener-app and artist-dashboard domains, e.g.:
 //   ALLOWED_ORIGINS=https://listener.audioblockz.com,https://artist.audioblockz.com
-const allowedOrigins: string[] = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim())
-  : ["http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:5500"];
+
 
 app.use(
   cors({
