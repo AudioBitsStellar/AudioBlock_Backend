@@ -12,6 +12,7 @@ export enum OnChainErrorCode {
   // Network and relay errors
   SOROBAN_NETWORK_ERROR = 'SOROBAN_NETWORK_ERROR',
   SOROBAN_TIMEOUT = 'SOROBAN_TIMEOUT',
+  INSUFFICIENT_FEE = 'INSUFFICIENT_FEE',
 
   // Contract-level errors
   CONTRACT_INVOCATION_FAILED = 'CONTRACT_INVOCATION_FAILED',
@@ -50,6 +51,12 @@ interface ErrorRule {
 }
 
 const ERROR_RULES: ErrorRule[] = [
+  {
+    patterns: [/try_again_later|insufficient.{0,20}fee|fee.{0,20}(low|insufficient)/i],
+    errorCode: OnChainErrorCode.INSUFFICIENT_FEE,
+    message: 'Network fees are currently too low. Please prepare and sign a new transaction.',
+    retryable: true,
+  },
   {
     patterns: [/expired|too late/i],
     errorCode: OnChainErrorCode.TRANSACTION_EXPIRED,

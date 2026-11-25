@@ -109,7 +109,7 @@ describe('ArtistService on-chain artist setup', () => {
 
     it("builds the invocation for the user's own stellarPublicKey", async () => {
       mockUserRepo.findOneBy.mockResolvedValue(makeUser());
-      mockPrepareInvocation.mockResolvedValue('XDR');
+      mockPrepareInvocation.mockResolvedValue({ xdr: 'XDR', inclusionFee: '100' });
 
       const result = await service.prepareArtistOnChainSetup(USER_ID, 'bafycid');
 
@@ -121,6 +121,7 @@ describe('ArtistService on-chain artist setup', () => {
         [`addr:${OWN_KEY}`, 'str:bafycid'],
       );
       expect(result.xdr).toBe('XDR');
+      expect(result.inclusionFee).toBe('100');
     });
   });
 
@@ -164,6 +165,8 @@ describe('ArtistService on-chain artist setup', () => {
       ['Soroban transaction rejected: {}', OnChainErrorCode.SOROBAN_NETWORK_ERROR],
       ['Timed out waiting for Soroban transaction abc', OnChainErrorCode.SOROBAN_TIMEOUT],
       ['transaction has expired', OnChainErrorCode.TRANSACTION_EXPIRED],
+      ['Transaction failed: TRY_AGAIN_LATER', OnChainErrorCode.INSUFFICIENT_FEE],
+      ['Timed out waiting after an insufficient fee', OnChainErrorCode.INSUFFICIENT_FEE],
     ])('propagates "%s" so it maps to %s without saving', async (message, code) => {
       mockUserRepo.findOneBy.mockResolvedValue(makeUser());
       mockSubmitSignedTransaction.mockRejectedValue(new Error(message));

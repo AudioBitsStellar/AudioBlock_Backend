@@ -108,7 +108,10 @@ describe('SongService.prepareSongMintTx', () => {
     process.env.SOROBAN_NETWORK_PASSPHRASE = 'Test SDF Network ; September 2015';
 
     const svc = makeSvc();
-    mockSorobanInstance.prepareInvocation.mockResolvedValue('unsigned-xdr');
+    mockSorobanInstance.prepareInvocation.mockResolvedValue({
+      xdr: 'unsigned-xdr',
+      inclusionFee: '100',
+    });
 
     const result = await svc.prepareSongMintTx('s1', 0);
 
@@ -120,6 +123,7 @@ describe('SongService.prepareSongMintTx', () => {
     );
     expect(result).toEqual({
       xdr: 'unsigned-xdr',
+      inclusionFee: '100',
       networkPassphrase: 'Test SDF Network ; September 2015',
     });
   });

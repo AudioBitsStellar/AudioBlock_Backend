@@ -20,6 +20,18 @@ const MAX_CONCURRENT_RPC = parseInt(process.env.SOROBAN_MAX_CONCURRENT_RPC || '5
 const BACKOFF_BASE_MS = parseInt(process.env.SOROBAN_BACKOFF_BASE_MS || '1000', 10);
 const BACKOFF_MAX_MS = parseInt(process.env.SOROBAN_BACKOFF_MAX_MS || '30000', 10);
 const BACKOFF_MAX_RETRIES = parseInt(process.env.SOROBAN_BACKOFF_MAX_RETRIES || '5', 10);
+const FEE_STATS_CACHE_MS = 15_000;
+const DEFAULT_MAX_INCLUSION_FEE = 1_000_000;
+
+export interface PreparedInvocation {
+  xdr: string;
+  inclusionFee: string;
+}
+
+interface CachedFeeStats {
+  expiresAt: number;
+  stats: rpc.Api.GetFeeStatsResponse;
+}
 
 export interface SorobanSubmitResult {
   hash: string;
@@ -83,6 +95,39 @@ export class SorobanService {
   private server = getSorobanServer();
   private semaphore = new Semaphore(MAX_CONCURRENT_RPC);
   private network = process.env.SOROBAN_NETWORK || 'testnet';
+  private feeStatsCache?: CachedFeeStats;
+
+  private async getFeeStats() {
+    if (this.feeStatsCache && this.feeStatsCache.expiresAt > Date.now()) {
+      return this.feeStatsCache.stats;
+    }
+
+    const stats = await this.withBackoff(() => this.server.getFeeStats(), 'getFeeStats');
+    this.feeStatsCache = { stats, expiresAt: Date.now() + FEE_STATS_CACHE_MS };
+    return stats;
+  }
+
+  private async getInclusionFee(): Promise<string> {
+    const percentile = Number(process.env.SOROBAN_INCLUSION_FEE_PERCENTILE || '70');
+    if (
+      !Number.isInteger(percentile) ||
+      percentile < 10 ||
+      percentile > 90 ||
+      percentile % 10 !== 0
+    ) {
+      throw new Error('SOROBAN_INCLUSION_FEE_PERCENTILE must be one of 10, 20, ..., 90');
+    }
+
+    const ceiling = BigInt(process.env.SOROBAN_MAX_INCLUSION_FEE || DEFAULT_MAX_INCLUSION_FEE);
+    const floor = BigInt(BASE_FEE);
+    if (ceiling < floor) {
+      throw new Error('SOROBAN_MAX_INCLUSION_FEE must be at least BASE_FEE');
+    }
+
+    const stats = await this.getFeeStats();
+    const statFee = BigInt(stats.sorobanInclusionFee[`p${percentile}`]);
+    return (statFee < floor ? floor : statFee > ceiling ? ceiling : statFee).toString();
+  }
 
   /**
    * Executes an RPC call with exponential backoff on transient errors.
@@ -139,7 +184,8 @@ export class SorobanService {
     contractId: string,
     method: string,
     args: xdr.ScVal[],
-  ): Promise<string> {
+  ): Promise<PreparedInvocation> {
+    const inclusionFee = await this.getInclusionFee();
     const account = await this.withBackoff(
       () => this.server.getAccount(sourcePublicKey),
       `getAccount(${sourcePublicKey})`,
@@ -148,7 +194,7 @@ export class SorobanService {
     const operation = contract.call(method, ...args);
 
     const transaction = new TransactionBuilder(account, {
-      fee: BASE_FEE,
+      fee: inclusionFee,
       networkPassphrase: getNetworkPassphrase(),
     })
       .addOperation(operation)
@@ -159,7 +205,7 @@ export class SorobanService {
       () => this.server.prepareTransaction(transaction),
       `prepareTransaction`,
     );
-    return prepared.toXDR();
+    return { xdr: prepared.toXDR(), inclusionFee };
   }
 
   /** Submits a wallet-signed XDR and waits for it to land. */
