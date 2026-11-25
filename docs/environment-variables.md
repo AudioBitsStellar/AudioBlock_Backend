@@ -22,6 +22,7 @@ Complete reference of all environment variables used by the AudioBlocks Backend.
 - [Server](#server)
 - [CORS](#cors)
 - [Compliance](#compliance)
+- [Royalty payouts (#919)](#royalty-payouts-919)
 
 ---
 
@@ -298,6 +299,30 @@ See [SANCTIONS_SCREENING.md](./SANCTIONS_SCREENING.md) and
 | `DMCA_AGENT_ADDRESS`              | No       | empty      | Designated DMCA agent postal address. Published.                                                                  |
 | `DMCA_AGENT_REGISTRATION_NUMBER`  | No       | empty      | Registration number from the U.S. Copyright Office designation. The agent is reported as `recorded` only when all four `DMCA_AGENT_*` required fields are set. |
 | `DMCA_AGENT_REGISTERED_AT`        | No       | empty      | ISO 8601 date the designation was filed. Published when set.                                                      |
+
+---
+
+## Royalty payouts (#919)
+
+Settlement happens on-chain in the Soroban royalty contract; the backend records
+expected payouts and reconciles them. This flag is the recorded sign-off that
+#919 asks for: it decides whether the payout pipeline may be armed at all, and
+arming additionally requires a reconciliation pass that reported no
+discrepancies.
+
+| Variable               | Required | Default   | Description                                                                                            |
+| ---------------------- | -------- | --------- | ------------------------------------------------------------------------------------------------------ |
+| `ROYALTY_PAYOUT_MODE`  | No       | `dry-run` | `disabled` refuses any royalty processing, `dry-run` reports only, `enabled` may arm after a passing reconciliation. |
+
+Unset and unrecognised values both resolve to `dry-run`, so a missing variable
+can never arm payouts.
+
+- Read the report: `npm run royalties:dry-run` (or
+  `ts-node src/jobs/scheduler.ts --job=royalty-payout-dry-run`). It writes
+  nothing — `RoyaltyPayoutDryRunService` holds no `save`/`update`/`delete`.
+- Get the sign-off: `npm run reconcile:royalties`. It exits non-zero when the
+  pass found a discrepancy, which is what `evaluatePayoutEnablement()` refuses
+  `enabled` mode on.
 
 ---
 

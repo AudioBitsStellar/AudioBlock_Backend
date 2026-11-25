@@ -41,6 +41,46 @@ This checklist documents the pre-launch environment provisioning requirements, s
   - 1 singleton task with auto-restart on exit for sequential Soroban ledger indexing.
   - Task allocation: `0.50 vCPU`, `1024 MB RAM`.
 
+### 2.3 Container Runtime Hardening
+Reference configuration: `docker-compose.prod.yml` and
+`docker-compose.staging.yml`, asserted by `tests/containerHardening.test.ts`.
+Every setting below was verified against the pinned images (a write round-trip
+for each service, and `CapEff: 0` / `NoNewPrivs: 1` / `EROFS` on a live
+container), so the checklist describes a configuration that boots, not an
+aspiration.
+
+- [ ] Every container runs with a read-only root filesystem.
+  - Compose: `read_only: true`. ECS/Fargate: `readonlyRootFilesystem: true` on
+    every `containerDefinitions` entry.
+  - The only writable paths are declared mounts. For the API that is
+    `/app/uploads` (chunked uploads, merged files, HLS segments) plus a sized
+    tmpfs at `/tmp`, where `os.tmpdir()` scratch lives (`src/utils/ffmpeg.ts`,
+    `src/services/CoverArtService.ts`). Anything else a container needs to
+    write must be added as a volume here, not by turning `read_only` off.
+- [ ] All Linux capabilities are dropped; nothing is re-added except where an
+  image's entrypoint provably needs it.
+  - Compose: `cap_drop: [ALL]`. ECS/Fargate:
+    `linuxParameters.capabilities.drop: ["ALL"]`.
+  - The backend runs with zero capabilities. `postgres:15-alpine` is the only
+    exception: its entrypoint starts as root to initialise PGDATA and su-execs
+    down, so `CHOWN, SETUID, SETGID, FOWNER, DAC_OVERRIDE, SYS_NICE` are
+    re-added. Redis and RabbitMQ avoid the same problem by running as their own
+    image user (`user: redis:redis`, `user: rabbitmq:rabbitmq`) instead of
+    root-and-gosu, which is what lets their capability lists stay empty.
+- [ ] Privilege escalation is disabled and the process count is capped.
+  - Compose: `security_opt: [no-new-privileges:true]` plus
+    `deploy.resources.limits.pids` (256 backend/DB, 128 Redis, 512 RabbitMQ —
+    headroom for ffmpeg and the health probe, not a concurrency limit).
+    ECS/Fargate: `privileged: false`; CPU/memory ceilings per task as in §2.2.
+- [ ] The image runs as a non-root user and ships no build toolchain.
+  - `Dockerfile` final stage: `USER appuser`, production dependencies copied
+    from the builder stage (no `npm ci` in the runtime stage, so no registry
+    access and no lifecycle scripts), and `uploads/*` pre-created and chowned so
+    a fresh named volume inherits ownership.
+- [ ] The image is scanned on every build with the same policy as CI
+  (`build-and-scan`): Trivy at `severity: CRITICAL,HIGH`,
+  `ignore-unfixed: true`, failing the job on any finding.
+
 ---
 
 ## 3. Backing Services Checklist

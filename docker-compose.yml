@@ -16,9 +16,15 @@ services:
       # backend starts without it and connects lazily; `docker compose up`
       # (no profile) therefore omits rabbitmq. Use `--profile full` or
       # `--profile queue` to include it.
+    # Only the write path belongs here. The hot-reload source mounts (`.:/app`
+    # and the anonymous `/app/node_modules`) live in docker-compose.override.yml,
+    # which Compose loads automatically for a plain `docker compose up` but never
+    # for `docker compose -f docker-compose.yml -f docker-compose.prod.yml`.
+    # Compose merges `volumes` by target path, so a source mount declared here
+    # would survive into the prod/staging overlays and hand the container a
+    # writable bind mount over /app, defeating their read_only root filesystem
+    # (#966).
     volumes:
-      - .:/app
-      - /app/node_modules
       - ./uploads:/app/uploads
     healthcheck:
       test:
@@ -33,24 +39,107 @@ services:
       start_period: 15s
       retries: 3
 
+  # The indexer, worker and scheduler are separate deployables built from the
+  # same Dockerfile via per-role build targets (Issue #965). Each image runs its
+  # own compiled entrypoint and answers /health/live + /health/ready on its own
+  # HEALTH_PORT, so the orchestrator can restart or scale them independently.
   indexer:
     container_name: audioblocks-indexer
     build:
       context: .
       dockerfile: Dockerfile
-    command: ['npm', 'run', 'worker:indexer']
+      target: indexer
     restart: unless-stopped
     env_file: .env.docker
     environment:
+      HEALTH_PORT: 9467
       INDEXER_METRICS_PORT: 9464
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "require('http').get('http://localhost:9467/health/live', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
     profiles:
       - full
       - indexer
       - monitoring
       - observability
+
+  worker:
+    container_name: audioblocks-worker
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: worker
+    restart: unless-stopped
+    env_file: .env.docker
+    environment:
+      HEALTH_PORT: 9466
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "require('http').get('http://localhost:9466/health/live', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    profiles:
+      - full
+      - worker
+      - queue
+
+  scheduler:
+    container_name: audioblocks-scheduler
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: scheduler
+    restart: unless-stopped
+    env_file: .env.docker
+    environment:
+      HEALTH_PORT: 9468
+      # pg_dump output for the daily backup job (Issue #968). Named volume keeps
+      # dumps off the container layer so a restart does not discard them.
+      BACKUP_DIR: /app/backups
+    volumes:
+      - backupdata:/app/backups
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "require('http').get('http://localhost:9468/health/live', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    profiles:
+      - full
+      - scheduler
 
   db:
     container_name: audioblocks-db
@@ -208,6 +297,7 @@ volumes:
   redisdata:
   pgadmin_data:
   rabbitmq_data:
+  backupdata:
   prometheus_data:
   grafana_data:
   loki_data:
