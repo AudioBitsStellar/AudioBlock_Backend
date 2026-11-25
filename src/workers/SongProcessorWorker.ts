@@ -12,14 +12,14 @@ import * as path from 'path';
 import * as os from 'os';
 import axios from 'axios';
 import { transcodeToHLS, analyzeLoudness, generateWaveformPeaks } from '../utils/ffmpeg';
-import { S3 } from 'aws-sdk';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { updateRabbitMQQueueDepth } from '../services/MetricsService';
 
 function getSongRepo() {
   return AppDataSource.getRepository(Song);
 }
 const MAX_ATTEMPTS = 3;
-const s3 = new S3({ region: process.env.AWS_REGION });
+const s3 = new S3Client({ region: process.env.AWS_REGION });
 
 interface SongPayload {
   songId: string;
@@ -44,13 +44,12 @@ async function uploadHLSToS3(songId: string, fileId: string): Promise<string> {
       if (entry.isDirectory()) {
         await uploadDirectory(localPath, `${s3Key}/`);
       } else {
-        await s3
-          .upload({
-            Bucket: process.env.AWS_BUCKET_NAME!,
-            Key: s3Key,
-            Body: fs.createReadStream(localPath),
-          })
-          .promise();
+        const command = new PutObjectCommand({
+          Bucket: process.env.AWS_BUCKET_NAME!,
+          Key: s3Key,
+          Body: fs.createReadStream(localPath),
+        });
+        await s3.send(command);
       }
     }
   }

@@ -5,6 +5,8 @@ import { UserFollow } from '../entities/UserFollow';
 import { Song } from '../entities/Song';
 import fs from 'fs';
 import { s3 } from '../config/s3';
+import { PutObjectCommand } from '@aws-sdk/client-s3';
+import { Upload } from '@aws-sdk/lib-storage';
 import { UpdateArtistProfileDTO } from '../dtos/UpdateArtistProfileDTO';
 import path from 'path';
 import {
@@ -92,18 +94,21 @@ export class ArtistProfileService {
     const buffer = fs.readFileSync(localPath);
     const fileId = crypto.randomUUID();
     const fileName = `${fileId}_${path.basename(localPath)}`;
+    const key = `${folder}/${fileName}`;
 
-    const upload = await s3
-      .upload({
+    const upload = new Upload({
+      client: s3,
+      params: {
         Bucket: process.env.AWS_BUCKET_NAME!,
-        Key: `${folder}/${fileName}`,
+        Key: key,
         Body: buffer,
         ContentType: 'image/png',
-      })
-      .promise();
+      },
+    });
 
+    await upload.done();
     fs.unlinkSync(localPath); // clean temp
-    return upload.Location;
+    return `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;
   }
 
   /**

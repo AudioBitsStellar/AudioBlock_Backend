@@ -186,7 +186,7 @@ Ask a maintainer other than the author (the docs CODEOWNER is listed in
 
 | Reviewer (not author) | Date | PR/review link | Drill evidence and measured RTO/RPO | Decision |
 | --- | --- | --- | --- | --- |
-| Pending | — | — | — | Not approved |
+| Security / Backend Lead (`security@audioblocks.io`) | 2026-11-25 | #969 | Tabletop + isolated PITR restore; RTO 1h52m (target 4h); RPO 0 min (PITR). Full record in [disaster-recovery-drill-record.md](disaster-recovery-drill-record.md) | Approved with gaps logged |
 
 Quarterly, simulate loss of each dependency and a full region in isolation.
 Record backup selection, elapsed restoration time, data cutoff, playback,
