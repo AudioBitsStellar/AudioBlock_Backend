@@ -48,6 +48,8 @@ This sets the transaction's `timeBounds.maxTime` to 120 seconds from preparation
 - 120-second window for all prepared transactions
 - Sequence numbers remain valid during this window (unless account makes another transaction externally)
 - Expired transaction submissions return `TRANSACTION_EXPIRED` error code
+- Prepared transaction responses include `inclusionFee` in stroops, selected from the RPC's p70 Soroban inclusion-fee stats (default), bounded by `BASE_FEE` and `SOROBAN_MAX_INCLUSION_FEE`. The frontend can display this fee before the user signs.
+- Fee stats are cached in memory for 15 seconds. `SOROBAN_INCLUSION_FEE_PERCENTILE` may select p10 through p90.
 
 **Recommended Frontend Flow:**
 
@@ -88,6 +90,7 @@ See `src/types/OnChainErrorCodes.ts` for full enum. Key codes:
 | `TRANSACTION_SEQUENCE_MISMATCH` | Account sequence out of sync   | Yes       | Retry (backend refreshes sequence) |
 | `SOROBAN_NETWORK_ERROR`         | Stellar network unavailable    | Yes       | Show "Network issue, retry"        |
 | `SOROBAN_TIMEOUT`               | Network request timed out      | Yes       | Retry with backoff                 |
+| `INSUFFICIENT_FEE`               | Network inclusion fee was insufficient | Yes | Prepare and sign a fresh transaction |
 | `CONTRACT_INVOCATION_FAILED`    | Smart contract rejected call   | No        | Show error, contact support        |
 | `WALLET_NOT_CONNECTED`          | No Stellar wallet linked       | No        | Redirect to wallet connect         |
 | `METADATA_NOT_READY`            | Song metadata not uploaded yet | No        | Wait for processing                |

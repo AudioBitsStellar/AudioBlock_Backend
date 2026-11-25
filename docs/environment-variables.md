@@ -118,6 +118,8 @@ Complete reference of all environment variables used by the AudioBlocks Backend.
 | Variable                                  | Required | Default                                          | Description                            |
 | ----------------------------------------- | -------- | ------------------------------------------------ | -------------------------------------- |
 | `SOROBAN_NETWORK`                         | No       | `testnet`                                        | Network to use: `testnet` or `mainnet` |
+| `SOROBAN_INCLUSION_FEE_PERCENTILE`        | No       | `70`                                             | Soroban inclusion-fee percentile to use (10-90, in increments of 10) |
+| `SOROBAN_MAX_INCLUSION_FEE`               | No       | `1000000`                                        | Maximum Soroban inclusion fee in stroops |
 | `SOROBAN_TESTNET_RPC_URL`                 | No       | `https://soroban-testnet.stellar.org`            | Testnet RPC endpoint                   |
 | `SOROBAN_TESTNET_NETWORK_PASSPHRASE`      | No       | `Test SDF Network ; September 2015`              | Testnet network passphrase             |
 | `SOROBAN_TESTNET_NFT_CONTRACT_ID`         | Yes\*    | —                                                | NFT contract address (testnet)         |

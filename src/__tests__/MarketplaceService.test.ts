@@ -29,7 +29,10 @@ beforeEach(() => {
 
 describe('MarketplaceService.prepareListing', () => {
   it('calls prepareInvocation with list_nft and returns PreparedTransaction', async () => {
-    mockSoroban.prepareInvocation.mockResolvedValue('unsigned-list-xdr');
+    mockSoroban.prepareInvocation.mockResolvedValue({
+      xdr: 'unsigned-list-xdr',
+      inclusionFee: '100',
+    });
 
     const result = await svc.prepareListing('GSELLER', 7, 10_000_000);
 
@@ -41,6 +44,7 @@ describe('MarketplaceService.prepareListing', () => {
     );
     expect(result).toEqual({
       xdr: 'unsigned-list-xdr',
+      inclusionFee: '100',
       networkPassphrase: 'Test SDF Network ; September 2015',
     });
   });
@@ -67,7 +71,10 @@ describe('MarketplaceService.submitListing', () => {
 
 describe('MarketplaceService.prepareBuy', () => {
   it('calls prepareInvocation with buy_nft and returns PreparedTransaction', async () => {
-    mockSoroban.prepareInvocation.mockResolvedValue('unsigned-buy-xdr');
+    mockSoroban.prepareInvocation.mockResolvedValue({
+      xdr: 'unsigned-buy-xdr',
+      inclusionFee: '100',
+    });
 
     const result = await svc.prepareBuy('GBUYER', 7);
 
@@ -79,6 +86,7 @@ describe('MarketplaceService.prepareBuy', () => {
     );
     expect(result).toEqual({
       xdr: 'unsigned-buy-xdr',
+      inclusionFee: '100',
       networkPassphrase: 'Test SDF Network ; September 2015',
     });
   });

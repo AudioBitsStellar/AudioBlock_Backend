@@ -689,14 +689,18 @@ export class SongService {
       );
     }
 
-    const xdrTx = await this.soroban.prepareInvocation(
+    const prepared = await this.soroban.prepareInvocation(
       user.stellarPublicKey,
       SorobanContracts.catalog,
       'upload_and_mint_song',
       [addressArg(user.stellarPublicKey), stringArg(song.metadataCid), u64Arg(albumId)],
     );
 
-    return { xdr: xdrTx, networkPassphrase: process.env.SOROBAN_NETWORK_PASSPHRASE || '' };
+    return {
+      xdr: prepared.xdr,
+      inclusionFee: prepared.inclusionFee,
+      networkPassphrase: process.env.SOROBAN_NETWORK_PASSPHRASE || '',
+    };
   }
 
   /**

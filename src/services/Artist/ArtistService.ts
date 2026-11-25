@@ -7,6 +7,7 @@ import { SorobanService, addressArg, stringArg } from '../Soroban/SorobanService
 
 export interface PreparedTransaction {
   xdr: string;
+  inclusionFee: string;
   networkPassphrase: string;
 }
 
@@ -60,14 +61,18 @@ export class ArtistService {
     }
     if (!cid) throw new Error('cid is required');
 
-    const xdrTx = await this.soroban.prepareInvocation(
+    const prepared = await this.soroban.prepareInvocation(
       user.stellarPublicKey,
       SorobanContracts.artist,
       'setup_artist_profile',
       [addressArg(user.stellarPublicKey), stringArg(cid)],
     );
 
-    return { xdr: xdrTx, networkPassphrase: process.env.SOROBAN_NETWORK_PASSPHRASE || '' };
+    return {
+      xdr: prepared.xdr,
+      inclusionFee: prepared.inclusionFee,
+      networkPassphrase: process.env.SOROBAN_NETWORK_PASSPHRASE || '',
+    };
   }
 
   /**
