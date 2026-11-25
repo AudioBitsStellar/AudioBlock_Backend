@@ -28,6 +28,7 @@ import logger from '../config/logger';
 import { songsUploadedTotal } from './MetricsService';
 import { deleteS3Objects, deleteS3Prefix, s3KeyFromUrl } from '../utils/s3Cleanup';
 import { paginatedResponse } from '../utils/pagination';
+import { Genre } from '../entities/Genre';
 
 const activityService = new ActivityService();
 
@@ -71,7 +72,7 @@ function toSongView(song: Song, isOwner: boolean) {
         }
       : null,
     cover: { path: song.coverArtPath, thumbnails: song.coverArtThumbnails },
-    genre: song.genre,
+    genre: song.genreEntity?.name ?? song.genre,
     genreId: song.genreId,
     duration: song.duration,
     playCount: song.playCount,
@@ -102,6 +103,8 @@ export interface FinalizeUploadOptions {
   description: string;
   /** Genre label. */
   genre: string;
+  /** Existing Genre relation id. */
+  genreId?: string;
   /** Path to the cover art image on disk. */
   coverArtPath: string;
   /** Comma-separated list of composer names. */
@@ -293,6 +296,7 @@ export class SongService {
   private songRepo: Repository<Song>;
   private userRepo: Repository<User>;
   private logRepo: Repository<TransactionLog>;
+  private genreRepo: Repository<Genre>;
   private soroban: SorobanService;
   private versionServiceInstance?: SongVersionService;
 
@@ -300,6 +304,7 @@ export class SongService {
     this.songRepo = AppDataSource.getRepository(Song);
     this.userRepo = AppDataSource.getRepository(User);
     this.logRepo = AppDataSource.getRepository(TransactionLog);
+    this.genreRepo = AppDataSource.getRepository(Genre);
     this.soroban = new SorobanService();
   }
 
@@ -443,10 +448,18 @@ export class SongService {
       artistAddress,
       description,
       genre,
+      genreId,
       coverArtPath,
       composers,
     } = options;
     const s3Location = await this.mergeScanAndUpload(fileId, totalChunks);
+
+    let resolvedGenreId = genreId;
+    if (genreId) {
+      const genreEntity = await this.genreRepo.findOneBy({ id: genreId });
+      if (!genreEntity) throw AppError.validation('Invalid genreId');
+      resolvedGenreId = genreEntity.id;
+    }
 
     //  Save song record to DB
     const song = this.songRepo.create({
@@ -457,6 +470,7 @@ export class SongService {
       status: 'processing',
       description,
       genre,
+      genreId: resolvedGenreId,
       coverArtPath,
       composers,
     });
@@ -869,6 +883,7 @@ export class SongService {
     const qb = this.songRepo
       .createQueryBuilder('song')
       .leftJoinAndSelect('song.user', 'artist')
+      .leftJoinAndSelect('song.genreEntity', 'genre')
       .where('song.status = :status', { status: 'ready' })
       .andWhere('song.flagged = false')
       // One index-backed lookup per searched column. A single OR across the songs
@@ -877,7 +892,7 @@ export class SongService {
       .andWhere(
         `song.id IN (
           SELECT id FROM songs WHERE title ILIKE :like
-          UNION SELECT id FROM songs WHERE genre ILIKE :like
+          UNION SELECT s.id FROM songs s JOIN genre g ON g.id = s."genreId" WHERE g.name ILIKE :like
           UNION SELECT id FROM songs WHERE composers ILIKE :like
           UNION SELECT id FROM songs WHERE description ILIKE :like
           UNION SELECT s.id FROM songs s JOIN users u ON u.id = s."artistId"
@@ -896,7 +911,7 @@ export class SongService {
           WHEN artist.username ILIKE :exact THEN 85
           WHEN artist.username ILIKE :prefix THEN 55
           WHEN artist.username ILIKE :like THEN 25
-          WHEN song.genre ILIKE :like THEN 15
+          WHEN genre.name ILIKE :like THEN 15
           ELSE 10
         END`,
         'relevance',
@@ -923,7 +938,7 @@ export class SongService {
       id: song.id,
       title: song.title,
       description: song.description,
-      genre: song.genre,
+      genre: song.genreEntity?.name ?? song.genre,
       duration: song.duration,
       playCount: song.playCount,
       coverArtPath: song.coverArtPath,
@@ -998,7 +1013,7 @@ export class SongService {
       id: song.id,
       title: song.title,
       description: song.description,
-      genre: song.genre,
+      genre: song.genreEntity?.name ?? song.genre,
       genreId: song.genreId,
       duration: song.duration,
       playCount: song.playCount,

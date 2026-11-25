@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { ArtistService } from '../services/Artist/ArtistService';
 import { handleError, handleOnChainError } from '../utils/helpers';
+import { AppError } from '../errors/AppError';
 
 export class ArtistOnChainController {
   private artistService: ArtistService;
@@ -41,6 +42,10 @@ export class ArtistOnChainController {
       const result = await this.artistService.submitArtistOnChainSetup(userId, signedXdr);
       return res.status(200).json({ success: true, data: result });
     } catch (error) {
+      if (error instanceof AppError) {
+        handleError(req, res, error);
+        return;
+      }
       handleOnChainError(req, res, error);
     }
   };

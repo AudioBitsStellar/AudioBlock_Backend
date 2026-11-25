@@ -1,8 +1,27 @@
 import express from 'express';
 import request from 'supertest';
 import { resolveTrustProxy } from '../../src/config/proxy';
+import helmet from 'helmet';
 
 describe('HTTP security configuration', () => {
+  it('sets standard security headers and allows embed routes to be framed', async () => {
+    const app = express();
+    app.disable('x-powered-by');
+    app.use(helmet({ hsts: false, crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+    app.get('/api/test', (_req, res) => res.json({ ok: true }));
+    app.use('/api/embed/test', (_req, res, next) => {
+      res.removeHeader('X-Frame-Options');
+      next();
+    }, (_req, res) => res.send('<iframe></iframe>'));
+
+    const api = await request(app).get('/api/test');
+    expect(api.headers['x-content-type-options']).toBe('nosniff');
+    expect(api.headers['x-powered-by']).toBeUndefined();
+    expect(api.headers['cross-origin-resource-policy']).toBe('cross-origin');
+
+    const embed = await request(app).get('/api/embed/test');
+    expect(embed.headers['x-frame-options']).toBeUndefined();
+  });
   it('trusts exactly one managed proxy by default in production', () => {
     expect(resolveTrustProxy('production', undefined)).toBe(1);
     expect(resolveTrustProxy('development', undefined)).toBe(false);

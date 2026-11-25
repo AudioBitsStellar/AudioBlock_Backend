@@ -1,5 +1,13 @@
 # Security Policy
 
+## HTTP security headers
+
+The API uses Helmet for standard browser security headers. HSTS is enabled only
+in production. Cross-origin resource policy is set to `cross-origin` so
+frontends can load HLS manifests and media segments. Embeddable `/api/embed/*`
+routes explicitly omit `X-Frame-Options` so third-party sites may frame the
+player.
+
 ## Vulnerability Scanning
 
 Container images are automatically scanned for known vulnerabilities using [Trivy](https://github.com/aquasecurity/trivy) as part of the CI pipeline.

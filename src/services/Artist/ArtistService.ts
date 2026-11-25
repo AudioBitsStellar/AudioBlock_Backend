@@ -3,6 +3,8 @@ import { User } from '../../entities/User';
 import { AppError } from '../../errors/AppError';
 import AppDataSource from '../../config/db';
 import { SorobanContracts } from '../../config/soroban';
+import { getNetworkPassphrase } from '../../config/soroban';
+import { TransactionBuilder } from '@stellar/stellar-sdk';
 import { SorobanService, addressArg, stringArg } from '../Soroban/SorobanService';
 
 export interface PreparedTransaction {
@@ -90,6 +92,27 @@ export class ArtistService {
   ): Promise<{ txHash: string; artistId: string; tokenId: string }> {
     const user = await this.userRepo.findOneBy({ id: userId });
     if (!user) throw new Error('User not found');
+    if (!user.stellarPublicKey) {
+      throw AppError.validation(
+        'Connect a Stellar wallet before submitting an on-chain artist transaction',
+      );
+    }
+
+    let transaction;
+    try {
+      transaction = TransactionBuilder.fromXDR(signedXdr, getNetworkPassphrase());
+    } catch {
+      throw AppError.validation(
+        'Invalid or malformed signed XDR transaction',
+        undefined,
+        'INVALID_XDR_FORMAT',
+      );
+    }
+    if (transaction.source !== user.stellarPublicKey) {
+      throw AppError.authorization(
+        'Signed transaction source account does not match the connected Stellar wallet',
+      );
+    }
 
     const { hash, returnValue } = await this.soroban.submitSignedTransaction(signedXdr);
 

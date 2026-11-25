@@ -189,9 +189,6 @@ export const SUCCESS_MESSAGES = {
 // BLOCKCHAIN & WEB3
 // ============================================================================
 
-/** Stellar network passphrase placeholder */
-export const DEFAULT_NETWORK_PASSPHRASE = 'Test SDF Network ; September 2015';
-
 /** Base fee for Stellar transactions */
 export const STELLAR_BASE_FEE = '100';
 
