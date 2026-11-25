@@ -33,9 +33,19 @@ RUN apk add --no-cache ffmpeg postgresql-client
 
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
+# Install production deps only. package.json's root `prepare` hook runs `husky`, a
+# devDependency, and npm fires lifecycle scripts of the root package even under
+# --omit=dev, so this layer aborts with `sh: husky: not found` (exit 127). Dropping the
+# hook here is the narrowest fix: HUSKY=0 cannot work because that flag is read by husky
+# itself, which is the very binary --omit=dev refuses to install, and --ignore-scripts
+# would also delete sqlite3's compiled binding: the lockfile leaves sqlite3 unflagged as
+# dev, so --omit=dev installs it, and only its install script builds node_sqlite3.node.
 COPY package*.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+RUN npm pkg delete scripts.prepare && npm ci --omit=dev && npm cache clean --force
 
+# Copy built artifacts from builder
+# Runtime needs nothing else from the builder: TypeORM resolves migrations from
+# dist/config/../migrations (see src/config/db.ts), so dist/ is complete.
 COPY --from=builder /app/dist ./dist
 # Read at runtime by the swagger route and by the backup/restore scripts.
 COPY --from=builder /app/docs ./docs
@@ -43,7 +53,6 @@ COPY --from=builder /app/scripts ./scripts
 
 # Writable dump directory; the scheduler's backup volume inherits this owner.
 RUN mkdir -p /app/backups && chown -R appuser:appgroup /app/backups
-
 USER appuser
 
 # ── Song-processing worker ───────────────────────────────────────────────────

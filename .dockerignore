@@ -46,4 +46,7 @@ eslint.config.js
 .prettierignore
 jest.config.js
 knip.config.ts
-tsconfig.json
+
+# `npm run build` is a bare `tsc`. With no tsconfig.json in the build context it
+# compiles nothing, prints its usage banner and exits 1, so the image could never
+# build (Issue #921). This file must stay in the context.
