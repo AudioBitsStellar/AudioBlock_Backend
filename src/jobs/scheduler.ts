@@ -14,6 +14,7 @@
  *   ts-node src/jobs/scheduler.ts --job=account-deletion
  *   ts-node src/jobs/scheduler.ts --job=webhook-retention
  *   ts-node src/jobs/scheduler.ts --job=onchain-reconciliation
+ *   ts-node src/jobs/scheduler.ts --job=marketplace-listings
  *   ts-node src/jobs/scheduler.ts --job=database-backup
  *
  * To run all jobs in one pass (not recommended for production):
@@ -29,6 +30,7 @@ import { runRoyaltyPayoutDryRunJob } from './RoyaltyPayoutDryRunJob';
 import { runAccountDeletionJob } from './AccountDeletionJob';
 import { runWebhookRetentionJob } from './WebhookRetentionJob';
 import { runOnChainReconciliationJob } from './OnChainReconciliationJob';
+import { runMarketplaceListingLifecycleJob } from './MarketplaceListingLifecycleJob';
 import { runDatabaseBackupJob } from './DatabaseBackupJob';
 
 /** TTL for the distributed lock — must exceed the worst-case job duration. */
@@ -68,6 +70,9 @@ const JOBS: Record<string, JobRunner> = {
     await runWebhookRetentionJob();
   },
   'onchain-reconciliation': runOnChainReconciliationJob,
+  'marketplace-listings': async () => {
+    await runMarketplaceListingLifecycleJob();
+  },
   'database-backup': async () => {
     await runDatabaseBackupJob();
   },

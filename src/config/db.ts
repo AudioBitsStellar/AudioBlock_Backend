@@ -25,12 +25,10 @@ import { Release } from '../entities/Release';
 import { ReleaseTrack } from '../entities/ReleaseTrack';
 import { ArtistVerification } from '../entities/ArtistVerification';
 import { DeviceToken } from '../entities/DeviceToken';
-import { AdminAuditLog } from '../entities/AdminAuditLog';
-import { Release } from '../entities/Release';
-import { ReleaseTrack } from '../entities/ReleaseTrack';
 import { ReleasePreSave } from '../entities/ReleasePreSave';
 import { UserSave } from '../entities/UserSave';
 import { EmailSuppression } from '../entities/EmailSuppression';
+import { MarketplaceListing } from '../entities/MarketplaceListing';
 
 if (process.env.NODE_ENV !== 'production') dotenv.config();
 
@@ -74,11 +72,10 @@ const AppDataSource = new DataSource({
     ReleaseTrack,
     ArtistVerification,
     DeviceToken,
-    Release,
-    ReleaseTrack,
     ReleasePreSave,
     UserSave,
     EmailSuppression,
+    MarketplaceListing,
   ],
   migrations: [__dirname + '/../migrations/*.{js,ts}'],
   migrationsTableName: 'migrations',

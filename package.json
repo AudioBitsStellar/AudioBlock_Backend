@@ -32,6 +32,7 @@
     "gdpr:purge-accounts": "ts-node src/jobs/AccountDeletionJob.ts",
     "reconcile:onchain": "ts-node src/jobs/OnChainReconciliationJob.ts",
     "aggregate:playback": "ts-node src/jobs/DailyPlaybackAggregationJob.ts",
+    "listings:expire": "ts-node src/jobs/MarketplaceListingLifecycleJob.ts",
     "scheduler": "ts-node src/jobs/scheduler.ts",
     "backfill:loudness": "ts-node scripts/backfill-loudness.ts",
     "cli:reindex": "ts-node src/cli/reindex.ts",

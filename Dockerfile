@@ -47,6 +47,9 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 COPY package*.json ./
 COPY --from=builder /app/node_modules ./node_modules
 
+# Copy built artifacts from builder
+# Runtime needs nothing else from the builder: TypeORM resolves migrations from
+# dist/config/../migrations (see src/config/db.ts), so dist/ is complete.
 COPY --from=builder /app/dist ./dist
 # Read at runtime by the swagger route and by the backup/restore scripts.
 COPY --from=builder /app/docs ./docs
@@ -67,7 +70,6 @@ RUN mkdir -p \
 
 # Writable dump directory; the scheduler's backup volume inherits this owner.
 RUN mkdir -p /app/backups && chown -R appuser:appgroup /app/backups
-
 USER appuser
 
 # ── Song-processing worker ───────────────────────────────────────────────────

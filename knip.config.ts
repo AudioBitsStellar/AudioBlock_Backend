@@ -13,6 +13,7 @@ const config: KnipConfig = {
     'src/jobs/RoyaltyReconciliationJob.ts!',
     'src/jobs/AccountDeletionJob.ts!',
     'src/jobs/OnChainReconciliationJob.ts!',
+    'src/jobs/MarketplaceListingLifecycleJob.ts!',
     'src/seeders/genre.seeder.ts!',
     'src/migrations/*.ts!',
   ],
