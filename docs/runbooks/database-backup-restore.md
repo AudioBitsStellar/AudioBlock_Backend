@@ -2,7 +2,7 @@
 
 **Document Owner:** DevOps / Platform Engineering  
 **Target Systems:** PostgreSQL 15+ (`AppDataSource`, `audioblocks-db` Docker container, AWS RDS)  
-**Last Tested:** 2026-10-18  
+**Last Tested:** 2026-11-23 — automated drill, see [restore-drill-record.md](restore-drill-record.md)  
 **RPO Target:** < 24 hours (daily logical dumps) / < 5 minutes (WAL archiving in RDS)  
 **RTO Target:** < 30 minutes  
 
@@ -27,12 +27,41 @@ This runbook specifies the backup schedule, storage architecture, retention rule
 
 | Backup Type | Frequency | Execution Window | Trigger / Mechanism |
 | :--- | :--- | :--- | :--- |
-| **Automated Logical Backup** | Daily | 02:00 UTC (off-peak) | Scheduled cron / AWS Backup / script |
+| **Automated Logical Backup** | Daily | 02:00 UTC (off-peak) | `database_backup` scheduler job (below) or the cron entry `0 2 * * *` |
 | **Continuous WAL Archiving** | Continuous | Real-time | PostgreSQL WAL shipping / RDS automated archiving |
 | **Pre-Deployment Backup** | Ad-hoc | Prior to migrations | Manual invocation before `npm run migration:run` |
 | **Pre-Incident Backup** | Ad-hoc | Prior to restore attempt | Mandatory safety dump before modifying corrupted DB |
 
-### 2.2 Storage Location & Security
+### 2.2 Automated Backup Job (Issue #968)
+
+The daily dump is produced by `src/jobs/DatabaseBackupJob.ts`, which wraps
+`scripts/backup.sh` — the same script this runbook asks an on-call engineer to
+run by hand, so the scheduled and manual paths cannot drift. The job:
+
+- writes `backup_YYYYMMDD_HHMMSS.sql.gz` plus a `.sha256` sidecar under
+  `BACKUP_DIR` (default `./backups`, `/app/backups` in the scheduler container);
+- re-reads the dump and fails the run on a missing file, missing sidecar or
+  checksum mismatch — a truncated dump is never recorded as a success;
+- prunes dumps (and sidecars) older than `BACKUP_RETENTION_DAYS` (default 7).
+
+Two triggers exist, both running that same job:
+
+```bash
+# 1. Long-running scheduler deployable (src/workers/scheduler.ts).
+#    Runs once at startup and then every SCHED_DB_BACKUP_MS (default 24h).
+npm run start:scheduler
+
+# 2. One-shot entrypoint for a Kubernetes CronJob or host cron.
+#    Install with `crontab -e` (times are the host's timezone; use UTC hosts):
+# 0 2 * * *  cd /opt/audioblocks && set -a && . ./.env && npm run scheduler -- --job=database-backup
+```
+
+The scheduler keeps a Redis `SET NX` lock per job, so doubling the pod count
+cannot double the backup. Logs are the structured scheduler lines
+(`[scheduler] database_backup: done (…ms)`) plus the job's
+`Database backup completed and verified` record with file, size and prunes.
+
+### 2.3 Storage Location & Security
 
 - **Storage Target:** Encrypted AWS S3 bucket:  
   `s3://audioblocks-backups-${NODE_ENV}/postgres/YYYY/MM/DD/audioblocks-db-YYYYMMDD_HHMMSS.dump`
@@ -107,6 +136,34 @@ pg_restore --list "${BACKUP_FILE}" | head -n 30
 ```
 
 Expected output: Table definitions, schema TOC entries, and index definitions without errors.
+
+> The automated job writes plain-SQL gzip dumps, so `pg_restore --list` does not
+> apply to those files. Verify them with the sidecar instead:
+>
+> ```bash
+> sha256sum -c backup_20261123_020000.sql.gz.sha256   # or: shasum -a 256 -c …
+> gunzip -t backup_20261123_020000.sql.gz
+> ```
+
+### 3.4 Restoring an Automated Backup
+
+`scripts/restore.sh` restores the `.sql.gz` produced by the job (or by
+`npm run db:backup`) into an existing, empty database. It verifies the sidecar
+when present and streams through `psql -v ON_ERROR_STOP=1`, so a partial
+restore fails the command instead of leaving a half-loaded schema.
+
+```bash
+# Against the compose database (DB_* envs default to localhost/postgres/audioblocks)
+DB_HOST=localhost DB_PORT=5432 DB_USER=postgres DB_NAME=audioblocks \
+POSTGRES_PASSWORD=… \
+  npm run db:restore -- backups/backup_20261123_020000.sql.gz
+```
+
+Run `scripts/restore-drill.sh` after changing the backup or restore scripts: it
+backs up a seeded scratch database with the real scripts, restores it into a
+second scratch database, compares every table's row count and an ordered md5 of
+all row values, and rewrites [restore-drill-record.md](restore-drill-record.md)
+with the measured RTO.
 
 ---
 
@@ -223,16 +280,21 @@ SELECT * FROM migrations ORDER BY timestamp DESC LIMIT 5;
 
 ### 5. Restart Applications & Verify Health
 ```bash
-# 1. Start backend and indexer services
-docker compose up -d backend indexer
+# 1. Start the API and the non-HTTP deployables (Issue #965)
+docker compose --profile full up -d
 
-# 2. Check application readiness
+# 2. Check API readiness
 curl -f http://localhost:4000/health/ready
 curl -f http://localhost:4000/health/live
 curl -f http://localhost:4000/health/worker
 
-# 3. Check application logs for error loops
-docker compose logs --tail=100 backend
+# 3. Check worker / indexer / scheduler readiness (same probe contract).
+#    Docker health status aggregates these; direct checks help when diagnosing.
+docker inspect --format '{{.State.Health.Status}}' \
+  audioblocks-worker audioblocks-indexer audioblocks-scheduler
+
+# 4. Check application logs for error loops
+docker compose logs --tail=100 backend worker indexer scheduler
 ```
 
 ---
