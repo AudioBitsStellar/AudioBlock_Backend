@@ -64,6 +64,27 @@ app.use('/api/songs', songRouter);
 
 ---
 
+## Song service error codes
+
+Song workflow failures use `AppError` so API responses preserve meaningful HTTP
+statuses and stable codes:
+
+| Code                                        | HTTP status | Meaning                                                     |
+| ------------------------------------------- | ----------: | ----------------------------------------------------------- |
+| `SONG_NOT_FOUND`                            |         404 | The requested song does not exist.                          |
+| `NOT_SONG_OWNER`                            |         403 | The caller does not own the song.                           |
+| `ROYALTY_TEMPLATE_NOT_FOUND`                |         404 | The requested royalty template does not exist.              |
+| `ROYALTY_TEMPLATE_NOT_OWNED`                |         403 | The caller does not own the royalty template.               |
+| `SONG_METADATA_NOT_READY`                   |         409 | Song metadata is not ready for minting.                     |
+| `STELLAR_WALLET_REQUIRED`                   |         400 | The artist must connect a Stellar wallet before minting.    |
+| `SONG_MINT_ALREADY_STARTED`                 |         409 | Minting is pending, in progress, or complete.               |
+| `MALWARE_DETECTED`                          |         422 | A malware scan rejected the uploaded audio.                 |
+| `UPLOAD_CHUNKS_INCOMPLETE`                  |         400 | The uploaded chunk count does not match the expected count. |
+| `UPLOAD_TEMP_DIR_NOT_FOUND`                 |         404 | The upload's temporary chunk directory does not exist.      |
+| `SONG_ALREADY_FLAGGED` / `SONG_NOT_FLAGGED` |         409 | The requested moderation state transition is invalid.       |
+| `SONG_NOT_RETRYABLE`                        |         409 | The song is not in a retryable failure state.               |
+| `INVALID_S3_KEY`                            |         400 | An upload key component contains invalid characters.        |
+
 ## 2. How to Add a New Database Entity & Migration
 
 ### Step 1: Create Entity Class (`src/entities/Playlist.ts`)

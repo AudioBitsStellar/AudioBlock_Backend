@@ -140,6 +140,10 @@ export class AuthController {
       const user = await this.authService.login(loginData);
       res.status(200).json({ success: true, message: 'User logged in successfully', user });
     } catch (error) {
+      if (error instanceof Error && /(signature|nonce|user not found)/i.test(error.message)) {
+        handleError(req, res, AppError.authentication('Invalid wallet credentials'));
+        return;
+      }
       handleError(req, res, error);
     }
   };
@@ -184,7 +188,7 @@ export class AuthController {
     try {
       const { refreshToken } = req.body;
       if (!refreshToken) {
-        return res.status(400).json({ success: false, message: 'Refresh token is required' });
+        return res.status(401).json({ success: false, message: 'Refresh token is required' });
       }
 
       const result = await this.authService.refreshToken(refreshToken, req);
@@ -203,6 +207,8 @@ export class AuthController {
       }
 
       await this.authService.logout(refreshToken, req);
+      res.clearCookie('token');
+      res.clearCookie('refreshToken');
       res.status(200).json({ success: true, message: 'Logged out successfully' });
     } catch (error) {
       logger.error({ reqId: (req as any).id, route: req.path, err: error }, 'logout error');

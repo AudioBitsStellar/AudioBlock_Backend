@@ -26,6 +26,18 @@ export interface SorobanSubmitResult {
   returnValue: unknown;
 }
 
+export interface SorobanTransactionLookup {
+  status: 'SUCCESS' | 'FAILED' | 'NOT_FOUND';
+  returnValue?: unknown;
+}
+
+export class SorobanTransactionFailedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SorobanTransactionFailedError';
+  }
+}
+
 /**
  * Simple semaphore for limiting concurrent RPC calls.
  */
@@ -162,6 +174,27 @@ export class SorobanService {
     return prepared.toXDR();
   }
 
+  getSignedTransactionHash(signedXdr: string): string {
+    return TransactionBuilder.fromXDR(signedXdr, getNetworkPassphrase()).hash().toString('hex');
+  }
+
+  async getTransaction(hash: string): Promise<SorobanTransactionLookup> {
+    const response = await this.withBackoff(
+      () => this.server.getTransaction(hash),
+      `getTransaction(${hash}) reconciliation`,
+    );
+    if (response.status === rpc.Api.GetTransactionStatus.SUCCESS) {
+      return {
+        status: 'SUCCESS',
+        returnValue: response.returnValue ? scValToNative(response.returnValue) : undefined,
+      };
+    }
+    if (response.status === rpc.Api.GetTransactionStatus.FAILED) {
+      return { status: 'FAILED' };
+    }
+    return { status: 'NOT_FOUND' };
+  }
+
   /** Submits a wallet-signed XDR and waits for it to land. */
   async submitSignedTransaction(signedXdr: string): Promise<SorobanSubmitResult> {
     const transaction = TransactionBuilder.fromXDR(signedXdr, getNetworkPassphrase());
@@ -171,7 +204,9 @@ export class SorobanService {
     );
 
     if (sendResponse.status === 'ERROR') {
-      throw new Error(`Soroban transaction rejected: ${JSON.stringify(sendResponse.errorResult)}`);
+      throw new SorobanTransactionFailedError(
+        `Soroban transaction rejected: ${JSON.stringify(sendResponse.errorResult)}`,
+      );
     }
 
     const hash = sendResponse.hash;
@@ -193,7 +228,14 @@ export class SorobanService {
     }
 
     if (getResponse.status !== rpc.Api.GetTransactionStatus.SUCCESS) {
-      throw new Error(`Soroban transaction ${hash} failed with status ${getResponse.status}`);
+      if (getResponse.status === rpc.Api.GetTransactionStatus.FAILED) {
+        throw new SorobanTransactionFailedError(
+          `Soroban transaction ${hash} failed with status ${getResponse.status}`,
+        );
+      }
+      throw new Error(
+        `Soroban transaction ${hash} returned unexpected status ${getResponse.status}`,
+      );
     }
 
     const returnValue = getResponse.returnValue
