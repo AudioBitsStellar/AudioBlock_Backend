@@ -1,7 +1,4 @@
 import { rpc, Networks } from '@stellar/stellar-sdk';
-import dotenv from 'dotenv';
-
-dotenv.config();
 
 export type SorobanNetwork = 'testnet' | 'mainnet';
 type ContractName = 'nft' | 'artist' | 'catalog' | 'royalty' | 'marketplace';

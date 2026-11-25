@@ -14,6 +14,7 @@
  *   ts-node src/jobs/scheduler.ts --job=webhook-retention
  *   ts-node src/jobs/scheduler.ts --job=onchain-reconciliation
  *   ts-node src/jobs/scheduler.ts --job=marketplace-listings
+ *   ts-node src/jobs/scheduler.ts --job=database-backup
  *
  * To run all jobs in one pass (not recommended for production):
  *   ts-node src/jobs/scheduler.ts --job=all
@@ -28,6 +29,7 @@ import { runAccountDeletionJob } from './AccountDeletionJob';
 import { runWebhookRetentionJob } from './WebhookRetentionJob';
 import { runOnChainReconciliationJob } from './OnChainReconciliationJob';
 import { runMarketplaceListingLifecycleJob } from './MarketplaceListingLifecycleJob';
+import { runDatabaseBackupJob } from './DatabaseBackupJob';
 
 /** TTL for the distributed lock — must exceed the worst-case job duration. */
 const LOCK_TTL_SECONDS = 300; // 5 minutes
@@ -64,6 +66,9 @@ const JOBS: Record<string, JobRunner> = {
   'marketplace-listings': async () => {
     await runMarketplaceListingLifecycleJob();
   },
+  'database-backup': async () => {
+    await runDatabaseBackupJob();
+  },
 };
 
 async function runJob(jobName: string): Promise<void> {
@@ -92,8 +97,10 @@ if (require.main === module) {
   const jobName = jobArg?.split('=')[1];
 
   if (!jobName) {
-    process.stderr.write('Usage: ts-node src/jobs/scheduler.ts --job=<name>\n');
-    process.stderr.write(`Known jobs: ${Object.keys(JOBS).join(', ')}, all\n`);
+    // eslint-disable-next-line no-console -- CLI usage/help belongs on stderr
+    console.error('Usage: ts-node src/jobs/scheduler.ts --job=<name>');
+    // eslint-disable-next-line no-console
+    console.error(`Known jobs: ${Object.keys(JOBS).join(', ')}, all`);
     process.exit(1);
   }
 

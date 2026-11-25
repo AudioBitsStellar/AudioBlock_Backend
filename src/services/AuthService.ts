@@ -23,6 +23,7 @@ import logger from '../config/logger';
 import { JobQueueService } from './JobQueueService';
 import { EMAIL_VERIFICATION_EXPIRATION_MS } from '../config/constants';
 import { assertMeetsMinimumAge } from '../utils/minimumAge';
+import { verifyJwtWithRotation } from '../config/jwtSecrets';
 
 const PASSWORD_SALT_ROUNDS = 12;
 const RECOVERY_CODE_COUNT = 8;
@@ -87,7 +88,11 @@ export class AuthService {
   private async verifyRefreshToken(token: string): Promise<JwtPayload | null> {
     const REFRESH_SECRET = process.env.REFRESH_TOKEN_SECRET || process.env.JWT_SECRET || 'secret';
     try {
-      return jwt.verify(token, REFRESH_SECRET) as JwtPayload;
+      return (
+        process.env.REFRESH_TOKEN_SECRET
+          ? jwt.verify(token, REFRESH_SECRET)
+          : verifyJwtWithRotation(token)
+      ) as JwtPayload;
     } catch {
       throw AppError.authentication('Invalid refresh token');
     }
@@ -482,7 +487,7 @@ export class AuthService {
 
     let payload: JwtPayload;
     try {
-      payload = jwt.verify(partialToken, JWT_SECRET) as JwtPayload;
+      payload = verifyJwtWithRotation(partialToken) as JwtPayload;
     } catch {
       throw AppError.authentication('Invalid or expired partial token');
     }

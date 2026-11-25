@@ -77,3 +77,103 @@ tests:
                 Song workers may have stalled, crashed, or encountered processing failures.
               runbook: 'https://github.com/AudioBitsStellar/AudioBlock_Backend/blob/main/docs/worker-scaling.md'
               dashboard: 'http://localhost:3001/d/audioblock-app'
+
+  # Indexer lag SLO alerts (Issue #917). The lag gauge is
+  # indexer_lag_ledgers{network,contract}; these three cases pin the
+  # thresholds and the `for:` windows so a rule edit cannot silently widen
+  # them.
+  - interval: 1m
+    input_series:
+      - series: 'indexer_lag_ledgers{network="stellar-testnet",contract="catalog"}'
+        values: '1500+0x40'
+    alert_rule_test:
+      # Below the 15m pending window the rule is only pending, not firing.
+      - eval_time: 14m
+        alertname: HighIndexerLag
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: HighIndexerLag
+        exp_alerts:
+          - exp_labels:
+              network: stellar-testnet
+              contract: catalog
+              severity: warning
+              team: backend
+            exp_annotations:
+              summary: 'Indexer is lagging for catalog on stellar-testnet'
+              description: >
+                The indexer worker has been 1500 ledgers behind the current
+                tip for catalog on stellar-testnet for over 15
+                minutes. The worker may have stalled (RPC outage or crash loop).
+              runbook: 'https://github.com/AudioBitsStellar/AudioBlock_Backend/blob/main/docs/indexer-backfill-runbook.md'
+              dashboard: 'http://localhost:3001/d/audioblock-indexer'
+      # 1500 ledgers is a warning, not a critical breach.
+      - eval_time: 15m
+        alertname: CriticalIndexerLag
+        exp_alerts: []
+      # The SLO is per contract: an alerting catalog cursor does not mark the
+      # healthy artist cursor as lagging.
+      - eval_time: 15m
+        alertname: IndexerLagMetricsMissing
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'indexer_lag_ledgers{network="stellar-testnet",contract="nft"}'
+        values: '999+0x40'
+    alert_rule_test:
+      # Just under the threshold and staying there: nothing may fire.
+      - eval_time: 15m
+        alertname: HighIndexerLag
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: HighIndexerLag
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'indexer_lag_ledgers{network="stellar-testnet",contract="royalty"}'
+        values: '15000+0x60'
+    alert_rule_test:
+      # Critical needs its own 30m dwell, even though warning fired at 15m.
+      - eval_time: 29m
+        alertname: CriticalIndexerLag
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: CriticalIndexerLag
+        exp_alerts:
+          - exp_labels:
+              network: stellar-testnet
+              contract: royalty
+              severity: critical
+              team: backend
+            exp_annotations:
+              summary: 'Indexer critically behind for royalty on stellar-testnet'
+              description: >
+                royalty on stellar-testnet is 15000 ledgers
+                behind the tip and needs immediate attention.
+              runbook: "https://github.com/AudioBitsStellar/AudioBlock_Backend/blob/main/docs/indexer-backfill-runbook.md"
+              dashboard: "http://localhost:3001/d/audioblock-indexer"
+
+  # A crashed or un-scraped worker stops emitting the gauge entirely, which is
+  # not the same failure as a lagging one and must alert on its own (#917).
+  - interval: 1m
+    input_series:
+      - series: 'indexer_events_processed_total{network="stellar-testnet",contract="catalog"}'
+        values: '0+5x30'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: IndexerLagMetricsMissing
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: IndexerLagMetricsMissing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              team: backend
+            exp_annotations:
+              summary: 'Indexer lag metrics are missing'
+              description: >
+                Prometheus has not received indexer lag metrics for 10 minutes.
+                Check that the indexer worker is running and its metrics endpoint is reachable.
+              runbook: 'https://github.com/AudioBitsStellar/AudioBlock_Backend/blob/main/docs/indexer-backfill-runbook.md'

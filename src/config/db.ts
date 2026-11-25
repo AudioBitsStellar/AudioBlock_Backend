@@ -30,7 +30,7 @@ import { UserSave } from '../entities/UserSave';
 import { EmailSuppression } from '../entities/EmailSuppression';
 import { MarketplaceListing } from '../entities/MarketplaceListing';
 
-dotenv.config();
+if (process.env.NODE_ENV !== 'production') dotenv.config();
 
 const AppDataSource = new DataSource({
   type: 'postgres',
@@ -42,7 +42,10 @@ const AppDataSource = new DataSource({
   synchronize: process.env.NODE_ENV === 'test',
   migrationsRun: process.env.NODE_ENV !== 'test',
   dropSchema: false,
-  ssl: false,
+  ssl:
+    process.env.POSTGRES_SSL === 'true'
+      ? { rejectUnauthorized: process.env.POSTGRES_SSL_REJECT_UNAUTHORIZED !== 'false' }
+      : false,
   logging: true,
   entities: [
     User,

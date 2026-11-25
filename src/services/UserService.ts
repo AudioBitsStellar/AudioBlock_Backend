@@ -3,7 +3,6 @@ import AppDataSource from '../config/db';
 import { User, UserRole } from '../entities/User';
 import { CreateUserDTO } from '../dtos/CreateUserDTO';
 import jwt from 'jsonwebtoken';
-import dotenv from 'dotenv';
 import redis from '../config/redis';
 import { TransactionLog } from '../entities/TransactionLog';
 import { AppError } from '../errors/AppError';
@@ -28,7 +27,6 @@ export class UserService {
   constructor() {
     this.userRepo = AppDataSource.getRepository(User);
     this.transactionLogRepo = AppDataSource.getRepository(TransactionLog);
-    dotenv.config();
   }
 
   /**

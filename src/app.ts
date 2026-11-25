@@ -1,4 +1,3 @@
-import cookieParser from "cookie-parser";
 import express, {
   Request,
   Response,
@@ -41,15 +40,22 @@ import notificationRoutes from "./routes/notificationRoutes";
 import ReleaseRoutes from "./routes/ReleaseRoutes";
 import releaseRoutes from "./routes/ReleaseRoutes";
 import { createBatchRoutes } from "./routes/BatchRoutes";
+import { JSON_BODY_LIMIT, URLENCODED_BODY_LIMIT } from "./config/constants";
+import { isPayloadTooLargeError } from "./middlewares/bodySizeLimit";
+import { resolveTrustProxy } from "./config/proxy";
 
 // Route imports
 
 // Initialize express app
 const app = express();
 
+// Express must trust only the proxy hops that are actually controlled by the
+// deployment. This keeps req.ip (and every rate limiter/anonymiser using it)
+// anchored to the real client address instead of an attacker-supplied hop.
+app.set("trust proxy", resolveTrustProxy());
+
 // Apply middleware
 // Apply global middlewares
-app.use(cookieParser());
 // Structured request logging with correlation id (Issue #33)
 app.use(requestLoggerMiddleware);
 
@@ -64,7 +70,10 @@ const allowedOrigins: string[] = process.env.ALLOWED_ORIGINS
 app.use(
   cors({
     origin: allowedOrigins,
-    credentials: true,
+    // Authentication is carried in the Authorization header, not cookies.
+    // Disabling credentialed CORS prevents cross-site requests from attaching
+    // ambient browser credentials and removes the CSRF exposure of this API.
+    credentials: false,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allowedHeaders: [
       "Content-Type",
@@ -75,12 +84,24 @@ app.use(
       "Access-Control-Request-Method",
       "Access-Control-Request-Headers",
     ],
-    exposedHeaders: ["Authorization"],
+    exposedHeaders: ["X-Request-ID"],
     maxAge: 86400, // 24 hours
   }),
 );
 
-app.use(express.json());
+// JSON is intentionally bounded globally. Batch metadata may be larger than
+// normal API payloads, so it gets an explicit per-route parser override before
+// its router is mounted.
+app.use((req, res, next) => {
+  // These routes install their own parser so they can accept a larger batch
+  // document or verify a signed raw webhook body before JSON decoding.
+  if (req.path === "/api/batch" || req.path.startsWith("/api/batch/") ||
+      req.path.startsWith("/api/webhooks/privy/")) {
+    return next();
+  }
+  return express.json({ limit: JSON_BODY_LIMIT })(req, res, next);
+});
+app.use(express.urlencoded({ extended: true, limit: URLENCODED_BODY_LIMIT }));
 
 // Sanitize free-text fields in every JSON request body (issue #327).
 // sanitizeInput itself already no-ops for multipart/binary uploads and
@@ -115,7 +136,11 @@ app.use("/health", healthRoutes);
 
 // Batch endpoint: generic sub-request dispatch + native artist-catalog
 // operations (e.g. bulk genre update).
-app.use("/api/batch", createBatchRoutes(app));
+app.use(
+  "/api/batch",
+  express.json({ limit: process.env.BATCH_JSON_BODY_LIMIT ?? "5mb" }),
+  createBatchRoutes(app),
+);
 
 app.use("/api/auth", authRoutes);
 app.use("/api/artist", artistRoutes);
@@ -240,6 +265,14 @@ const customErrorHandler: ErrorRequestHandler = (err, req, res, _next) => {
       success: false,
       message: err.message,
       type: "VALIDATION_FAILED",
+    });
+  }
+
+  if (isPayloadTooLargeError(err)) {
+    return res.status(413).json({
+      success: false,
+      message: "Request body exceeds the maximum allowed size.",
+      type: "PAYLOAD_TOO_LARGE",
     });
   }
 

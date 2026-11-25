@@ -8,6 +8,7 @@
  */
 import { scValToNative } from '@stellar/stellar-sdk';
 import { getSorobanServer } from '../../config/soroban';
+import logger from '../../config/logger';
 
 /**
  * A contract event normalized to plain JS values, ready to be decoded by a
@@ -62,8 +63,19 @@ function normalizeEvent(raw: unknown): NormalizedContractEvent | null {
   try {
     topic = Array.isArray(e.topic) ? e.topic.map((t) => scValToNative(t as never)) : [];
     value = e.value !== undefined ? scValToNative(e.value as never) : null;
-  } catch {
-    // Some diagnostic events do not deserialize cleanly; treat as unreadable.
+  } catch (err) {
+    // An event whose ScVal this build cannot decode is dropped before it can
+    // reach the retention path, so log it: an upgrade that changed an event's
+    // layout shows up here first (ADR-013).
+    logger.warn(
+      {
+        eventId: e.id,
+        ledger: e.ledger,
+        contractId: typeof e.contractId === 'string' ? e.contractId : undefined,
+        err,
+      },
+      'Soroban event ScVal could not be normalized; event dropped before indexing',
+    );
     return null;
   }
 
