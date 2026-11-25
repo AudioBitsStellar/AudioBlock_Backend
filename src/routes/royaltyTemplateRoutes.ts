@@ -1,14 +1,15 @@
 import { Router } from 'express';
 import { RoyaltyTemplateController } from '../controllers/RoyaltyTemplateController';
-import { requireAuth } from '../middlewares/authMiddleware';
+import { authArtistMiddleware } from '../middlewares/authMiddleware';
 
 const controller = new RoyaltyTemplateController();
 const router = Router();
 
-router.use(requireAuth);
+router.use(authArtistMiddleware);
 
 router.post('/', controller.create);
 router.get('/', controller.list);
+router.get('/:id', controller.get);
 router.put('/:id', controller.update);
 router.delete('/:id', controller.delete);
 

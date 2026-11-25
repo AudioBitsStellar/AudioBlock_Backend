@@ -322,7 +322,7 @@ Reusable preset templates for splitting royalties across multiple collaborators.
 | `id`        | `uuid`        | `PK`                                  | Template ID.                                   |
 | `name`      | `varchar`     | Required                              | Template title (e.g., "50/50 Producer Split"). |
 | `userId`    | `uuid`        | `FK -> users.id`, `ON DELETE CASCADE` | Template owner user ID.                        |
-| `splits`    | `simple-json` | Required                              | JSON array of `{ userId, role, percentage }`.  |
+| `splits`    | `simple-json` | Required                              | JSON array of `{ userId, role, percentage, stellarAddress }`.  |
 | `createdAt` | `timestamp`   | Auto set                              | Creation timestamp.                            |
 | `updatedAt` | `timestamp`   | Auto set                              | Update timestamp.                              |
 

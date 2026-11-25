@@ -13,6 +13,8 @@ export interface TemplateSplit {
   userId: string;
   role: string;
   percentage: number;
+  /** Stellar account receiving this split. */
+  stellarAddress: string;
 }
 
 @Entity('royalty_templates')
