@@ -21,6 +21,9 @@ COPY package*.json ./
 RUN npm ci
 COPY . .
 RUN npm run build
+# Drop dev dependencies once the build has produced dist/, so the production
+# stage can copy the tree instead of re-installing it.
+RUN npm prune --omit=dev
 
 # ── Shared runtime ───────────────────────────────────────────────────────────
 FROM node:20-alpine AS runtime
@@ -33,15 +36,16 @@ RUN apk add --no-cache ffmpeg postgresql-client
 
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
-# Install production deps only. package.json's root `prepare` hook runs `husky`, a
-# devDependency, and npm fires lifecycle scripts of the root package even under
-# --omit=dev, so this layer aborts with `sh: husky: not found` (exit 127). Dropping the
-# hook here is the narrowest fix: HUSKY=0 cannot work because that flag is read by husky
-# itself, which is the very binary --omit=dev refuses to install, and --ignore-scripts
-# would also delete sqlite3's compiled binding: the lockfile leaves sqlite3 unflagged as
-# dev, so --omit=dev installs it, and only its install script builds node_sqlite3.node.
+# Copy only production deps.
+#
+# `npm ci --omit=dev` used to run here, and it could not work: `npm ci` executes
+# the root `prepare` script (`husky`), and husky is a devDependency that
+# `--omit=dev` just removed — the step failed with `sh: husky: not found`
+# (npm error code 127) and no image was ever produced (Issue #966). Pruning the
+# builder's already-resolved tree keeps the lockfile authoritative, runs no
+# lifecycle scripts, and needs no registry access.
 COPY package*.json ./
-RUN npm pkg delete scripts.prepare && npm ci --omit=dev && npm cache clean --force
+COPY --from=builder /app/node_modules ./node_modules
 
 # Copy built artifacts from builder
 # Runtime needs nothing else from the builder: TypeORM resolves migrations from
@@ -50,6 +54,19 @@ COPY --from=builder /app/dist ./dist
 # Read at runtime by the swagger route and by the backup/restore scripts.
 COPY --from=builder /app/docs ./docs
 COPY --from=builder /app/scripts ./scripts
+
+# Everything the container writes at runtime lives under /app/uploads (chunked
+# uploads, merged files, HLS segments) or os.tmpdir(). Creating and owning these
+# up front is what lets the prod manifests mount a named volume over /app/uploads
+# and run the rest of the filesystem read-only (Issue #966).
+RUN mkdir -p \
+    uploads/temp \
+    uploads/merged \
+    uploads/profile-images \
+    uploads/page-covers \
+    uploads/covers \
+    uploads/hls \
+  && chown -R appuser:appgroup /app/uploads
 
 # Writable dump directory; the scheduler's backup volume inherits this owner.
 RUN mkdir -p /app/backups && chown -R appuser:appgroup /app/backups
@@ -85,6 +102,8 @@ CMD ["node", "dist/workers/scheduler.js"]
 
 # ── HTTP API (default target) ────────────────────────────────────────────────
 FROM runtime AS api
+USER appuser
+COPY --from=builder /app/dist ./dist
 ENV NODE_ENV=production \
     HEALTH_PORT=4000
 EXPOSE 4000

@@ -44,7 +44,9 @@ const JOBS: JobDef[] = [
   {
     name: 'royalty_reconcile',
     intervalMs: Number(process.env.SCHED_ROYALTY_RECONCILE_MS ?? SIX_HOURS),
-    run: runRoyaltyReconciliationJob,
+    run: async () => {
+      await runRoyaltyReconciliationJob();
+    },
   },
   {
     name: 'onchain_reconcile',

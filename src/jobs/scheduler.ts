@@ -10,6 +10,7 @@
  * Usage (Kubernetes CronJob or any cron host):
  *   ts-node src/jobs/scheduler.ts --job=daily-playback
  *   ts-node src/jobs/scheduler.ts --job=royalty-reconciliation
+ *   ts-node src/jobs/scheduler.ts --job=royalty-payout-dry-run
  *   ts-node src/jobs/scheduler.ts --job=account-deletion
  *   ts-node src/jobs/scheduler.ts --job=webhook-retention
  *   ts-node src/jobs/scheduler.ts --job=onchain-reconciliation
@@ -25,6 +26,7 @@ import redis from '../config/redis';
 import logger from '../config/logger';
 import { runPlaybackAggregationJob } from './DailyPlaybackAggregationJob';
 import { runRoyaltyReconciliationJob } from './RoyaltyReconciliationJob';
+import { runRoyaltyPayoutDryRunJob } from './RoyaltyPayoutDryRunJob';
 import { runAccountDeletionJob } from './AccountDeletionJob';
 import { runWebhookRetentionJob } from './WebhookRetentionJob';
 import { runOnChainReconciliationJob } from './OnChainReconciliationJob';
@@ -55,7 +57,12 @@ type JobRunner = () => Promise<void>;
 
 const JOBS: Record<string, JobRunner> = {
   'daily-playback': runPlaybackAggregationJob,
-  'royalty-reconciliation': runRoyaltyReconciliationJob,
+  'royalty-reconciliation': async () => {
+    await runRoyaltyReconciliationJob();
+  },
+  'royalty-payout-dry-run': async () => {
+    await runRoyaltyPayoutDryRunJob();
+  },
   'account-deletion': async () => {
     await runAccountDeletionJob();
   },

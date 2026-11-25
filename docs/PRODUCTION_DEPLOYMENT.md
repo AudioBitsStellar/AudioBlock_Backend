@@ -62,8 +62,20 @@ npm start              # node dist/index.js — runs migrations on boot in produ
 Or use Docker:
 
 ```bash
-docker compose -f docker-compose.prod.yml up -d --build
+# docker-compose.prod.yml is an overlay: the base file carries the build
+# context, images, ports and named volumes, so it must be composed with it.
+# Running the overlay alone fails with `service "rabbitmq" has neither an image
+# nor a build context specified`, which is what the previous command in this
+# file did.
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
+
+The queue workers need RabbitMQ, which the base file puts behind a profile:
+add `--profile full` (or `COMPOSE_PROFILES=full`) to start it. Both manifests
+apply the #966 runtime hardening — read-only root filesystems, all capabilities
+dropped, `no-new-privileges`, and CPU/memory/PID ceilings — so `uploads` must
+be a named volume and `/tmp` a tmpfs; a container that needs to write anywhere
+else is a bug to fix in the manifest, not a reason to drop `read_only`.
 
 The HTTP server binds and passes health checks before connecting to
 RabbitMQ, so deploy platforms will report healthy even if the broker is

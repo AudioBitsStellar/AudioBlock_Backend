@@ -135,7 +135,10 @@ psql $DATABASE_URL -c "
   AND network = 'mainnet';"
 
 # 3. Redeploy the indexer worker so it picks up the new env var.
-docker-compose -f docker-compose.prod.yml up -d --no-deps indexer
+#    docker-compose.prod.yml is an overlay, and `indexer` is defined in the
+#    base file behind the `indexer` profile, so both are needed:
+docker compose --profile indexer -f docker-compose.yml -f docker-compose.prod.yml \
+  up -d --no-deps indexer
 # or:
 kubectl rollout restart deployment/indexer
 

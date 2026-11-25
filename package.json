@@ -28,6 +28,7 @@
     "seed:test": "ts-node src/seeders/test.seeder.ts",
     "db:seed:test": "ts-node src/seeders/test.seeder.ts",
     "reconcile:royalties": "ts-node src/jobs/RoyaltyReconciliationJob.ts",
+    "royalties:dry-run": "ts-node src/jobs/RoyaltyPayoutDryRunJob.ts",
     "gdpr:purge-accounts": "ts-node src/jobs/AccountDeletionJob.ts",
     "reconcile:onchain": "ts-node src/jobs/OnChainReconciliationJob.ts",
     "aggregate:playback": "ts-node src/jobs/DailyPlaybackAggregationJob.ts",
